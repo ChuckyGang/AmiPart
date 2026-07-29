@@ -22,6 +22,7 @@
 #include "clib.h"
 #include "locale_support.h"
 #include "rdb.h"
+#include "pfsresize.h"
 #include "version.h"
 #include "partview_internal.h"
 
@@ -270,6 +271,7 @@ ULONG parse_dostype(const char *s)
 #define PDLG_AUTOMOUNT   12
 #define PDLG_VOLNAME     14
 #define PDLG_NOFORMAT    15
+#define PDLG_DELDIR      16
 
 /* Rows: Name, LoCyl, SizeMB, FS, BlockSize, BootPri, Bootable+Automount, DirSCSI+SyncSCSI */
 #define PDLG_ROWS 8
@@ -491,6 +493,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
     struct Gadget  *syncscsi_gad  = NULL;
     struct Gadget  *volname_gad   = NULL;
     struct Gadget  *noformat_gad  = NULL;
+    struct Gadget  *deldir_gad    = NULL;
     struct Window  *win          = NULL;
     BOOL            result       = FALSE;
     UWORD           cur_fs       = 1;   /* default FFS */
@@ -725,14 +728,27 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             if (is_new) {
                 STR_GAD(PDLG_VOLNAME, GS(MSG_DLG_VOLUME_NAME), volname_str, 31, &volname_gad)
                 {
+                    UWORD half = (inner_w - pad * 3) / 2;
                     struct TagItem cbt[] = { { GTCB_Checked, 0 }, { TAG_DONE, 0 } };
+                    struct TagItem ddt[] = { { GTCB_Checked, 0 }, { GA_Disabled, 0 },
+                                             { TAG_DONE, 0 } };
                     cbt[0].ti_Data = (ULONG)FALSE;   /* format by default */
                     ng.ng_LeftEdge=bor_l+pad; ng.ng_TopEdge=ROW_Y(row);
-                    ng.ng_Width=inner_w-pad*2; ng.ng_Height=row_h;
+                    ng.ng_Width=half; ng.ng_Height=row_h;
                     ng.ng_GadgetText=GS(MSG_DLG_DO_NOT_FORMAT); ng.ng_GadgetID=PDLG_NOFORMAT;
                     ng.ng_Flags=PLACETEXT_RIGHT;
                     noformat_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
                     if (!noformat_gad) goto cleanup; prev=noformat_gad;
+
+                    /* PFS3 only: keep a deleted-file history (deldir).  Greyed
+                       out while a non-PFS filesystem is selected. */
+                    ddt[1].ti_Data = (ULONG)!PFS_IsSupportedType(dlg_fs_dostypes[cur_fs]);
+                    ng.ng_LeftEdge=bor_l+pad+half+pad; ng.ng_TopEdge=ROW_Y(row);
+                    ng.ng_Width=half; ng.ng_Height=row_h;
+                    ng.ng_GadgetText=GS(MSG_DLG_DELDIR); ng.ng_GadgetID=PDLG_DELDIR;
+                    ng.ng_Flags=PLACETEXT_RIGHT;
+                    deldir_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,ddt);
+                    if (!deldir_gad) goto cleanup; prev=deldir_gad;
                 }
                 row++;
             }
@@ -797,7 +813,16 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 case IDCMP_CLOSEWINDOW: running = FALSE; break;
                 case IDCMP_GADGETUP:
                     switch (gad->GadgetID) {
-                    case PDLG_TYPE:      cur_fs  = (UWORD)code; break;
+                    case PDLG_TYPE:
+                        cur_fs = (UWORD)code;
+                        if (deldir_gad) {
+                            struct TagItem st[] = { { GA_Disabled, 0 },
+                                                    { TAG_DONE, 0 } };
+                            st[0].ti_Data = (ULONG)
+                                !PFS_IsSupportedType(dlg_fs_dostypes[cur_fs]);
+                            GT_SetGadgetAttrsA(deldir_gad, win, NULL, st);
+                        }
+                        break;
                     case PDLG_BLOCKSIZE: cur_bsz = (UWORD)code; break;
                     case PDLG_ADVANCED:
                         partition_advanced_dialog(pi);
@@ -892,6 +917,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                            non-empty volume name and "Do not format" unchecked. */
                         pi->volume_name[0] = '\0';
                         pi->want_format    = 0;
+                        pi->deldir_blocks  = 0;
                         if (is_new && volname_gad) {
                             BOOL no_format = (noformat_gad &&
                                 (noformat_gad->Flags & GFLG_SELECTED));
@@ -901,6 +927,12 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                             pi->volume_name[sizeof(pi->volume_name) - 1] = '\0';
                             pi->want_format = (!no_format &&
                                                pi->volume_name[0] != '\0');
+                            /* PFS3 deldir: 32 blocks (the maximum) when the
+                               checkbox is on and the format will happen. */
+                            if (pi->want_format && deldir_gad &&
+                                (deldir_gad->Flags & GFLG_SELECTED) &&
+                                PFS_IsSupportedType(pi->dos_type))
+                                pi->deldir_blocks = 32;
                         }
                         if (destructive) need_reboot = TRUE;
                         result = TRUE; running = FALSE;

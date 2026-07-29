@@ -1812,7 +1812,7 @@ static BOOL format_pending_partitions(struct Window *win, struct BlockDev *bd,
     report[0] = '\0';
     for (i = 0; i < rdb->num_parts; i++) {
         struct PartInfo *pi = &rdb->parts[i];
-        char line[160];
+        char line[240];
 
         if (!pi->want_format || pi->volume_name[0] == '\0') continue;
         any = 1;
@@ -1826,8 +1826,16 @@ static BOOL format_pending_partitions(struct Window *win, struct BlockDev *bd,
             if (QuickFormat_EnsureHandler(rdb, pi->dos_type,
                                           err, sizeof(err)) &&
                 QuickFormat_Partition(bd, pi, mounted, err, sizeof(err))) {
+                char  tnote[160];
+                ULONG ll;
                 DP_SNPRINTF(line, GS(MSG_PV_FMT_FORMATTED),
                         mounted[0] ? mounted : pi->drive_name, pi->volume_name);
+                if (QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
+                                         pi->dos_type, pi->deldir_blocks,
+                                         tnote, sizeof(tnote)) && tnote[0]) {
+                    ll = strlen(line);
+                    snprintf(line + ll, sizeof(line) - ll, "%s\n", tnote);
+                }
             } else {
                 DP_SNPRINTF(line, GS(MSG_PV_FMT_FAILED), pi->drive_name, err);
                 need_reboot = TRUE;   /* not mounted - reboot to pick it up */

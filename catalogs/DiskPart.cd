@@ -3966,3 +3966,27 @@ Copied the %s filesystem driver to the destination.\n
 MSG_PC_DST_BEYOND_DISK_FMT
 Destination %s ends at block %lu, which cannot be read.\nThe disk image is smaller than its RDB claims (truncated),\nso the clone would write into space that does not exist.\n
 ;
+; --- PFS3 post-format tuning (quickformat.c) --------------------------------
+; The deldir strings are appended to MSG_QF_PFS3_FNSIZE_* on the same line,
+; hence the leading comma+space.
+MSG_QF_PFS3_FNSIZE_OK
+PFS3: long filenames enabled (max 107)
+;
+MSG_QF_PFS3_FNSIZE_FAIL_FMT
+PFS3: setting filename size failed (error %ld)
+;
+MSG_QF_PFS3_DELDIR_OK_FMT
+, deldir on (%ld blocks, %ld files)
+;
+MSG_QF_PFS3_DELDIR_FAIL_FMT
+, enabling deldir failed (error %ld)
+;
+MSG_QF_PFS3_NOT_SUPPORTED
+PFS3: handler too old for setfnsize/setdeldir - defaults kept
+;
+MSG_DLG_DELDIR
+PFS3 deldir (undelete)
+;
+MSG_SCR_DELDIR_NEEDS_VOLNAME
+DELDIR has no effect without VOLNAME (partition is not formatted)
+;

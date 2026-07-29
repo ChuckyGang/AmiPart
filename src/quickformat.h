@@ -26,6 +26,18 @@
 BOOL QuickFormat_Partition(struct BlockDev *bd, const struct PartInfo *pi,
                            char *mounted_name, char *errbuf, ULONG errlen);
 
+/* After a successful quick-format of a PFS-family partition, tune the live
+ * handler the way the PFS3 setfnsize/setdeldir utilities do, by sending their
+ * DosPackets directly (no external binaries needed): raise the maximum
+ * filename length to 107 (always), and enable a deldir of deldir_blocks
+ * blocks (0 = leave disabled; each block keeps 31 deleted files).
+ * Best-effort: a handler too old for the packets keeps its defaults, and the
+ * format result is unaffected either way.  Returns TRUE if the dostype was
+ * PFS-family and tuning was attempted; notebuf (optional) then receives a
+ * one-line, localized outcome for the user (no trailing newline). */
+BOOL QuickFormat_PFS3Tune(const char *mounted_name, ULONG dostype,
+                          UWORD deldir_blocks, char *notebuf, ULONG notelen);
+
 /* Make sure a handler for dostype exists in FileSystem.resource, loading
  * and registering it from the RDB (FSHD/LSEG code, or the FSHD's handler
  * file path) when it is not resident - the same thing the ROM strap does

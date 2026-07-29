@@ -24,6 +24,7 @@
 #include "clib.h"
 #include "locale_support.h"
 #include "rdb.h"
+#include "pfsresize.h"
 #include "quickformat.h"
 
 /* ExpansionBase is declared by <proto/expansion.h> and defined in main.c. */
@@ -262,6 +263,74 @@ BOOL QuickFormat_Partition(struct BlockDev *bd, const struct PartInfo *pi,
     Inhibit((CONST_STRPTR)withcolon, DOSFALSE);
 
     set_err(errbuf, errlen, "");
+    return TRUE;
+}
+
+/* PFS3 handler-private DosPackets, as sent by the setfnsize/setdeldir tools
+   shipped with PFS3 (verified against the pfs3aio source, struct.h /
+   dd_funcs.c).  Arg1 must be ID_PFS_DISK, Arg2 carries the value. */
+#define ACTION_PFS_SET_DELDIR 2221
+#define ACTION_PFS_SET_FNSIZE 2222
+#define ID_PFS_DISK           0x50465302UL   /* 'PFS\2' */
+#define PFS_MAX_FNSIZE        107
+#define PFS_MAX_DELDIR_BLOCKS 32
+#define PFS_DELDIR_PER_BLOCK  31
+
+BOOL QuickFormat_PFS3Tune(const char *mounted_name, ULONG dostype,
+                          UWORD deldir_blocks, char *notebuf, ULONG notelen)
+{
+    struct MsgPort *port;
+    char  wc[44];
+    char  note[160];
+    ULONG len;
+
+    if (notebuf && notelen) notebuf[0] = '\0';
+    if (!mounted_name || !mounted_name[0] || !PFS_IsSupportedType(dostype))
+        return FALSE;
+
+    /* The handler only accepts these packets with the volume online; a
+       just-formatted volume needs a root Lock to come up. */
+    MaterializeVolume(mounted_name);
+
+    DP_SNPRINTF(wc, "%s:", mounted_name);
+    port = DeviceProc((CONST_STRPTR)wc);
+    if (!port) {
+        set_err(notebuf, notelen, GS(MSG_QF_PFS3_NOT_SUPPORTED));
+        return TRUE;
+    }
+
+    /* Raise the maximum filename length to 107 (always safe on a fresh,
+       empty volume; the handler rejects anything below its current size). */
+    if (DoPkt(port, ACTION_PFS_SET_FNSIZE, ID_PFS_DISK, PFS_MAX_FNSIZE,
+              0, 0, 0)) {
+        DP_SNPRINTF(note, "%s", GS(MSG_QF_PFS3_FNSIZE_OK));
+    } else {
+        LONG err = IoErr();
+        if (err == ERROR_ACTION_NOT_KNOWN) {
+            /* Handler predates the packet - setdeldir would fail the same
+               way, so report once and stop. */
+            set_err(notebuf, notelen, GS(MSG_QF_PFS3_NOT_SUPPORTED));
+            return TRUE;
+        }
+        DP_SNPRINTF(note, GS(MSG_QF_PFS3_FNSIZE_FAIL_FMT), (long)err);
+    }
+
+    /* Optionally enable the deldir (hidden deleted-file history). */
+    if (deldir_blocks) {
+        if (deldir_blocks > PFS_MAX_DELDIR_BLOCKS)
+            deldir_blocks = PFS_MAX_DELDIR_BLOCKS;
+        len = strlen(note);
+        if (DoPkt(port, ACTION_PFS_SET_DELDIR, ID_PFS_DISK,
+                  (LONG)deldir_blocks, 0, 0, 0))
+            snprintf(note + len, sizeof(note) - len,
+                     GS(MSG_QF_PFS3_DELDIR_OK_FMT), (long)deldir_blocks,
+                     (long)deldir_blocks * PFS_DELDIR_PER_BLOCK);
+        else
+            snprintf(note + len, sizeof(note) - len,
+                     GS(MSG_QF_PFS3_DELDIR_FAIL_FMT), (long)IoErr());
+    }
+
+    set_err(notebuf, notelen, note);
     return TRUE;
 }
 

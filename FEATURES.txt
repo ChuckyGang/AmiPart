@@ -66,6 +66,12 @@ scripting interface.
    format" option in the Add dialog; VOLNAME= on the CLI / in scripts).  The
    partition is temp-mounted and formatted by its real filesystem handler, then
    left mounted - no reboot needed.  Real devices only (not image files).
+ * PFS3 partitions are tuned right after the quick-format: the maximum
+   filename length is raised to 107, and optionally a deldir (hidden
+   deleted-file history, up to 32 blocks / 992 files) is enabled - same as
+   running the PFS3 setfnsize/setdeldir utilities, but built in ("PFS3
+   deldir" checkbox in the Add dialog; DELDIR=<1-32> on the CLI / in
+   scripts).
  * When the filesystem is not resident (e.g. formatting a PFS3 partition on a
    system that booted without pfs3), the handler is loaded from the disk's own
    RDB (the FSHD/LSEG code added with ADDFS - exactly what the ROM does at
@@ -207,6 +213,7 @@ scripting interface.
    - DELMBR NAME=<MBR1..MBR4>: removes an MBR partition.
  * INFO (CLI and script) now includes MBR partition table when present.
  * ADDPART VOLNAME=<label> (CLI and script) quick-formats the new partition.
+   DELDIR=<1-32> additionally enables a PFS3 deldir of that many blocks.
  * DRYRUN mode previews actions without writing.
  * FORCE option suppresses confirmation prompts for unattended runs.
 

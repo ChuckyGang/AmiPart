@@ -162,6 +162,8 @@ struct PartInfo {
        of a newly created partition after the table is written. */
     char  volume_name[32]; /* label to format with; empty = do not format */
     UBYTE want_format;     /* TRUE only for a new partition the user opted to format */
+    UBYTE deldir_blocks;   /* PFS3 only: deldir blocks to enable after the format
+                              (0 = leave disabled, max 32; 31 entries per block) */
 };
 
 struct FSInfo {

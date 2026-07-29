@@ -1289,8 +1289,15 @@
 #define MSG_PCP_FS_ASK_GADGETS       1283
 #define MSG_PC_FS_COPIED_FMT         1284
 #define MSG_PC_DST_BEYOND_DISK_FMT   1285
+#define MSG_QF_PFS3_FNSIZE_OK        1286
+#define MSG_QF_PFS3_FNSIZE_FAIL_FMT  1287
+#define MSG_QF_PFS3_DELDIR_OK_FMT    1288
+#define MSG_QF_PFS3_DELDIR_FAIL_FMT  1289
+#define MSG_QF_PFS3_NOT_SUPPORTED    1290
+#define MSG_DLG_DELDIR               1291
+#define MSG_SCR_DELDIR_NEEDS_VOLNAME 1292
 
-#define MSG_COUNT 1286
+#define MSG_COUNT 1293
 
 #endif /* DISKPART_STRINGS_H */
 
@@ -2588,5 +2595,12 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1283 MSG_PCP_FS_ASK_GADGETS */ "Copy driver|Skip",
     /* 1284 MSG_PC_FS_COPIED_FMT */ "Copied the %s filesystem driver to the destination.\n",
     /* 1285 MSG_PC_DST_BEYOND_DISK_FMT */ "Destination %s ends at block %lu, which cannot be read.\nThe disk image is smaller than its RDB claims (truncated),\nso the clone would write into space that does not exist.\n",
+    /* 1286 MSG_QF_PFS3_FNSIZE_OK */ "PFS3: long filenames enabled (max 107)",
+    /* 1287 MSG_QF_PFS3_FNSIZE_FAIL_FMT */ "PFS3: setting filename size failed (error %ld)",
+    /* 1288 MSG_QF_PFS3_DELDIR_OK_FMT */ ", deldir on (%ld blocks, %ld files)",
+    /* 1289 MSG_QF_PFS3_DELDIR_FAIL_FMT */ ", enabling deldir failed (error %ld)",
+    /* 1290 MSG_QF_PFS3_NOT_SUPPORTED */ "PFS3: handler too old for setfnsize/setdeldir - defaults kept",
+    /* 1291 MSG_DLG_DELDIR */ "PFS3 deldir (undelete)",
+    /* 1292 MSG_SCR_DELDIR_NEEDS_VOLNAME */ "DELDIR has no effect without VOLNAME (partition is not formatted)",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

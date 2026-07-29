@@ -761,6 +761,16 @@ static LONG do_addpart(ULONG ln, char **tok, UWORD ntok)
         pi->sectors = s_st.rdb.sectors;
     }
 
+    /* DELDIR (optional) - PFS3 only: deldir blocks to enable after the
+       quick-format (needs VOLNAME; silently capped at 32). */
+    v = kwarg(tok, ntok, "DELDIR");
+    if (v && v[0]) {
+        ULONG n = strtoul(v, NULL, 10);
+        pi->deldir_blocks = (UBYTE)(n > 32 ? 32 : n);
+        if (!pi->want_format)
+            sc_warn(ln, GS(MSG_SCR_DELDIR_NEEDS_VOLNAME));
+    }
+
     s_st.rdb.num_parts++;
     s_st.dirty = TRUE;
 
@@ -1842,6 +1852,8 @@ static LONG do_write(ULONG ln)
         UWORD i;
         for (i = 0; i < s_st.rdb.num_parts; i++) {
             struct PartInfo *pi = &s_st.rdb.parts[i];
+            char tnote[160];
+            tnote[0] = '\0';
             if (!pi->want_format || pi->volume_name[0] == '\0') continue;
             if (s_st.bd->backend == BD_FILE) {
                 DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_SKIPPED_FMT),
@@ -1855,12 +1867,19 @@ static LONG do_write(ULONG ln)
                     DP_SNPRINTF(s_msg, GS(MSG_SCR_FORMATTED_FMT),
                             mounted[0] ? mounted : pi->drive_name,
                             pi->volume_name);
+                    QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
+                                         pi->dos_type, pi->deldir_blocks,
+                                         tnote, sizeof(tnote));
                 } else {
                     DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_FAILED_FMT),
                             pi->drive_name, err);
                 }
             }
             sc_puts(s_msg);
+            if (tnote[0]) {
+                DP_SNPRINTF(s_msg, "  %s\n", tnote);
+                sc_puts(s_msg);
+            }
             pi->want_format = 0;
         }
     }

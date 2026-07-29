@@ -210,7 +210,7 @@ RESTOREEXT <file>
 
 ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
          [TYPE=<dostype>] [BOOTPRI=<n>] [BOOTABLE] [ENFORCESIZE]
-         [BLOCKSIZE=<n>]
+         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>]
   Add a partition to the existing RDB, then ask Y/N before writing.
   FORCE skips the write question.  See SCRIPT COMMANDS for full
   description of LOW/HIGH/TYPE/BLOCKSIZE syntax.
@@ -388,7 +388,7 @@ INIT NEWGEO
 
 ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
          [TYPE=<dostype>] [BOOTPRI=<n>] [BOOTABLE] [ENFORCESIZE]
-         [BLOCKSIZE=<n>]
+         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>]
   Add a partition entry to the in-memory RDB.
   TYPE defaults to DOS3 (0x444F5303) if not specified.
   TYPE can be a hex value (0x444F5303 or $444F5303) or a short
@@ -418,6 +418,21 @@ ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
                  omitted.  Must be a power of two from 512 up to 32768
                  (512, 1024, 2048, 4096, ...).  Most setups use 512;
                  only change it if your filesystem expects larger blocks.
+
+  VOLNAME=<label>  Quick-format the new partition after WRITE, with this
+                 volume label.  The partition is temp-mounted and formatted
+                 by its real filesystem handler, then left mounted - no
+                 reboot needed.  Real devices only (not image files).
+                 Omitted or empty = no format.
+
+  DELDIR=<blocks>  PFS3/PDS3 partitions with VOLNAME only: after the
+                 format, enable the deldir (a hidden directory that keeps
+                 recently deleted files for undeletion) with this many
+                 deldir blocks.  Each block holds 31 files; the maximum
+                 is 32 blocks (992 files).  Freshly formatted PFS3
+                 partitions also get their maximum filename length raised
+                 to 107 automatically (the setfnsize/setdeldir utilities
+                 are not needed).
 
   Requires WRITE to commit to disk.
 

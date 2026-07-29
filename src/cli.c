@@ -70,7 +70,7 @@ extern struct DosLibrary *DOSBase;
     "ZEROPART/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
-    "TODEV/K"
+    "TODEV/K,DELDIR/K"
 
 enum {
     ARG_LISTDEV = 0,
@@ -127,6 +127,7 @@ enum {
     ARG_PARTCLONE,
     ARG_TO,
     ARG_TODEV,
+    ARG_DELDIR,
     ARG_COUNT
 };
 
@@ -1204,7 +1205,7 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
                         const char *high_s,    const char *type_s,
                         const char *bootpri_s, BOOL bootable,
                         const char *volname_s, BOOL enforcesize,
-                        const char *blocksize_s)
+                        const char *blocksize_s, const char *deldir_s)
 {
     struct BlockDev *bd;
     struct PartInfo *pi;
@@ -1352,10 +1353,14 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
         if (bd->backend == BD_FILE) {
             cli_puts(GS(MSG_CLI_VOLNAME_IGNORED));
         } else {
-            char err[80], mounted[40];
-            err[0] = '\0';
+            char err[80], mounted[40], tnote[160];
+            err[0] = '\0'; tnote[0] = '\0';
             strncpy(pi->volume_name, volname_s, sizeof(pi->volume_name) - 1);
             pi->volume_name[sizeof(pi->volume_name) - 1] = '\0';
+            if (deldir_s) {
+                ULONG n = strtoul(deldir_s, NULL, 10);
+                pi->deldir_blocks = (UBYTE)(n > 32 ? 32 : n);
+            }
             if (!pi->heads)   pi->heads   = s_rdb.heads;
             if (!pi->sectors) pi->sectors = s_rdb.sectors;
             if (QuickFormat_EnsureHandler(&s_rdb, pi->dos_type,
@@ -1363,10 +1368,17 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
                 QuickFormat_Partition(bd, pi, mounted, err, sizeof(err))) {
                 DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMATTED_AS),
                         mounted[0] ? mounted : pi->drive_name, pi->volume_name);
+                QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
+                                     pi->dos_type, pi->deldir_blocks,
+                                     tnote, sizeof(tnote));
             } else {
                 DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMAT_FAILED), err);
             }
             cli_puts(outbuf);
+            if (tnote[0]) {
+                DP_SNPRINTF(outbuf, "%s\n", tnote);
+                cli_puts(outbuf);
+            }
         }
     }
 
@@ -3214,7 +3226,8 @@ LONG cli_run(void)
                                  (BOOL)args[ARG_BOOTABLE],
                                  (const char *)args[ARG_VOLNAME],
                                  (BOOL)args[ARG_ENFORCESIZE],
-                                 (const char *)args[ARG_BLOCKSIZE]);
+                                 (const char *)args[ARG_BLOCKSIZE],
+                                 (const char *)args[ARG_DELDIR]);
 
             if (rc == RETURN_OK && args[ARG_GROW]) {
                 STRPTR *gv = (STRPTR *)args[ARG_GROW];
