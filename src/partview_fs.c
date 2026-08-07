@@ -701,7 +701,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                             if (fs_addedit_dialog(&new_fi, FALSE)) {
                                 rdb->filesystems[rdb->num_fs++] = new_fi;
                                 dirty = TRUE;
-                                { struct TagItem dt[]={{GTLV_Labels,TAG_IGNORE},{TAG_DONE,0}};
+                                { struct TagItem dt[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
                                   struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt);
                                   build_fs_list(rdb);
@@ -727,7 +727,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                             if (fs_addedit_dialog(&edit_fi, TRUE)) {
                                 rdb->filesystems[sel] = edit_fi;
                                 dirty = TRUE;
-                                { struct TagItem dt[]={{GTLV_Labels,TAG_IGNORE},{TAG_DONE,0}};
+                                { struct TagItem dt[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
                                   struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt);
                                   build_fs_list(rdb);
@@ -800,7 +800,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                                 dirty = TRUE;
                                 if (sel >= (WORD)rdb->num_fs)
                                     sel = (WORD)rdb->num_fs - 1;
-                                { struct TagItem dt2[]={{GTLV_Labels,TAG_IGNORE},{TAG_DONE,0}};
+                                { struct TagItem dt2[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
                                   struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt2);
                                   build_fs_list(rdb);
