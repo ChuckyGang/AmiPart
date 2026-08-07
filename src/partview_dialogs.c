@@ -31,12 +31,18 @@ extern struct DosLibrary    *DOSBase;
 extern struct IntuitionBase *IntuitionBase;
 extern struct Library       *GadToolsBase;
 
+/* DOS\4/DOS\5 (directory cache) are deliberately absent: FFS V45+
+   (OS 3.1.4/3.2) no longer supports creating DC volumes.  DOS\6/DOS\7
+   (long filenames) need the V45+ FFS to mount. */
 static const struct { const char *name; ULONG dostype; } builtin_fs[] = {
-    { "OFS",      0x444F5300UL },
-    { "FFS",      0x444F5301UL },
-    { "FFS+Intl", 0x444F5303UL },
+    { "OFS",          0x444F5300UL },
+    { "FFS",          0x444F5301UL },
+    { "OFS+Intl",     0x444F5302UL },
+    { "FFS+Intl",     0x444F5303UL },
+    { "OFS+LongName", 0x444F5306UL },
+    { "FFS+LongName", 0x444F5307UL },
 };
-#define NUM_BUILTIN_FS 3
+#define NUM_BUILTIN_FS 6
 
 /* Returns a human-readable filesystem name: built-in friendly name if known,
    otherwise falls back to FormatDosType (e.g. "PFS\3").  buf >= 16 bytes. */
