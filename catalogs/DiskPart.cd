@@ -3532,13 +3532,13 @@ MSG_CLI_INFO_MBR_ROW_FMT
 ; Non-harddisk device rejection (CD-ROM, tape, etc)
 ;==========================================================================
 MSG_PV_NOT_A_HARDDISK
-This device is not a hard disk (CD-ROM, tape, or similar).\nPartitioning is not supported.
+This device is not a hard disk (CD-ROM, tape, or similar).\nPartitioning is not supported. (SCSI device type %lu)
 ;
 MSG_CLI_NOT_A_HARDDISK
-This device is not a hard disk (CD-ROM, tape, or similar). Partitioning is not supported.\n
+This device is not a hard disk (CD-ROM, tape, or similar). Partitioning is not supported. (SCSI device type %lu)\n
 ;
 MSG_SCR_NOT_A_HARDDISK
-This device is not a hard disk (CD-ROM, tape, or similar). Partitioning is not supported.
+This device is not a hard disk (CD-ROM, tape, or similar). Partitioning is not supported. (SCSI device type %lu)
 ;
 ;==========================================================================
 ; partview_diskcopy.c

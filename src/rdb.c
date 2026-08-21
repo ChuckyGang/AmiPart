@@ -418,12 +418,14 @@ struct BlockDev *BlockDev_Open(const char *devname, ULONG unit)
     {
         struct SCSICmd scmd;
         UBYTE cdb[6];
+        UBYTE sense[18];
         /* 512, not 36: same lide.device full-sector-passthrough hazard as
            try_read_capacity() - an undersized buffer is overrun. */
         UBYTE *inq = (UBYTE *)AllocVec(512, MEMF_PUBLIC | MEMF_CLEAR);
         if (inq) {
             memset(&scmd, 0, sizeof(scmd));
             memset(cdb,   0, sizeof(cdb));
+            memset(sense, 0, sizeof(sense));
             cdb[0] = 0x12;  /* INQUIRY */
             cdb[4] = 36;    /* allocation length */
 
@@ -431,7 +433,9 @@ struct BlockDev *BlockDev_Open(const char *devname, ULONG unit)
             scmd.scsi_Length      = 36;
             scmd.scsi_Command     = cdb;
             scmd.scsi_CmdLength   = 6;
-            scmd.scsi_Flags       = SCSIF_READ;
+            scmd.scsi_Flags       = SCSIF_READ | SCSIF_AUTOSENSE;
+            scmd.scsi_SenseData   = sense;
+            scmd.scsi_SenseLength = sizeof(sense);
 
             bd->iotd.iotd_Req.io_Command = HD_SCSICMD;
             bd->iotd.iotd_Req.io_Length  = sizeof(scmd);
@@ -439,7 +443,12 @@ struct BlockDev *BlockDev_Open(const char *devname, ULONG unit)
             bd->iotd.iotd_Req.io_Flags   = 0;
             bd->iotd.iotd_Count          = 0;
 
-            if (DoIO((struct IORequest *)&bd->iotd) == 0) {
+            /* scsi_Status must be checked too (like try_scsi_inquiry() in
+               devices.c does): some HD_SCSICMD emulations return io_Error=0
+               for a command they failed, and trusting the buffer then would
+               plant a garbage device type that gets a good disk refused. */
+            if (DoIO((struct IORequest *)&bd->iotd) == 0 &&
+                scmd.scsi_Status == 0) {
                 /* bytes 8-15: vendor (8 chars), 16-31: product (16 chars) */
                 char vendor[9], product[17];
                 WORD last;
@@ -764,7 +773,26 @@ BOOL BlockDev_IsHardDisk(struct BlockDev *bd)
     if (!bd) return TRUE;
     if (bd->backend == BD_FILE) return TRUE;  /* image files always act as HDs */
     if (!bd->device_type_known) return TRUE;  /* driver answered neither query */
-    return (BOOL)(bd->device_type == DG_DIRECT_ACCESS);
+
+    /* Refuse only device types that are positively NOT rewritable disks.
+       Everything else is accepted: besides DG_DIRECT_ACCESS that includes
+       DG_OPTICAL_DISK (MO drives carry RDBs), 0x0E (RBC "simplified
+       direct-access", reported by some flash/CF bridges) and DG_UNKNOWN
+       (some IDE drivers use it for plain ATA drives) - a CF card behind
+       one of those emulations must not be locked out. */
+    switch (bd->device_type) {
+        case DG_SEQUENTIAL_ACCESS:   /* tape */
+        case DG_PRINTER:
+        case DG_PROCESSOR:
+        case DG_WORM:                /* write-once */
+        case DG_CDROM:
+        case DG_SCANNER:
+        case DG_MEDIUM_CHANGER:
+        case DG_COMMUNICATION:
+            return FALSE;
+        default:
+            return TRUE;
+    }
 }
 
 /* ------------------------------------------------------------------ */

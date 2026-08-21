@@ -253,7 +253,8 @@ static struct BlockDev *cli_open_target(const char *devname, ULONG unit)
         return NULL;
     }
     if (!BlockDev_IsHardDisk(bd)) {
-        cli_puts(GS(MSG_CLI_NOT_A_HARDDISK));
+        DP_SNPRINTF(outbuf, GS(MSG_CLI_NOT_A_HARDDISK), (ULONG)bd->device_type);
+        cli_puts(outbuf);
         BlockDev_Close(bd);
         return NULL;
     }

@@ -118,13 +118,15 @@ BOOL             BlockDev_GetGeometry(struct BlockDev *bd,
 /* Returns TRUE if block 0 has a PC MBR signature (0x55AA at offset 510). */
 BOOL             BlockDev_HasMBR(struct BlockDev *bd);
 
-/* Returns TRUE if the device identifies itself as a direct-access disk
- * (peripheral device type DG_DIRECT_ACCESS, read from the SCSI INQUIRY
- * response if the device answered HD_SCSICMD, else from TD_GETGEOMETRY's
- * dg_DeviceType).  FALSE for CD-ROMs, tape drives, and other non-harddisk
- * peripheral types.  A NULL bd, a BD_FILE (image) backend, or a device
- * whose driver answered neither query all count as unknown and return
- * TRUE, so devices nothing could be determined about aren't blocked. */
+/* Returns FALSE only if the device positively identifies itself as a
+ * non-rewritable-disk peripheral type (CD-ROM, tape, printer, WORM, etc;
+ * read from the SCSI INQUIRY response if the device answered HD_SCSICMD,
+ * else from TD_GETGEOMETRY's dg_DeviceType).  Every other type is accepted
+ * - including DG_OPTICAL_DISK, RBC (0x0E) and DG_UNKNOWN, which real
+ * disk-like devices report through some driver emulations.  A NULL bd, a
+ * BD_FILE (image) backend, or a device whose driver answered neither query
+ * all count as unknown and return TRUE, so devices nothing could be
+ * determined about aren't blocked. */
 BOOL             BlockDev_IsHardDisk(struct BlockDev *bd);
 
 /* Erase MBR partition table entries + boot signature from block 0.

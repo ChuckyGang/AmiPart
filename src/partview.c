@@ -2104,11 +2104,13 @@ BOOL partview_run(const char *devname, ULONG unit)
 
     if (bd && !BlockDev_IsHardDisk(bd)) {
         struct EasyStruct es;
+        ULONG fmtargs[1];
+        fmtargs[0] = bd->device_type;
         es.es_StructSize=sizeof(es); es.es_Flags=0;
         es.es_Title=(UBYTE*)DISKPART_VERTITLE;
         es.es_TextFormat=(UBYTE*)GS(MSG_PV_NOT_A_HARDDISK);
         es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
-        EasyRequest(NULL, &es, NULL);
+        EasyRequestArgs(NULL, &es, NULL, fmtargs);
         goto cleanup;
     }
 
