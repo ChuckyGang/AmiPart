@@ -96,7 +96,13 @@ CD_FILE   := catalogs/AmiPart.cd
 STRINGS_H := src/amipart_strings.h
 GENCAT    := support/gencat.py
 
-.PHONY: all clean icon adf FORCE strings catalog-template catalog
+.PHONY: all clean icon adf FORCE strings catalog-template catalog amiga linux
+
+# Convenience names for the two targets: `make amiga` (the default) builds
+# the m68k binary here, `make linux` builds the native host CLI in host/.
+amiga: all
+linux:
+	$(MAKE) -C host
 
 # Keep 'all' the default goal (rules below would otherwise grab it).
 all: $(program) $(program).info
