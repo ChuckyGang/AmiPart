@@ -2,3 +2,4 @@ obj/
 out/
 test/*.hdf
 review.txt
+test/host/hostrdb

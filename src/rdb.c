@@ -25,6 +25,7 @@
 
 #include "clib.h"
 #include "rdb.h"
+#include "rdbbe.h"
 #include "locale_support.h"
 
 /* TD_READ64/TD_WRITE64 are not in the Bartman SDK trackdisk.h but are
@@ -897,7 +898,7 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         if (!BlockDev_ReadBlock(bd, blk, buf))
             continue;
         rdsk = (struct RigidDiskBlock *)buf;
-        if (rdsk->rdb_ID != IDNAME_RIGIDDISK)
+        if (BE32R(rdsk->rdb_ID) != IDNAME_RIGIDDISK)
             continue;
 
         /* Validate by checksum when SummedLongs is in a valid range for a
@@ -911,10 +912,10 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
            unverifiable. */
         {
             const ULONG *lp = (const ULONG *)buf;
-            ULONG        sl = rdsk->rdb_SummedLongs;
+            ULONG        sl = BE32R(rdsk->rdb_SummedLongs);
             if (sl >= 2 && sl <= 128) {
                 ULONG sum = 0, ci;
-                for (ci = 0; ci < sl; ci++) sum += lp[ci];
+                for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
                 if (sum != 0) continue;   /* checksum mismatch - not a valid RDSK */
             }
             /* sl == 0 or sl > 128: checksum unverifiable; trust the ID */
@@ -923,14 +924,14 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         rdb->valid       = TRUE;
         rdb->blk_size    = bd->block_size;
         rdb->block_num   = blk;
-        rdb->flags       = rdsk->rdb_Flags;
-        rdb->cylinders   = rdsk->rdb_Cylinders;
-        rdb->sectors     = rdsk->rdb_Sectors;
-        rdb->heads       = rdsk->rdb_Heads;
-        rdb->rdb_block_lo= rdsk->rdb_RDBBlocksLo;
-        rdb->rdb_block_hi= rdsk->rdb_RDBBlocksHi;
-        rdb->lo_cyl      = rdsk->rdb_LoCylinder;
-        rdb->hi_cyl      = rdsk->rdb_HiCylinder;
+        rdb->flags       = BE32R(rdsk->rdb_Flags);
+        rdb->cylinders   = BE32R(rdsk->rdb_Cylinders);
+        rdb->sectors     = BE32R(rdsk->rdb_Sectors);
+        rdb->heads       = BE32R(rdsk->rdb_Heads);
+        rdb->rdb_block_lo= BE32R(rdsk->rdb_RDBBlocksLo);
+        rdb->rdb_block_hi= BE32R(rdsk->rdb_RDBBlocksHi);
+        rdb->lo_cyl      = BE32R(rdsk->rdb_LoCylinder);
+        rdb->hi_cyl      = BE32R(rdsk->rdb_HiCylinder);
 
         /* Sanitize lo_cyl/hi_cyl: some tools write garbage here.
            Handle two distinct cases:
@@ -948,8 +949,8 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             }
         }
 
-        rdb->part_list   = rdsk->rdb_PartitionList;
-        rdb->fshdr_list  = rdsk->rdb_FileSysHeaderList;
+        rdb->part_list   = BE32R(rdsk->rdb_PartitionList);
+        rdb->fshdr_list  = BE32R(rdsk->rdb_FileSysHeaderList);
 
         memcpy(rdb->disk_vendor,   rdsk->rdb_DiskVendor,   8);  rdb->disk_vendor[8]   = '\0';
         memcpy(rdb->disk_product,  rdsk->rdb_DiskProduct,  16); rdb->disk_product[16] = '\0';
@@ -978,16 +979,16 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         if (!BlockDev_ReadBlock(bd, next, buf))
             break;
         pb = (struct PartitionBlock *)buf;
-        if (pb->pb_ID != IDNAME_PARTITION)
+        if (BE32R(pb->pb_ID) != IDNAME_PARTITION)
             break;
         /* Checksum-validate the PART block - same logic as for RDSK:
            verify when SummedLongs is in range (2..128), else trust ID. */
         {
             const ULONG *lp = (const ULONG *)buf;
-            ULONG sl = pb->pb_SummedLongs;
+            ULONG sl = BE32R(pb->pb_SummedLongs);
             if (sl >= 2 && sl <= 128) {
                 ULONG sum = 0, ci;
-                for (ci = 0; ci < sl; ci++) sum += lp[ci];
+                for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
                 if (sum != 0) break;   /* checksum mismatch - corrupt or truncated chain */
             }
             /* sl out of range: non-standard tool; trust the PART ID */
@@ -995,8 +996,8 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
 
         pi = &rdb->parts[rdb->num_parts];
         pi->block_num = next;
-        pi->next_part = pb->pb_Next;
-        pi->flags     = pb->pb_Flags;
+        pi->next_part = BE32R(pb->pb_Next);
+        pi->flags     = BE32R(pb->pb_Flags);
 
         /* BSTR drive name */
         bstr = pb->pb_DriveName;
@@ -1008,29 +1009,32 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
 
         /* DosEnvec array */
         env = pb->pb_Environment;
-        pi->low_cyl       = env[DE_LOWCYL];
-        pi->high_cyl      = env[DE_UPPERCYL];
-        pi->heads         = env[DE_NUMHEADS];
-        pi->sectors       = env[DE_BLKSPERTRACK];
-        pi->block_size    = env[DE_SIZEBLOCK] * 4;
-        pi->sectors_per_block = (env[DE_TABLESIZE] >= DE_SECSPERBLK
-                                 && env[DE_SECSPERBLK] > 0)
-                                ? env[DE_SECSPERBLK] : 1;
-        pi->dos_type      = env[DE_DOSTYPE];
-        pi->boot_pri      = (LONG)env[DE_BOOTPRI];
-        pi->reserved_blks = env[DE_RESERVEDBLKS];
-        pi->interleave    = env[DE_INTERLEAVE];
-        pi->max_transfer  = env[DE_MAXTRANSFER];
-        pi->mask          = env[DE_MASK];
-        pi->num_buffer    = env[DE_NUMBUFFERS];
-        pi->buf_mem_type  = env[DE_BUFMEMTYPE];
-        pi->baud          = (env[DE_TABLESIZE] >= DE_BAUD)    ? env[DE_BAUD]    : 0;
-        pi->control       = (env[DE_TABLESIZE] >= DE_CONTROL) ? env[DE_CONTROL] : 0;
+        pi->low_cyl       = BE32R(env[DE_LOWCYL]);
+        pi->high_cyl      = BE32R(env[DE_UPPERCYL]);
+        pi->heads         = BE32R(env[DE_NUMHEADS]);
+        pi->sectors       = BE32R(env[DE_BLKSPERTRACK]);
+        pi->block_size    = BE32R(env[DE_SIZEBLOCK]) * 4;
+        pi->sectors_per_block = (BE32R(env[DE_TABLESIZE]) >= DE_SECSPERBLK
+                                 && BE32R(env[DE_SECSPERBLK]) > 0)
+                                ? BE32R(env[DE_SECSPERBLK]) : 1;
+        pi->dos_type      = BE32R(env[DE_DOSTYPE]);
+        pi->boot_pri      = (LONG)BE32R(env[DE_BOOTPRI]);
+        pi->reserved_blks = BE32R(env[DE_RESERVEDBLKS]);
+        pi->interleave    = BE32R(env[DE_INTERLEAVE]);
+        pi->max_transfer  = BE32R(env[DE_MAXTRANSFER]);
+        pi->mask          = BE32R(env[DE_MASK]);
+        pi->num_buffer    = BE32R(env[DE_NUMBUFFERS]);
+        pi->buf_mem_type  = BE32R(env[DE_BUFMEMTYPE]);
+        pi->baud          = (BE32R(env[DE_TABLESIZE]) >= DE_BAUD)
+                            ? BE32R(env[DE_BAUD])    : 0;
+        pi->control       = (BE32R(env[DE_TABLESIZE]) >= DE_CONTROL)
+                            ? BE32R(env[DE_CONTROL]) : 0;
         /* DE_BOOTBLOCKS = 19; only present when table size covers it */
-        pi->boot_blocks   = (env[DE_TABLESIZE] >= 19) ? env[19] : 0;
-        pi->dev_flags     = pb->pb_DevFlags;
+        pi->boot_blocks   = (BE32R(env[DE_TABLESIZE]) >= 19)
+                            ? BE32R(env[19]) : 0;
+        pi->dev_flags     = BE32R(pb->pb_DevFlags);
 
-        next = pb->pb_Next;
+        next = BE32R(pb->pb_Next);
         rdb->num_parts++;
     }
 
@@ -1064,15 +1068,15 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         if (!BlockDev_ReadBlock(bd, next, buf))
             break;
         fhb = (struct FileSysHeaderBlock *)buf;
-        if (fhb->fhb_ID != IDNAME_FSHEADER)
+        if (BE32R(fhb->fhb_ID) != IDNAME_FSHEADER)
             break;
         /* Checksum-validate the FSHD block - same logic as RDSK/PART. */
         {
             const ULONG *lp = (const ULONG *)buf;
-            ULONG sl = fhb->fhb_SummedLongs;
+            ULONG sl = BE32R(fhb->fhb_SummedLongs);
             if (sl >= 2 && sl <= 128) {
                 ULONG sum = 0, ci;
-                for (ci = 0; ci < sl; ci++) sum += lp[ci];
+                for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
                 if (sum != 0) break;   /* checksum mismatch - corrupt or truncated chain */
             }
             /* sl out of range: non-standard tool; trust the FSHD ID */
@@ -1080,21 +1084,21 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
 
         fi = &rdb->filesystems[rdb->num_fs];
         fi->block_num    = next;
-        fi->next_fshd    = fhb->fhb_Next;
-        fi->flags        = fhb->fhb_Flags;
-        fi->dos_type     = fhb->fhb_DosType;
-        fi->version      = fhb->fhb_Version;
-        fi->patch_flags  = fhb->fhb_PatchFlags;
-        fi->stack_size   = fhb->fhb_StackSize;
-        fi->priority     = fhb->fhb_Priority;
-        fi->global_vec   = fhb->fhb_GlobalVec;
-        fi->seg_list_blk = (ULONG)fhb->fhb_SegListBlocks;
+        fi->next_fshd    = BE32R(fhb->fhb_Next);
+        fi->flags        = BE32R(fhb->fhb_Flags);
+        fi->dos_type     = BE32R(fhb->fhb_DosType);
+        fi->version      = BE32R(fhb->fhb_Version);
+        fi->patch_flags  = BE32R(fhb->fhb_PatchFlags);
+        fi->stack_size   = BE32R(fhb->fhb_StackSize);
+        fi->priority     = (LONG)BE32R(fhb->fhb_Priority);
+        fi->global_vec   = (LONG)BE32R(fhb->fhb_GlobalVec);
+        fi->seg_list_blk = BE32R(fhb->fhb_SegListBlocks);
         fi->code         = NULL;
         fi->code_size    = 0;
         memcpy(fi->fs_name, fhb->fhb_FileSysName, 84);
         fi->fs_name[83]  = '\0';
 
-        next = fhb->fhb_Next;
+        next = BE32R(fhb->fhb_Next);
 
         /* Count LSEG blocks to allocate exact buffer */
         {
@@ -1110,16 +1114,16 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             if (chain_seen(lseg_seen, &lseg_seen_n, lseg_blk)) break; /* cycle */
             if (!BlockDev_ReadBlock(bd, lseg_blk, buf)) break;
             lsb = (struct LoadSegBlock *)buf;
-            if (lsb->lsb_ID != IDNAME_LOADSEG) break;
+            if (BE32R(lsb->lsb_ID) != IDNAME_LOADSEG) break;
             lp = (const ULONG *)buf;
-            sl = lsb->lsb_SummedLongs;
+            sl = BE32R(lsb->lsb_SummedLongs);
             if (sl >= 2 && sl <= 128) {
-                sum = 0; for (ci = 0; ci < sl; ci++) sum += lp[ci];
+                sum = 0; for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
                 if (sum != 0) break;   /* checksum mismatch */
             }
             /* sl out of range: non-standard tool; trust the LSEG ID */
             num_lseg++;
-            lseg_blk = lsb->lsb_Next;
+            lseg_blk = BE32R(lsb->lsb_Next);
         }
         } /* end LSEG count scope */
 
@@ -1145,24 +1149,23 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
                     if (chain_seen(lseg_seen2, &lseg_seen2_n, lseg_blk)) { ok = FALSE; break; }
                     if (!BlockDev_ReadBlock(bd, lseg_blk, buf)) { ok = FALSE; break; }
                     lsb = (struct LoadSegBlock *)buf;
-                    if (lsb->lsb_ID != IDNAME_LOADSEG) { ok = FALSE; break; }
+                    if (BE32R(lsb->lsb_ID) != IDNAME_LOADSEG) { ok = FALSE; break; }
                     lp = (const ULONG *)buf;
-                    sl = lsb->lsb_SummedLongs;
+                    sl = BE32R(lsb->lsb_SummedLongs);
                     if (sl >= 2 && sl <= 128) {
-                        sum = 0; for (ci = 0; ci < sl; ci++) sum += lp[ci];
+                        sum = 0; for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
                         if (sum != 0) { ok = FALSE; break; }
                     }
                     /* sl out of range: non-standard tool; trust the LSEG ID */
                     /* Respect lsb_SummedLongs - the last block may be partial.
                        SummedLongs includes 5 header longs; the rest is data.
                        Clamp to 492 bytes (123 longs) maximum per block. */
-                    data_bytes = (lsb->lsb_SummedLongs > 5UL)
-                                 ? (lsb->lsb_SummedLongs - 5UL) * 4UL : 0UL;
+                    data_bytes = (sl > 5UL) ? (sl - 5UL) * 4UL : 0UL;
                     if (data_bytes > 492UL) data_bytes = 492UL;
                     memcpy(fi->code + offset, lsb->lsb_LoadData, data_bytes);
                     offset += data_bytes;
                     count2++;
-                    lseg_blk = lsb->lsb_Next;
+                    lseg_blk = BE32R(lsb->lsb_Next);
                 }
                 if (ok) {
                     fi->code_size = offset;  /* actual bytes, not padded to 492 */
@@ -1220,7 +1223,7 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG _sl = (sl_); \
     if (_sl >= 2 && _sl <= 128) { \
         ULONG _s = 0, _k; \
-        for (_k = 0; _k < _sl; _k++) _s += (buf_)[_k]; \
+        for (_k = 0; _k < _sl; _k++) _s += BE32R((buf_)[_k]); \
         if (_s != 0) IC_ERR(GS(MSG_RDBC_CHECKSUM_BAD)); \
         else IC_OUT(GS(MSG_RDBC_CHECKSUM_OK)); \
     } else { IC_LINE(GS(MSG_RDBC_CHECKSUM_SKIPPED), _sl); } \
@@ -1238,10 +1241,10 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
     IC_LINE(GS(MSG_RDBC_RDSK_BLOCK), rdb->block_num);
     if (!BlockDev_ReadBlock(bd, rdb->block_num, buf)) {
         IC_ERR(GS(MSG_RDBC_READ_FAILED_2));
-    } else if (buf[0] != IDNAME_RIGIDDISK) {
-        IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_RDSK), buf[0]);
+    } else if (BE32R(buf[0]) != IDNAME_RIGIDDISK) {
+        IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_RDSK), BE32R(buf[0]));
     } else {
-        IC_CHKSUM(buf[1], buf);
+        IC_CHKSUM(BE32R(buf[1]), buf);
         IC_LINE(GS(MSG_RDBC_GEOMETRY),
                 (ULONG)rdb->cylinders, (ULONG)rdb->heads, (ULONG)rdb->sectors,
                 (ULONG)rdb->lo_cyl, (ULONG)rdb->hi_cyl);
@@ -1267,10 +1270,10 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
         if (!BlockDev_ReadBlock(bd, pi->block_num, buf)) {
             IC_ERR(GS(MSG_RDBC_READ_FAILED_4)); continue;
         }
-        if (buf[0] != IDNAME_PARTITION) {
-            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), buf[0]);
+        if (BE32R(buf[0]) != IDNAME_PARTITION) {
+            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), BE32R(buf[0]));
         } else {
-            IC_CHKSUM(buf[1], buf);
+            IC_CHKSUM(BE32R(buf[1]), buf);
         }
         if (pi->low_cyl > pi->high_cyl)
             IC_ERRLINE(GS(MSG_RDBC_ERR_LOWCYL_GT_HIGHCYL),
@@ -1319,10 +1322,10 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
 
         if (!BlockDev_ReadBlock(bd, fi->block_num, buf)) {
             IC_ERR(GS(MSG_RDBC_READ_FAILED_4));
-        } else if (buf[0] != IDNAME_FSHEADER) {
-            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), buf[0]); errors++;
+        } else if (BE32R(buf[0]) != IDNAME_FSHEADER) {
+            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), BE32R(buf[0])); errors++;
         } else {
-            IC_CHKSUM(buf[1], buf);
+            IC_CHKSUM(BE32R(buf[1]), buf);
         }
 
         lseg_blk = fi->seg_list_blk;
@@ -1342,23 +1345,23 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
                 IC_ERRLINE(GS(MSG_RDBC_LSEG_READ_FAILED), lseg_blk);
                 errors++; break;
             }
-            if (buf[0] != IDNAME_LOADSEG) {
+            if (BE32R(buf[0]) != IDNAME_LOADSEG) {
                 IC_ERRLINE(GS(MSG_RDBC_LSEG_ID_WRONG),
-                           lseg_blk, buf[0]);
+                           lseg_blk, BE32R(buf[0]));
                 lseg_bad++; errors++; break;
             }
             {
-                ULONG sl = buf[1];
+                ULONG sl = BE32R(buf[1]);
                 if (sl >= 2 && sl <= 128) {
                     ULONG sum = 0, k;
-                    for (k = 0; k < sl; k++) sum += buf[k];
+                    for (k = 0; k < sl; k++) sum += BE32R(buf[k]);
                     if (sum != 0) { lseg_bad++; errors++; }
                     else lseg_ok++;
                 } else {
                     lseg_ok++;
                 }
             }
-            lseg_blk = buf[4];   /* lsb_Next is longword index 4, not 127 */
+            lseg_blk = BE32R(buf[4]);   /* lsb_Next is longword index 4, not 127 */
             lseg_count++;
         }
         }
@@ -1397,7 +1400,7 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
 static LONG block_checksum(const ULONG *buf, ULONG num_longs)
 {
     ULONG sum = 0, i;
-    for (i = 0; i < num_longs; i++) sum += buf[i];
+    for (i = 0; i < num_longs; i++) sum += BE32R(buf[i]);
     return (LONG)(-sum);
 }
 
@@ -1470,13 +1473,13 @@ static void fill_lseg_chain(UBYTE *big_buf, ULONG base_blk, ULONG block_size,
         ULONG summed_longs = (i + 1 < num_blocks) ? 128UL : (5UL + data_longs);
 
         memset(blk_buf, 0, block_size);
-        blk_buf[0] = IDNAME_LOADSEG;
-        blk_buf[1] = summed_longs;
-        blk_buf[2] = 0;
-        blk_buf[3] = 7;
-        blk_buf[4] = next;
+        BE32W(blk_buf[0], IDNAME_LOADSEG);
+        BE32W(blk_buf[1], summed_longs);
+        BE32W(blk_buf[2], 0);
+        BE32W(blk_buf[3], 7);
+        BE32W(blk_buf[4], next);
         memcpy((UBYTE *)blk_buf + 20, code + off, chunk);
-        blk_buf[2] = (ULONG)block_checksum(blk_buf, summed_longs);
+        BE32W(blk_buf[2], (ULONG)block_checksum(blk_buf, summed_longs));
     }
 }
 
@@ -1611,13 +1614,13 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
         buf = BLKPTR(blk);
         pb  = (struct PartitionBlock *)buf;
 
-        pb->pb_ID          = IDNAME_PARTITION;
-        pb->pb_SummedLongs = bd->block_size / 4;
-        pb->pb_ChkSum      = 0;
-        pb->pb_HostID      = 7;
-        pb->pb_Next        = next;
-        pb->pb_Flags       = pi->flags;
-        pb->pb_DevFlags    = pi->dev_flags;
+        BE32W(pb->pb_ID,          IDNAME_PARTITION);
+        BE32W(pb->pb_SummedLongs, bd->block_size / 4);
+        BE32W(pb->pb_ChkSum,      0);
+        BE32W(pb->pb_HostID,      7);
+        BE32W(pb->pb_Next,        next);
+        BE32W(pb->pb_Flags,       pi->flags);
+        BE32W(pb->pb_DevFlags,    pi->dev_flags);
 
         /* BSTR drive name */
         bstr = pb->pb_DriveName;
@@ -1627,38 +1630,38 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
         memcpy(bstr + 1, pi->drive_name, len);
 
         /* DosEnvec - index 19 (DE_BOOTBLOCKS) is the highest index we fill */
-        pb->pb_Environment[DE_TABLESIZE]    = 19;
-        pb->pb_Environment[DE_SIZEBLOCK]    = pi->block_size > 0
-                                              ? pi->block_size / 4 : 128;
-        pb->pb_Environment[DE_SECORG]       = 0;
-        pb->pb_Environment[DE_NUMHEADS]     =
+        BE32W(pb->pb_Environment[DE_TABLESIZE],    19);
+        BE32W(pb->pb_Environment[DE_SIZEBLOCK],    pi->block_size > 0
+                                                   ? pi->block_size / 4 : 128);
+        BE32W(pb->pb_Environment[DE_SECORG],       0);
+        BE32W(pb->pb_Environment[DE_NUMHEADS],
             pi->heads   > 0 ? pi->heads   :
-            rdb->heads  > 0 ? rdb->heads  : 1;
-        pb->pb_Environment[DE_SECSPERBLK]   = pi->sectors_per_block > 0
-                                              ? pi->sectors_per_block : 1;
-        pb->pb_Environment[DE_BLKSPERTRACK] =
+            rdb->heads  > 0 ? rdb->heads  : 1);
+        BE32W(pb->pb_Environment[DE_SECSPERBLK],   pi->sectors_per_block > 0
+                                                   ? pi->sectors_per_block : 1);
+        BE32W(pb->pb_Environment[DE_BLKSPERTRACK],
             pi->sectors > 0 ? pi->sectors :
-            rdb->sectors > 0 ? rdb->sectors : 1;
-        pb->pb_Environment[DE_RESERVEDBLKS] = pi->reserved_blks > 0
-                                              ? pi->reserved_blks : 2;
-        pb->pb_Environment[DE_PREFAC]       = 0;
-        pb->pb_Environment[DE_INTERLEAVE]   = pi->interleave;
-        pb->pb_Environment[DE_LOWCYL]       = pi->low_cyl;
-        pb->pb_Environment[DE_UPPERCYL]     = pi->high_cyl;
-        pb->pb_Environment[DE_NUMBUFFERS]   =
-            pi->num_buffer   > 0 ? pi->num_buffer   : 30;
-        pb->pb_Environment[DE_MEMBUFTYPE]   = pi->buf_mem_type;
-        pb->pb_Environment[DE_MAXTRANSFER]  =
-            pi->max_transfer > 0 ? pi->max_transfer : 0x7FFFFFFFUL;
-        pb->pb_Environment[DE_MASK]         =
-            pi->mask > 0         ? pi->mask         : 0x7FFFFFFCUL;
-        pb->pb_Environment[DE_BOOTPRI]      = (ULONG)(LONG)pi->boot_pri;
-        pb->pb_Environment[DE_DOSTYPE]      = pi->dos_type;
-        pb->pb_Environment[DE_BAUD]         = pi->baud;
-        pb->pb_Environment[DE_CONTROL]      = pi->control;
-        pb->pb_Environment[DE_BOOTBLOCKS]   = pi->boot_blocks;
+            rdb->sectors > 0 ? rdb->sectors : 1);
+        BE32W(pb->pb_Environment[DE_RESERVEDBLKS], pi->reserved_blks > 0
+                                                   ? pi->reserved_blks : 2);
+        BE32W(pb->pb_Environment[DE_PREFAC],       0);
+        BE32W(pb->pb_Environment[DE_INTERLEAVE],   pi->interleave);
+        BE32W(pb->pb_Environment[DE_LOWCYL],       pi->low_cyl);
+        BE32W(pb->pb_Environment[DE_UPPERCYL],     pi->high_cyl);
+        BE32W(pb->pb_Environment[DE_NUMBUFFERS],
+            pi->num_buffer   > 0 ? pi->num_buffer   : 30);
+        BE32W(pb->pb_Environment[DE_MEMBUFTYPE],   pi->buf_mem_type);
+        BE32W(pb->pb_Environment[DE_MAXTRANSFER],
+            pi->max_transfer > 0 ? pi->max_transfer : 0x7FFFFFFFUL);
+        BE32W(pb->pb_Environment[DE_MASK],
+            pi->mask > 0         ? pi->mask         : 0x7FFFFFFCUL);
+        BE32W(pb->pb_Environment[DE_BOOTPRI],      (ULONG)(LONG)pi->boot_pri);
+        BE32W(pb->pb_Environment[DE_DOSTYPE],      pi->dos_type);
+        BE32W(pb->pb_Environment[DE_BAUD],         pi->baud);
+        BE32W(pb->pb_Environment[DE_CONTROL],      pi->control);
+        BE32W(pb->pb_Environment[DE_BOOTBLOCKS],   pi->boot_blocks);
 
-        pb->pb_ChkSum = block_checksum(buf, bd->block_size / 4);
+        BE32W(pb->pb_ChkSum, (ULONG)block_checksum(buf, bd->block_size / 4));
     }
 
     /* --- Fill FileSysHeaderBlocks --- */
@@ -1672,27 +1675,28 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
         buf = BLKPTR(fshd_blk + i);
         fhb = (struct FileSysHeaderBlock *)buf;
 
-        fhb->fhb_ID           = IDNAME_FSHEADER;
-        fhb->fhb_SummedLongs  = 128;
-        fhb->fhb_ChkSum       = 0;
-        fhb->fhb_HostID       = 7;
-        fhb->fhb_Next         = next_fshd;
-        fhb->fhb_Flags        = fi->flags;
-        fhb->fhb_DosType      = fi->dos_type;
-        fhb->fhb_Version      = fi->version;
-        fhb->fhb_PatchFlags   = fi->patch_flags;  /* 0x180 set at Add time for new entries */
-        fhb->fhb_Type         = 0;
-        fhb->fhb_Task         = 0;
-        fhb->fhb_Lock         = 0;
-        fhb->fhb_Handler      = 0;
-        fhb->fhb_StackSize    = fi->stack_size;
-        fhb->fhb_Priority     = fi->priority;
-        fhb->fhb_Startup      = 0;
-        fhb->fhb_SegListBlocks = (LONG)lseg_starts[i];
-        fhb->fhb_GlobalVec    = fi->global_vec   ? fi->global_vec   : -1L;
+        BE32W(fhb->fhb_ID,          IDNAME_FSHEADER);
+        BE32W(fhb->fhb_SummedLongs, 128);
+        BE32W(fhb->fhb_ChkSum,      0);
+        BE32W(fhb->fhb_HostID,      7);
+        BE32W(fhb->fhb_Next,        next_fshd);
+        BE32W(fhb->fhb_Flags,       fi->flags);
+        BE32W(fhb->fhb_DosType,     fi->dos_type);
+        BE32W(fhb->fhb_Version,     fi->version);
+        BE32W(fhb->fhb_PatchFlags,  fi->patch_flags);  /* 0x180 set at Add time for new entries */
+        BE32W(fhb->fhb_Type,        0);
+        BE32W(fhb->fhb_Task,        0);
+        BE32W(fhb->fhb_Lock,        0);
+        BE32W(fhb->fhb_Handler,     0);
+        BE32W(fhb->fhb_StackSize,   fi->stack_size);
+        BE32W(fhb->fhb_Priority,    (ULONG)fi->priority);
+        BE32W(fhb->fhb_Startup,     0);
+        BE32W(fhb->fhb_SegListBlocks, lseg_starts[i]);
+        BE32W(fhb->fhb_GlobalVec,
+              (ULONG)(fi->global_vec ? fi->global_vec : -1L));
         memcpy(fhb->fhb_FileSysName, fi->fs_name, 84);
 
-        fhb->fhb_ChkSum = (LONG)block_checksum(buf, 128);
+        BE32W(fhb->fhb_ChkSum, (ULONG)block_checksum(buf, 128));
     }
 
     /* --- Fill LoadSegBlock chains (filesystem code) --- */
@@ -1714,51 +1718,51 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     buf  = BLKPTR(rdb->rdb_block_lo);
     rdsk = (struct RigidDiskBlock *)buf;
 
-    rdsk->rdb_ID          = IDNAME_RIGIDDISK;
-    rdsk->rdb_SummedLongs = bd->block_size / 4;
-    rdsk->rdb_ChkSum      = 0;
-    rdsk->rdb_HostID      = 7;
-    rdsk->rdb_BlockBytes  = bd->block_size;
-    rdsk->rdb_Flags       = rdb->flags | RDBFF_LASTTID; /* RDBFF_LAST/LASTLUN user-controlled; LASTTID always set */
+    BE32W(rdsk->rdb_ID,          IDNAME_RIGIDDISK);
+    BE32W(rdsk->rdb_SummedLongs, bd->block_size / 4);
+    BE32W(rdsk->rdb_ChkSum,      0);
+    BE32W(rdsk->rdb_HostID,      7);
+    BE32W(rdsk->rdb_BlockBytes,  bd->block_size);
+    BE32W(rdsk->rdb_Flags,       rdb->flags | RDBFF_LASTTID); /* RDBFF_LAST/LASTLUN user-controlled; LASTTID always set */
 
     /* Optional block list heads: 0xFFFFFFFF = none */
-    rdsk->rdb_BadBlockList      = RDB_END_MARK;
-    rdsk->rdb_PartitionList     = rdb->part_list;
-    rdsk->rdb_FileSysHeaderList = rdb->fshdr_list;
-    rdsk->rdb_DriveInit         = RDB_END_MARK;
+    BE32W(rdsk->rdb_BadBlockList,      RDB_END_MARK);
+    BE32W(rdsk->rdb_PartitionList,     rdb->part_list);
+    BE32W(rdsk->rdb_FileSysHeaderList, rdb->fshdr_list);
+    BE32W(rdsk->rdb_DriveInit,         RDB_END_MARK);
 
     /* Reserved1[6] must be 0xFFFFFFFF per spec */
     {
         UWORD r;
         for (r = 0; r < 6; r++)
-            rdsk->rdb_Reserved1[r] = 0xFFFFFFFFUL;
+            BE32W(rdsk->rdb_Reserved1[r], 0xFFFFFFFFUL);
     }
 
     /* Physical drive characteristics */
-    rdsk->rdb_Cylinders    = rdb->cylinders;
-    rdsk->rdb_Sectors      = rdb->sectors;
-    rdsk->rdb_Heads        = rdb->heads;
-    rdsk->rdb_Interleave   = 0;
-    rdsk->rdb_Park         = rdb->cylinders;
-    rdsk->rdb_WritePreComp = 0;
-    rdsk->rdb_ReducedWrite = 0;
-    rdsk->rdb_StepRate     = 0;
+    BE32W(rdsk->rdb_Cylinders,    rdb->cylinders);
+    BE32W(rdsk->rdb_Sectors,      rdb->sectors);
+    BE32W(rdsk->rdb_Heads,        rdb->heads);
+    BE32W(rdsk->rdb_Interleave,   0);
+    BE32W(rdsk->rdb_Park,         rdb->cylinders);
+    BE32W(rdsk->rdb_WritePreComp, 0);
+    BE32W(rdsk->rdb_ReducedWrite, 0);
+    BE32W(rdsk->rdb_StepRate,     0);
 
     /* Logical drive characteristics */
-    rdsk->rdb_RDBBlocksLo    = rdb->rdb_block_lo;
-    rdsk->rdb_RDBBlocksHi    = last_used_blk;
-    rdsk->rdb_LoCylinder     = rdb->lo_cyl;
-    rdsk->rdb_HiCylinder     = rdb->hi_cyl;
-    rdsk->rdb_CylBlocks      = rdb->heads * rdb->sectors;
-    rdsk->rdb_AutoParkSeconds = 0;
-    rdsk->rdb_HighRDSKBlock  = last_used_blk;
+    BE32W(rdsk->rdb_RDBBlocksLo,    rdb->rdb_block_lo);
+    BE32W(rdsk->rdb_RDBBlocksHi,    last_used_blk);
+    BE32W(rdsk->rdb_LoCylinder,     rdb->lo_cyl);
+    BE32W(rdsk->rdb_HiCylinder,     rdb->hi_cyl);
+    BE32W(rdsk->rdb_CylBlocks,      rdb->heads * rdb->sectors);
+    BE32W(rdsk->rdb_AutoParkSeconds, 0);
+    BE32W(rdsk->rdb_HighRDSKBlock,  last_used_blk);
 
     /* Drive identification strings (preserve if read earlier) */
     memcpy(rdsk->rdb_DiskVendor,   rdb->disk_vendor,   8);
     memcpy(rdsk->rdb_DiskProduct,  rdb->disk_product,  16);
     memcpy(rdsk->rdb_DiskRevision, rdb->disk_revision, 4);
 
-    rdsk->rdb_ChkSum = block_checksum(buf, bd->block_size / 4);
+    BE32W(rdsk->rdb_ChkSum, (ULONG)block_checksum(buf, bd->block_size / 4));
 
 #undef BLKPTR
 
