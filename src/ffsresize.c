@@ -48,6 +48,7 @@
 
 #include "clib.h"
 #include "rdb.h"
+#include "rdbbe.h"
 #include "ffsresize.h"
 #include "shrinkinfo.h"
 #include "locale_support.h"
@@ -94,6 +95,14 @@
 /* FS-block I/O helpers - translate one FS-block I/O into spb device  */
 /* block I/Os of bd->block_size bytes each.                            */
 /* ------------------------------------------------------------------ */
+/* All FFS metadata this engine touches (boot/root/bitmap/bm-ext blocks)
+   is an array of big-endian longwords on disk.  The two I/O helpers
+   below swab the whole block at the boundary (a no-op on the Amiga),
+   so all engine code operates on native values on any host.  Byte
+   regions inside the blocks (volume name, boot code) are only ever
+   copied, never interpreted, and an untouched longword swaps back to
+   its original bytes on write. */
+
 static BOOL read_fs_block(struct BlockDev *bd, ULONG part_abs, ULONG fs_blk,
                           ULONG spb, void *buf)
 {
@@ -105,21 +114,27 @@ static BOOL read_fs_block(struct BlockDev *bd, ULONG part_abs, ULONG fs_blk,
         if (!BlockDev_ReadBlock(bd, abs + i, p + i * bsz))
             return FALSE;
     }
+    BE32_SWAB_BUF(buf, (spb * bsz) / 4);
     return TRUE;
 }
 
 static BOOL write_fs_block(struct BlockDev *bd, ULONG part_abs, ULONG fs_blk,
                            ULONG spb, const void *buf)
 {
-    const UBYTE *p   = (const UBYTE *)buf;
-    ULONG        abs = part_abs + fs_blk * spb;
-    ULONG        bsz = bd->block_size > 0 ? bd->block_size : 512;
-    ULONG        i;
+    UBYTE *p   = (UBYTE *)buf;   /* swabbed in place, restored below */
+    ULONG  abs = part_abs + fs_blk * spb;
+    ULONG  bsz = bd->block_size > 0 ? bd->block_size : 512;
+    ULONG  i;
+    BOOL   ok  = TRUE;
+    BE32_SWAB_BUF(p, (spb * bsz) / 4);
     for (i = 0; i < spb; i++) {
-        if (!BlockDev_WriteBlock(bd, abs + i, p + i * bsz))
-            return FALSE;
+        if (!BlockDev_WriteBlock(bd, abs + i, p + i * bsz)) {
+            ok = FALSE;
+            break;
+        }
     }
-    return TRUE;
+    BE32_SWAB_BUF(p, (spb * bsz) / 4);   /* caller's buffer stays native */
+    return ok;
 }
 
 /* FFS bitmap bit macros.

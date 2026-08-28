@@ -25,6 +25,14 @@
 #define BE32R(f)     ((ULONG)(f))
 #define BE32W(f, v)  ((void)((f) = (v)))
 
+/* In-place whole-buffer swab for filesystem metadata blocks that are
+   pure arrays of big-endian longwords (FFS boot/root/bitmap blocks):
+   a no-op here.  On a little-endian host it swaps every longword, so
+   engine code reads/writes native values; byte-string regions (volume
+   names, boot code) survive because an untouched word swaps back to
+   its original bytes on the way out. */
+#define BE32_SWAB_BUF(p, nlongs) ((void)0)
+
 #else
 
 /* Little-endian host: assemble/store big-endian bytes. */
@@ -42,6 +50,18 @@ static inline void rdbbe_w32(void *p, ULONG v)
 }
 #define BE32R(f)     rdbbe_r32(&(f))
 #define BE32W(f, v)  rdbbe_w32(&(f), (ULONG)(v))
+
+static inline void rdbbe_swab_buf(void *p, ULONG nlongs)
+{
+    UBYTE *b = (UBYTE *)p;
+    ULONG  i;
+    for (i = 0; i < nlongs; i++, b += 4) {
+        UBYTE t;
+        t = b[0]; b[0] = b[3]; b[3] = t;
+        t = b[1]; b[1] = b[2]; b[2] = t;
+    }
+}
+#define BE32_SWAB_BUF(p, nlongs) rdbbe_swab_buf((p), (nlongs))
 
 #endif
 
