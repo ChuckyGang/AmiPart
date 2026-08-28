@@ -1330,8 +1330,16 @@
 #define MSG_SCR_PARTCLONE_TODEV_ERR  1324
 #define MSG_SCR_PARTCLONE_NO_RDB_DEST 1325
 #define MSG_SCR_PARTCLONE_OK_FMT     1326
+#define MSG_CLI_COPYDISK_NEED_TODEV  1327
+#define MSG_CLI_COPYDISK_WARNING     1328
+#define MSG_CLI_COPYDISK_SELF        1329
+#define MSG_CLI_COPYDISK_SRCDST_FMT  1330
+#define MSG_CLI_COPYDISK_LAST_CHANCE_FMT 1331
+#define MSG_CLI_COPYDISK_DONE        1332
+#define MSG_CLI_COPYDISK_FAILED_FMT  1333
+#define MSG_CLI_COPYDISK_ASK         1334
 
-#define MSG_COUNT 1327
+#define MSG_COUNT 1335
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2670,5 +2678,13 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1324 MSG_SCR_PARTCLONE_TODEV_ERR */ "PARTCLONE: cannot open TODEV device.",
     /* 1325 MSG_SCR_PARTCLONE_NO_RDB_DEST */ "PARTCLONE: no valid RDB on the destination device.",
     /* 1326 MSG_SCR_PARTCLONE_OK_FMT */ "PARTCLONE: %s -> %s cloned. Reboot before using the destination.\n",
+    /* 1327 MSG_CLI_COPYDISK_NEED_TODEV */ "ERROR: COPYDISK requires TODEV=<device>:<unit>.\n",
+    /* 1328 MSG_CLI_COPYDISK_WARNING */ "WARNING: This will OVERWRITE the ENTIRE destination disk -\nRDB, all partitions and all data!\n\n",
+    /* 1329 MSG_CLI_COPYDISK_SELF */ "ERROR: Source and destination are the same device/unit.\n",
+    /* 1330 MSG_CLI_COPYDISK_SRCDST_FMT */ "Copying %s unit %lu (%s)\n     to %s unit %lu (%s)...\n",
+    /* 1331 MSG_CLI_COPYDISK_LAST_CHANCE_FMT */ "LAST CHANCE: OVERWRITE %s unit %lu completely?",
+    /* 1332 MSG_CLI_COPYDISK_DONE */ "\nDisk copy complete. Reboot before mounting the destination.\n",
+    /* 1333 MSG_CLI_COPYDISK_FAILED_FMT */ "\nCOPYDISK FAILED: %s\n",
+    /* 1334 MSG_CLI_COPYDISK_ASK */ "Are you sure you want to copy the whole disk?",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

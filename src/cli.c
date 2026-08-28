@@ -70,7 +70,7 @@ extern struct DosLibrary *DOSBase;
     "ZEROPART/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
-    "TODEV/K,DELDIR/K"
+    "TODEV/K,DELDIR/K,COPYDISK/S"
 
 enum {
     ARG_LISTDEV = 0,
@@ -128,6 +128,7 @@ enum {
     ARG_TO,
     ARG_TODEV,
     ARG_DELDIR,
+    ARG_COPYDISK,
     ARG_COUNT
 };
 
@@ -2943,6 +2944,75 @@ static LONG cmd_imagein(const char *devname, ULONG unit,
 }
 
 /* ------------------------------------------------------------------ */
+/* COPYDISK - block-for-block copy of the whole disk to a second      */
+/* device (TODEV=<device>:<unit>).  Destination is fully overwritten. */
+/* ------------------------------------------------------------------ */
+
+static LONG cmd_copydisk(const char *devname, ULONG unit,
+                         const char *todev_s, BOOL force)
+{
+    struct BlockDev *bd, *dbd;
+    struct CliProg prog;
+    char   ddevname[64], errbuf[80];
+    char   src_size[24], dst_size[24];
+    ULONG  dunit;
+    BOOL   ok;
+
+    if (!todev_s || !todev_s[0] || !parse_dev(todev_s, ddevname, &dunit)) {
+        cli_puts(GS(MSG_CLI_COPYDISK_NEED_TODEV));
+        return RETURN_WARN;
+    }
+    if (str_eq_ci(ddevname, devname) && dunit == unit) {
+        cli_puts(GS(MSG_CLI_COPYDISK_SELF));
+        return RETURN_ERROR;
+    }
+
+    cli_puts(GS(MSG_CLI_COPYDISK_WARNING));
+    if (!ask_yn(GS(MSG_CLI_COPYDISK_ASK), force))
+        return RETURN_OK;
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), devname, unit);
+    cli_puts(outbuf);
+    bd = cli_open_target(devname, unit);
+    if (!bd) return RETURN_ERROR;
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), ddevname, dunit);
+    cli_puts(outbuf);
+    dbd = cli_open_target(ddevname, dunit);
+    if (!dbd) { BlockDev_Close(bd); return RETURN_ERROR; }
+
+    FormatSize(bd->total_bytes,  src_size);
+    FormatSize(dbd->total_bytes, dst_size);
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_COPYDISK_SRCDST_FMT),
+            devname, unit, src_size, ddevname, dunit, dst_size);
+    cli_puts(outbuf);
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_COPYDISK_LAST_CHANCE_FMT),
+            ddevname, dunit);
+    if (!ask_yn(outbuf, force)) {
+        cli_puts(GS(MSG_CLI_ABORTED));
+        BlockDev_Close(dbd); BlockDev_Close(bd);
+        return RETURN_OK;
+    }
+
+    prog.last_pct = 0; prog.last_blocks = 0; errbuf[0] = '\0';
+    ok = ImageCopy_DiskToDisk(bd, dbd, cli_prog_cb, &prog,
+                              errbuf, sizeof(errbuf));
+
+    BlockDev_Close(dbd);
+    BlockDev_Close(bd);
+
+    if (!ok) {
+        DP_SNPRINTF(outbuf, GS(MSG_CLI_COPYDISK_FAILED_FMT),
+                errbuf[0] ? errbuf : GS(MSG_CLI_UNKNOWN));
+        cli_puts(outbuf);
+        return RETURN_ERROR;
+    }
+    cli_puts(GS(MSG_CLI_COPYDISK_DONE));
+    return RETURN_OK;
+}
+
+/* ------------------------------------------------------------------ */
 /* ADDMBR MBRTYPE=<t> STARTCYL=<cyl> ENDCYL=<cyl|+size> [ACTIVE]     */
 /* ------------------------------------------------------------------ */
 
@@ -3137,7 +3207,8 @@ LONG cli_run(void)
         !args[ARG_IMAGEOUT] && !args[ARG_IMAGEIN] && !args[ARG_GROW] &&
         !args[ARG_ZEROPART] && !args[ARG_ADDMBR] && !args[ARG_DELMBR] &&
         !args[ARG_SHRINKINFO] && !args[ARG_SHRINK] &&
-        !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE]) {
+        !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE] &&
+        !args[ARG_COPYDISK]) {
         FreeArgs(rdargs);
         return CLI_NO_ARGS;
     }
@@ -3178,7 +3249,8 @@ LONG cli_run(void)
          args[ARG_IMAGEOUT]  || args[ARG_IMAGEIN]  || args[ARG_GROW] ||
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
-         args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE])) {
+         args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
+         args[ARG_COPYDISK])) {
 
         char  devname[64];
         ULONG unit;
@@ -3266,6 +3338,10 @@ LONG cli_run(void)
                                    (const char *)args[ARG_PARTCLONE],
                                    (const char *)args[ARG_TO],
                                    (const char *)args[ARG_TODEV]);
+
+            if (rc == RETURN_OK && args[ARG_COPYDISK])
+                rc = cmd_copydisk(devname, unit,
+                                  (const char *)args[ARG_TODEV], force);
 
             if (rc == RETURN_OK && args[ARG_DELPART])
                 rc = cmd_delpart(devname, unit, force,

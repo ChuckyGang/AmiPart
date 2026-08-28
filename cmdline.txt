@@ -114,6 +114,17 @@ IMAGEIN <path>
 
   Example:  AmiPart DEV uaehf.device:0 IMAGEIN=ram:disk.hdf FORCE
 
+COPYDISK TODEV=<device>:<unit>
+  Copy the open target block-for-block onto a second disk - no
+  intermediate image file needed.  The destination must have the same
+  block size and be at least as large as the source; its RDB, MBR,
+  partitions and data are completely overwritten.  Unreadable source
+  blocks are zero-filled rather than aborting (same as IMAGEOUT).
+  DESTRUCTIVE: prompts twice for Y/N confirmation unless FORCE is
+  given.  Reboot before mounting the destination.
+
+  Example:  AmiPart DEV scsi.device:0 COPYDISK TODEV=scsi.device:2
+
 MOUNTLIST <path>
   Write an AmigaDOS MountList text file at <path> describing every
   partition in the open target's RDB (one entry per partition, with the

@@ -4095,3 +4095,27 @@ PARTCLONE: no valid RDB on the destination device.
 MSG_SCR_PARTCLONE_OK_FMT
 PARTCLONE: %s -> %s cloned. Reboot before using the destination.\n
 ;
+MSG_CLI_COPYDISK_NEED_TODEV
+ERROR: COPYDISK requires TODEV=<device>:<unit>.\n
+;
+MSG_CLI_COPYDISK_WARNING
+WARNING: This will OVERWRITE the ENTIRE destination disk -\nRDB, all partitions and all data!\n\n
+;
+MSG_CLI_COPYDISK_SELF
+ERROR: Source and destination are the same device/unit.\n
+;
+MSG_CLI_COPYDISK_SRCDST_FMT
+Copying %s unit %lu (%s)\n     to %s unit %lu (%s)...\n
+;
+MSG_CLI_COPYDISK_LAST_CHANCE_FMT
+LAST CHANCE: OVERWRITE %s unit %lu completely?
+;
+MSG_CLI_COPYDISK_DONE
+\nDisk copy complete. Reboot before mounting the destination.\n
+;
+MSG_CLI_COPYDISK_FAILED_FMT
+\nCOPYDISK FAILED: %s\n
+;
+MSG_CLI_COPYDISK_ASK
+Are you sure you want to copy the whole disk?
+;
