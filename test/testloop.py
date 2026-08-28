@@ -25,7 +25,7 @@ from the directory tree between operations (parametrized for both 512- and
 """
 import os, sys, struct, random, hashlib, subprocess, shutil, time
 
-DP    = "/home/john/Documents/Code/AmiPart/out/AmiPart"
+DP    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "AmiPart")
 HERE  = os.path.dirname(os.path.abspath(__file__))
 LOG   = os.path.join(HERE, "testloop.log")
 
