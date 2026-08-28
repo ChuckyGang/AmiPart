@@ -1,5 +1,5 @@
 /*
- * guilv.c - Shared GadTools ListView helpers for DiskPart's GUI.
+ * guilv.c - Shared GadTools ListView helpers for AmiPart's GUI.
  * See guilv.h.
  */
 

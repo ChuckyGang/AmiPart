@@ -1,11 +1,11 @@
 /*
- * locale_support.h - locale.library catalog support for DiskPart.
+ * locale_support.h - locale.library catalog support for AmiPart.
  *
- * DiskPart's translatable strings live in catalogs/DiskPart.cd; the C ids and
- * built-in English defaults are generated from it into diskpart_strings.h.
+ * AmiPart's translatable strings live in catalogs/AmiPart.cd; the C ids and
+ * built-in English defaults are generated from it into amipart_strings.h.
  *
  * locale.library only exists on AmigaOS 2.1 (Kickstart v38) and later.  On
- * Kickstart 2.04 (v37) - which DiskPart still supports - LocaleOpen() is a
+ * Kickstart 2.04 (v37) - which AmiPart still supports - LocaleOpen() is a
  * harmless no-op and GS() returns the built-in English strings.
  */
 
@@ -13,9 +13,9 @@
 #define LOCALE_SUPPORT_H
 
 #include <exec/types.h>
-#include "diskpart_strings.h"
+#include "amipart_strings.h"
 
-/* Open locale.library (v38+) and the DiskPart.catalog for the user's
+/* Open locale.library (v38+) and the AmiPart.catalog for the user's
  * preferred language.  No-op when locale.library is unavailable. */
 void LocaleOpen(void);
 void LocaleClose(void);

@@ -1,4 +1,4 @@
-# DiskPart Makefile
+# AmiPart Makefile
 # AmigaOS 2.x+ GadTools hard-drive selector
 #
 # Toolchains supported (auto-detected, override with TOOLCHAIN=...):
@@ -29,7 +29,7 @@ ifeq ($(origin TOOLCHAIN),undefined)
   endif
 endif
 
-program = out/DiskPart
+program = out/AmiPart
 
 # --- Per-toolchain configuration ---------------------------------------------
 
@@ -90,10 +90,10 @@ src_obj := $(addprefix obj/,$(patsubst src/%.c,%.o,$(src_c)))
 objects := $(src_obj) $(TC_SUPPORT_OBJ)
 
 # --- Localization (locale.library catalogs) ----------------------------------
-# catalogs/DiskPart.cd is the single source of truth for translatable strings.
-# It generates src/diskpart_strings.h (ids + built-in English defaults).
-CD_FILE   := catalogs/DiskPart.cd
-STRINGS_H := src/diskpart_strings.h
+# catalogs/AmiPart.cd is the single source of truth for translatable strings.
+# It generates src/amipart_strings.h (ids + built-in English defaults).
+CD_FILE   := catalogs/AmiPart.cd
+STRINGS_H := src/amipart_strings.h
 GENCAT    := support/gencat.py
 
 .PHONY: all clean icon adf FORCE strings catalog-template catalog
@@ -101,7 +101,7 @@ GENCAT    := support/gencat.py
 # Keep 'all' the default goal (rules below would otherwise grab it).
 all: $(program) $(program).info
 
-# Autoboot ADF that boots straight into DiskPart, no Workbench required.
+# Autoboot ADF that boots straight into AmiPart, no Workbench required.
 # Needs amitools (`pip install amitools`) for its xdftool.
 adf: $(program).adf
 
@@ -128,11 +128,11 @@ catalog-template: $(CD_FILE) $(GENCAT)
 
 # Compile a finished translation into a binary catalog:
 #   make catalog LANG=deutsch        (reads catalogs/deutsch.ct)
-# Install the result as LOCALE:Catalogs/deutsch/DiskPart.catalog
+# Install the result as LOCALE:Catalogs/deutsch/AmiPart.catalog
 catalog: $(CD_FILE) $(GENCAT)
-	$(info Compiling catalogs/$(LANG)/DiskPart.catalog)
+	$(info Compiling catalogs/$(LANG)/AmiPart.catalog)
 	@mkdir -p catalogs/$(LANG)
-	@python3 $(GENCAT) catalog $(CD_FILE) catalogs/$(LANG).ct catalogs/$(LANG)/DiskPart.catalog
+	@python3 $(GENCAT) catalog $(CD_FILE) catalogs/$(LANG).ct catalogs/$(LANG)/AmiPart.catalog
 
 # build.o embeds __DATE__/__TIME__ via build.c - force-rebuild every
 # invocation so the stamp matches the current build.

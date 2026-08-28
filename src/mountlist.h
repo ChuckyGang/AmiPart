@@ -2,7 +2,7 @@
  * mountlist.h - Export an AmigaDOS MountList from RDB partition data.
  *
  * The MountList is the classic text description the C:Mount command reads to
- * mount a device.  DiskPart already holds every DosEnvVec field it needs in
+ * mount a device.  AmiPart already holds every DosEnvVec field it needs in
  * struct RDBInfo, so the export is a pure formatter shared by the GUI, the
  * CLI (MOUNTLIST=) and the script engine (MOUNTLIST FILE=).
  */

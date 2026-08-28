@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Build an autoboot ADF that boots straight into DiskPart (no Workbench).
+Build an autoboot ADF that boots straight into AmiPart (no Workbench).
 
-The floppy's Startup-Sequence runs DiskPart directly against the default
+The floppy's Startup-Sequence runs AmiPart directly against the default
 boot CLI screen dos.library opens before running Startup-Sequence, so no
 Workbench or other disk-based OS files are needed on the floppy.
 
 Requires amitools (`pip install amitools`) for its xdftool.
 
 Usage:
-  python3 support/make_adf.py output.adf path/to/DiskPart
+  python3 support/make_adf.py output.adf path/to/AmiPart
 """
 
 import subprocess
@@ -20,7 +20,7 @@ import tempfile
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: make_adf.py output.adf DiskPart-binary")
+        print("Usage: make_adf.py output.adf AmiPart-binary")
         sys.exit(1)
 
     adf_path, binary_path = sys.argv[1], sys.argv[2]
@@ -31,15 +31,15 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         startup_path = os.path.join(td, "Startup-Sequence")
         with open(startup_path, "w", newline="\n") as f:
-            f.write("DiskPart\n")
+            f.write("AmiPart\n")
 
         cmd = [
             "xdftool", adf_path,
             "create", "+",
-            "format", "diskpart", "ffs", "+",
+            "format", "amipart", "ffs", "+",
             "makedir", "S", "+",
             "write", startup_path, "S/Startup-Sequence", "+",
-            "write", binary_path, "DiskPart", "+",
+            "write", binary_path, "AmiPart", "+",
             "boot", "install", "boot2x3x",
         ]
         subprocess.run(cmd, check=True)

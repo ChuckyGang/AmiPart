@@ -1,5 +1,5 @@
 /*
- * locale_support.c - locale.library catalog support for DiskPart.
+ * locale_support.c - locale.library catalog support for AmiPart.
  *
  * See locale_support.h.  Kept deliberately small so it can be the only file
  * that needs <proto/locale.h>; everything else just calls GS(MSG_xxx).
@@ -16,12 +16,12 @@
 
 /* Instantiate the built-in English default table here (one definition). */
 #define DPSTRINGS_DEFINE_TABLE
-#include "diskpart_strings.h"
+#include "amipart_strings.h"
 #undef DPSTRINGS_DEFINE_TABLE
 
 /* proto/locale.h declares this; we own the single definition. */
 struct LocaleBase   *LocaleBase      = NULL;
-static struct Catalog *DiskPartCatalog = NULL;
+static struct Catalog *AmiPartCatalog = NULL;
 
 void LocaleOpen(void)
 {
@@ -35,16 +35,16 @@ void LocaleOpen(void)
             { OC_Version,         1 },
             { TAG_DONE,           0 },
         };
-        DiskPartCatalog = OpenCatalogA(NULL, (STRPTR)"DiskPart.catalog", tags);
+        AmiPartCatalog = OpenCatalogA(NULL, (STRPTR)"AmiPart.catalog", tags);
     }
 }
 
 void LocaleClose(void)
 {
     if (LocaleBase) {
-        if (DiskPartCatalog) {
-            CloseCatalog(DiskPartCatalog);
-            DiskPartCatalog = NULL;
+        if (AmiPartCatalog) {
+            CloseCatalog(AmiPartCatalog);
+            AmiPartCatalog = NULL;
         }
         CloseLibrary((struct Library *)LocaleBase);
         LocaleBase = NULL;
@@ -58,6 +58,6 @@ CONST_STRPTR GetDPString(LONG id)
                        : (CONST_STRPTR)"";
     /* GetCatalogStr safely returns `def` for a NULL catalog or missing id. */
     if (LocaleBase)
-        return (CONST_STRPTR)GetCatalogStr(DiskPartCatalog, id, (STRPTR)def);
+        return (CONST_STRPTR)GetCatalogStr(AmiPartCatalog, id, (STRPTR)def);
     return def;
 }

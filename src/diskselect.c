@@ -195,7 +195,7 @@ static BOOL confirm_exit(struct Window *win)
     struct EasyStruct es;
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
-    es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+    es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
     es.es_TextFormat   = (UBYTE *)GS(MSG_MAIN_EXIT_BODY);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_YES_NO);
     return (BOOL)(EasyRequestArgs(win, &es, NULL, NULL) == 1);
@@ -365,7 +365,7 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
             if (!prev) goto cleanup;
         }
 
-        DP_SNPRINTF(dev_title, "%s%s", DISKPART_VERTITLE,
+        DP_SNPRINTF(dev_title, "%s%s", AMIPART_VERTITLE,
                 GS(MSG_MAIN_TITLE_SELECT_DEV));
 
         {
@@ -605,7 +605,7 @@ static void probe_win_open(struct ProbeWin *pw, const char *devname)
 
     memset(pw, 0, sizeof(*pw));
     {
-        int n = DP_SNPRINTF(pw->title, "%s", DISKPART_VERTITLE);
+        int n = DP_SNPRINTF(pw->title, "%s", AMIPART_VERTITLE);
         sprintf(pw->title + n, GS(MSG_MAIN_TITLE_PROBING_FMT), devname);
     }
 
@@ -751,7 +751,7 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
     }
 
     {
-        int n = DP_SNPRINTF(win_title, "%s", DISKPART_VERTITLE);
+        int n = DP_SNPRINTF(win_title, "%s", AMIPART_VERTITLE);
         sprintf(win_title + n, GS(MSG_MAIN_TITLE_DASH_FMT), devname);
     }
 

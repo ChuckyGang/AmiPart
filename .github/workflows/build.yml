@@ -64,11 +64,11 @@ jobs:
       - name: Upload binary + icon
         uses: actions/upload-artifact@v4
         with:
-          name: DiskPart
+          name: AmiPart
           path: |
-            out/DiskPart
-            out/DiskPart.info
-            out/DiskPart.adf
+            out/AmiPart
+            out/AmiPart.info
+            out/AmiPart.adf
           if-no-files-found: error
 
   release:
@@ -85,7 +85,7 @@ jobs:
       - name: Download built binary
         uses: actions/download-artifact@v4
         with:
-          name: DiskPart
+          name: AmiPart
           path: out
 
       - name: Set release date
@@ -94,12 +94,12 @@ jobs:
 
       - name: Create LHA archive
         run: |
-          ARCHIVE="DiskPart-${{ steps.date.outputs.DATE }}-PROTO.lha"
+          ARCHIVE="AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha"
           python3 support/make_lha.py "$ARCHIVE" \
-            "DiskPart:out/DiskPart" \
-            "DiskPart.info:out/DiskPart.info" \
+            "AmiPart:out/AmiPart" \
+            "AmiPart.info:out/AmiPart.info" \
             "README.md:README.md" \
-            "Catalogs/DiskPart.cd:catalogs/DiskPart.cd" \
+            "Catalogs/AmiPart.cd:catalogs/AmiPart.cd" \
             "Catalogs/README.txt:catalogs/README.txt" \
             "support/gencat.py:support/gencat.py"
           ls -lh "$ARCHIVE"
@@ -116,8 +116,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create proto \
-            --title "DiskPart ${{ steps.date.outputs.DATE }} PROTO" \
+            --title "AmiPart ${{ steps.date.outputs.DATE }} PROTO" \
             --notes "Automated prototype build from commit \`${{ github.sha }}\`." \
             --prerelease \
-            "DiskPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
-            "out/DiskPart.adf#DiskPart-autoboot.adf"
+            "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
+            "out/AmiPart.adf#AmiPart-autoboot.adf"

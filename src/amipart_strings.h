@@ -1,6 +1,6 @@
-/* Auto-generated from catalogs/DiskPart.cd by support/gencat.py. DO NOT EDIT. */
-#ifndef DISKPART_STRINGS_H
-#define DISKPART_STRINGS_H
+/* Auto-generated from catalogs/AmiPart.cd by support/gencat.py. DO NOT EDIT. */
+#ifndef AMIPART_STRINGS_H
+#define AMIPART_STRINGS_H
 
 /* Message ids - also the locale.library catalog string numbers. */
 #define MSG_OK                       0
@@ -1299,7 +1299,7 @@
 
 #define MSG_COUNT 1293
 
-#endif /* DISKPART_STRINGS_H */
+#endif /* AMIPART_STRINGS_H */
 
 /* Built-in (English) defaults - used when no catalog is loaded, e.g.
  * on Kickstart 2.04 where locale.library is absent.  The table is
@@ -1320,10 +1320,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /*   8 MSG_OK_CANCEL */ "OK|Cancel",
     /*   9 MSG_YES_NO */ "Yes|No",
     /*  10 MSG_CONTINUE_ABORT */ "Continue|Abort",
-    /*  11 MSG_ERROR_TITLE */ "DiskPart Error",
-    /*  12 MSG_WARNING_TITLE */ "DiskPart Warning",
-    /*  13 MSG_INFO_TITLE */ "DiskPart",
-    /*  14 MSG_MAIN_EXIT_BODY */ "Exit DiskPart?",
+    /*  11 MSG_ERROR_TITLE */ "AmiPart Error",
+    /*  12 MSG_WARNING_TITLE */ "AmiPart Warning",
+    /*  13 MSG_INFO_TITLE */ "AmiPart",
+    /*  14 MSG_MAIN_EXIT_BODY */ "Exit AmiPart?",
     /*  15 MSG_MAIN_MANUAL_DEV */ "Manual device name:",
     /*  16 MSG_MAIN_SELECT */ "Select",
     /*  17 MSG_MAIN_FILTER */ "Filter",
@@ -1343,12 +1343,12 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /*  31 MSG_MAIN_IMG_NOEXIST_FMT */ "File \"%s\" does not exist.\nEnter size for the new image:",
     /*  32 MSG_MAIN_SIZE_PROMPT */ "Size (e.g. 100M, 2G):",
     /*  33 MSG_MAIN_CREATE */ "Create",
-    /*  34 MSG_MAIN_NEW_IMAGE_TITLE */ "DiskPart - New Image",
+    /*  34 MSG_MAIN_NEW_IMAGE_TITLE */ "AmiPart - New Image",
     /*  35 MSG_MAIN_SIZE_MIN */ "Size must be at least 512 bytes.",
     /*  36 MSG_MAIN_SIZE_MAX */ "Size exceeds the 2 GB dos.library image-file limit.",
     /*  37 MSG_MAIN_IMG_CREATE_FAIL_FMT */ "Failed to create image file:\n%s",
-    /*  38 MSG_MAIN_WARN_TITLE */ "DiskPart - WARNING",
-    /*  39 MSG_MAIN_WARN_BODY */ "EXPERIMENTAL SOFTWARE\nDiskPart %s  (built %s)\n\nDiskPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.",
+    /*  38 MSG_MAIN_WARN_TITLE */ "AmiPart - WARNING",
+    /*  39 MSG_MAIN_WARN_BODY */ "EXPERIMENTAL SOFTWARE\nAmiPart %s  (built %s)\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.",
     /*  40 MSG_MAIN_WARN_GADGETS */ "I have a backup - Continue|Quit",
     /*  41 MSG_CLI_IMAGE_PATH_BAD */ "ERROR: IMAGE path is empty or too long.\n",
     /*  42 MSG_CLI_NEED_DEV_OR_IMAGE */ "This command requires DEV <device>:<unit> or IMAGE <path>.\n",
@@ -1568,7 +1568,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 256 MSG_PV_REBOOT_WRITTEN */ "Partition table written.\nReboot now for changes to take effect.",
     /* 257 MSG_PV_WRITE_FAILED_FMT */ "Write failed (err %d)!\nCheck device and try again.",
     /* 258 MSG_PV_REBOOT_LAYOUT */ "Disk layout has changed.\nReboot now for changes to take effect.",
-    /* 259 MSG_PV_EXIT_BODY */ "Exit DiskPart?",
+    /* 259 MSG_PV_EXIT_BODY */ "Exit AmiPart?",
     /* 260 MSG_PV_NORESIZE_START_TITLE */ "Cannot Resize From Start",
     /* 261 MSG_PV_NORESIZE_START_BODY */ "Filesystem resize is only possible when\nthe start cylinder is left unchanged.\n\nTo grow a partition, drag the right edge instead.",
     /* 262 MSG_PV_DLG_EDIT_PART */ "Edit Partition",
@@ -1632,7 +1632,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 320 MSG_DLG_DESTROY_GADGETS */ "Yes, destroy data|Cancel",
     /* 321 MSG_DLG_REBOOT_BODY */ "Filesystem or block size changed.\nA reboot is required for this\npartition to be recognised correctly.",
     /* 322 MSG_DLG_ABOUT_PREFIX */ "About ",
-    /* 323 MSG_DLG_ABOUT_BODY */ "DiskPart %s\nBuilt: %s\nAmigaOS 2.x RDB Hard Disk Partition Editor\n\nA native GadTools application with full RDB support.\nNo external library dependencies beyond the ROM.\n\nDirector: John Hertell\nCode: Claude Code (Anthropic)\n\nhttps://github.com/ChuckyGang/DiskPart\n\nMIT License \251 2026 John Hertell",
+    /* 323 MSG_DLG_ABOUT_BODY */ "AmiPart %s\nBuilt: %s\nAmigaOS 2.x RDB Hard Disk Partition Editor\n(formerly known as \"DiskPart\")\n\nA native GadTools application with full RDB support.\nNo external library dependencies beyond the ROM.\n\nDirector: John Hertell\nCode: Claude Code (Anthropic)\n\nhttps://github.com/ChuckyGang/AmiPart\n\nMIT License \251 2026 John Hertell",
     /* 324 MSG_DLG_CYLINDERS */ "Cylinders",
     /* 325 MSG_DLG_HEADS */ "Heads",
     /* 326 MSG_DLG_SECTORS_TRK */ "Sectors/Trk",
@@ -1810,7 +1810,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 498 MSG_SCR_REBOOTING */ "Rebooting in 3 seconds...\n",
     /* 499 MSG_SCR_COUNTDOWN_FMT */ "%u...\n",
     /* 500 MSG_SCR_UNKNOWN_CMD_FMT */ "Unknown command \"%s\".",
-    /* 501 MSG_SCR_PRINTFAULT_HDR */ "DiskPart SCRIPT",
+    /* 501 MSG_SCR_PRINTFAULT_HDR */ "AmiPart SCRIPT",
     /* 502 MSG_SCR_DRYRUN_SUPPRESSED */ "DRYRUN: disk writes suppressed.\n\n",
     /* 503 MSG_SCR_SCRIPT_HDR_FMT */ "Script: %s\n\n",
     /* 504 MSG_SCR_ENDED_UNSAVED */ "WARNING: script ended with unsaved changes.\n",
@@ -1841,7 +1841,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 529 MSG_MOVE_WARN_POWER2 */ "PERMANENTLY DESTROY YOUR DATA.  No rollback.",
     /* 530 MSG_MOVE_WARN_TIME1 */ "THIS WILL TAKE A VERY LONG TIME - PLAN FOR HOURS.",
     /* 531 MSG_MOVE_WARN_TIME2 */ "1 GB ~ 20-60 min.  Large disks may take MUCH longer.",
-    /* 532 MSG_MOVE_WARN_TIME3 */ "Do NOT power off, interrupt or close DiskPart!",
+    /* 532 MSG_MOVE_WARN_TIME3 */ "Do NOT power off, interrupt or close AmiPart!",
     /* 533 MSG_MOVE_NEW_START_CYL */ "New start cyl",
     /* 534 MSG_MOVE_BACKUP_CHK_FMT */ "I have a current backup of %s",
     /* 535 MSG_MOVE_BTN_MOVE */ "Move Partition",
@@ -2542,7 +2542,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1230 MSG_PC_WRITE_ERR */ "Write error (disk full?).\n",
     /* 1231 MSG_PC_READ_ERR_FMT */ "Read error at block %lu.\n",
     /* 1232 MSG_PC_SHORT_FILE */ "Dump file is truncated or not a partition dump.\n",
-    /* 1233 MSG_PC_BAD_MAGIC */ "Not a DiskPart partition dump (bad header).\n",
+    /* 1233 MSG_PC_BAD_MAGIC */ "Not a AmiPart partition dump (bad header).\n",
     /* 1234 MSG_PC_BAD_VERSION_FMT */ "Unsupported dump version %lu.\n",
     /* 1235 MSG_PC_OOM */ "Out of memory.\n",
     /* 1236 MSG_PC_DST_TOO_SMALL_FMT */ "Destination %s holds %lu blocks; the dump needs %lu - choose a larger partition.\n",

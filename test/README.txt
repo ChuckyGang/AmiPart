@@ -1,7 +1,7 @@
-DiskPart grow/shrink fuzz loop (Linux host, not Amiga)
+AmiPart grow/shrink fuzz loop (Linux host, not Amiga)
 ======================================================
 
-testloop.py exercises GROW + SHRINK end-to-end against the real DiskPart
+testloop.py exercises GROW + SHRINK end-to-end against the real AmiPart
 binary running under vamos (amitools).  Each iteration:
 
   random FS (FFS real via xdftool / PFS3 + SFS synthesized) with random

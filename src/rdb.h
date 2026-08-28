@@ -1,5 +1,5 @@
 /*
- * rdb.h - Block device handle and RDB structures for DiskPart.
+ * rdb.h - Block device handle and RDB structures for AmiPart.
  */
 
 #ifndef RDB_H
@@ -37,7 +37,7 @@ typedef unsigned long long UQUAD;
 #define MAX_PARTITIONS   64
 #define MAX_FILESYSTEMS  32
 
-/* Maximum size of a filesystem handler binary (LSEG code) that DiskPart will
+/* Maximum size of a filesystem handler binary (LSEG code) that AmiPart will
    accept when adding an FS and can read back without truncation.  All add
    paths (GUI/CLI/script) enforce this, and MAX_LSEG_BLOCKS in rdb.c is sized
    to round-trip it. */

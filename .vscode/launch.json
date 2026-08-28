@@ -7,7 +7,7 @@
             "preLaunchTask": "compile",
             "name": "Amiga 1200",
             "config": "A1200",
-            "program": "${workspaceFolder}/out/DiskPart",
+            "program": "${workspaceFolder}/out/AmiPart",
             "kickstart": "/home/john/amiga/roms/kick31.rom",
             "emuargs": [
                 "--hard_drive_2=${workspaceFolder}/test/test.hdf",

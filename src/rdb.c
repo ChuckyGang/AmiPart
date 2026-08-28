@@ -1,5 +1,5 @@
 /*
- * rdb.c - Block device I/O and RDB read/write for DiskPart.
+ * rdb.c - Block device I/O and RDB read/write for AmiPart.
  *
  * Stage 1: BlockDev_Open / BlockDev_Close / BlockDev_ReadBlock /
  *          BlockDev_WriteBlock / BlockDev_HasMBR.
@@ -267,7 +267,7 @@ static BOOL device_is_modern(struct BlockDev *bd)
 /* BlockDev_OpenFile / BlockDev_CreateFile                             */
 /*                                                                     */
 /* File backend: treat a host file as a 512-byte-block disk image.    */
-/* Used for HDF/RDB image files (uaehf-style images, etc.) so DiskPart */
+/* Used for HDF/RDB image files (uaehf-style images, etc.) so AmiPart */
 /* can edit them directly without going through a mounted device.     */
 /* ------------------------------------------------------------------ */
 
@@ -676,7 +676,7 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
        Gated strictly on IOERR_NOCMD so a genuine TD_WRITE64 write failure is
        never silently retried through a different path.  The UAE/Amiberry
        "CMD_WRITE hangs on cached FS blocks" hazard only affects live, mounted
-       partitions; DiskPart writes run with the partition inhibited/unmounted,
+       partitions; AmiPart writes run with the partition inhibited/unmounted,
        and UAE supports TD_WRITE64 so it never reaches this fallback anyway.
        These pre-NSD drivers address at most 4 GB, so the 32-bit offset is
        sufficient - refuse rather than wrap if a >4 GB block is ever asked. */

@@ -517,7 +517,7 @@ BOOL UnmountPartition(struct BlockDev *bd, const char *name,
 /* Source 2: the handler path stored in the FSHD (e.g. "L:pfs3aio")    */
 /*           via plain LoadSeg(), when the RDB carries no code.        */
 /*                                                                     */
-/* On success a FileSysEntry (ln_Name "DiskPart") is added to the      */
+/* On success a FileSysEntry (ln_Name "AmiPart") is added to the      */
 /* resource, so the existing find_filesys()/apply_patch() machinery -  */
 /* and every later mount until reboot - just works.  The entry, its    */
 /* name and the SegList are allocated with AllocMem and deliberately   */
@@ -534,7 +534,7 @@ BOOL UnmountPartition(struct BlockDev *bd, const char *name,
 static BPTR qf_loadseg_mem(const UBYTE *data, ULONG size)
 {
     static const char *paths[] = {
-        "T:diskpart_fs.ldtmp", "RAM:diskpart_fs.ldtmp"
+        "T:amipart_fs.ldtmp", "RAM:amipart_fs.ldtmp"
     };
     int i;
     for (i = 0; i < 2; i++) {
@@ -629,7 +629,7 @@ BOOL QuickFormat_EnsureHandler(const struct RDBInfo *rdb, ULONG dostype,
         set_err(errbuf, errlen, GS(MSG_QF_ENS_LOAD_FAIL_FMT));
         return FALSE;
     }
-    memcpy(name, "DiskPart", 9);
+    memcpy(name, "AmiPart", sizeof("AmiPart"));
 
     fse->fse_Node.ln_Name = name;
     fse->fse_DosType    = dostype;

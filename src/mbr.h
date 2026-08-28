@@ -1,5 +1,5 @@
 /*
- * mbr.h - PC Master Boot Record support for DiskPart.
+ * mbr.h - PC Master Boot Record support for AmiPart.
  *
  * Allows a disk to carry both an MBR at block 0 (for PC-compatible
  * partition tables, e.g. for PiStorm / bridgeboard shared disks) and

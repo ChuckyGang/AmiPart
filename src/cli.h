@@ -1,5 +1,5 @@
 /*
- * cli.h - DiskPart CLI mode declarations.
+ * cli.h - AmiPart CLI mode declarations.
  */
 
 #ifndef CLI_H

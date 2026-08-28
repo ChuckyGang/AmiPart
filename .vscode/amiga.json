@@ -1,5 +1,5 @@
 {
-    "program": "out/DiskPart",
+    "program": "out/AmiPart",
     "includePath": [ "${workspaceFolder}/src" ],
     "defines": [ "NO_INLINE_STDARG" ]
 }

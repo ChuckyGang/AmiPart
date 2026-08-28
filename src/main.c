@@ -1,5 +1,5 @@
 /*
- * main.c - DiskPart two-level device selection.
+ * main.c - AmiPart two-level device selection.
  *
  * Level 1: list of exec device driver names that responded to probing.
  * Level 2: list of units for the chosen driver, showing disk name/size.
@@ -39,7 +39,7 @@
 #include "rdb.h"
 #include "version.h"
 
-static const char diskpart_ver[] = "$VER: DiskPart 0.1 (2026)";
+static const char amipart_ver[] = "$VER: AmiPart 0.1 (2026)";
 
 /* ------------------------------------------------------------------ */
 /* Library bases - SysBase set by main() before any LP call            */
@@ -58,7 +58,7 @@ struct Library       *ExpansionBase  = NULL;
  * support/gcc8_c_support.c).  NULL on CLI launch or under toolchains
  * that don't supply a custom _start (e.g. Bebbo) - WB tooltype
  * lookup will then be a no-op. */
-struct WBStartup *DiskPart_WBStartup = NULL;
+struct WBStartup *AmiPart_WBStartup = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Gadget IDs                                                           */
@@ -411,7 +411,7 @@ int main(void)
     DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 37);
     if (!DOSBase) goto cleanup;
 
-    /* Localization: opens locale.library (v38+) + DiskPart.catalog when
+    /* Localization: opens locale.library (v38+) + AmiPart.catalog when
      * present.  No-op on Kickstart 2.04 (v37) - GS() then falls back to the
      * built-in English strings.  Opened before CLI dispatch so CLI/script
      * messages are localized too. */
@@ -454,9 +454,9 @@ int main(void)
     {
         BOOL skip_warning = cli_nowarning();
 
-        if (!skip_warning && IconBase && DiskPart_WBStartup &&
-            DiskPart_WBStartup->sm_NumArgs >= 1) {
-            struct WBArg    *wa  = &DiskPart_WBStartup->sm_ArgList[0];
+        if (!skip_warning && IconBase && AmiPart_WBStartup &&
+            AmiPart_WBStartup->sm_NumArgs >= 1) {
+            struct WBArg    *wa  = &AmiPart_WBStartup->sm_ArgList[0];
             struct DiskObject *dobj;
             BPTR             prev_dir;
 
@@ -475,7 +475,7 @@ int main(void)
             struct EasyStruct es;
             char body[512];
             DP_SNPRINTF(body, GS(MSG_MAIN_WARN_BODY),
-                DISKPART_VERSION, DiskPart_BuildStamp);
+                AMIPART_VERSION, AmiPart_BuildStamp);
 
             es.es_StructSize   = sizeof(es);
             es.es_Flags        = 0;

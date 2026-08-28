@@ -449,12 +449,12 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* Unseal pass (2026-07-20): free any allocated-marked bits in the  */
         /* OLD last bitmap block that now fall inside the grown size.       */
         /* Freshly formatted pfs3 leaves out-of-range bits FREE, but an     */
-        /* earlier DiskPart SHRINK sealed them - without this, the re-grown */
+        /* earlier AmiPart SHRINK sealed them - without this, the re-grown */
         /* region up to that block's coverage end would stay unallocatable  */
         /* (bits read as used) while blocksfree claims it free.  Bits below */
         /* cur_disksize are NEVER touched (real allocation state).          */
         /* Non-fatal: any read/validation hiccup skips the unseal - volumes */
-        /* never shrunk by DiskPart do not need it.                         */
+        /* never shrunk by AmiPart do not need it.                         */
         if (old_num_bmb > 0 && (reserved_blksize % 512) == 0) {
             ULONG max_idx = (options & PFS_MODE_SUPERINDEX)
                             ? (ULONG)PFS_MAX_BITMAPINDEX : 5UL;
@@ -513,7 +513,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* ---------------------------------------------------------------- */
         /* disksize is written UNCONDITIONALLY (2026-07-20; used to be
            MODE_SIZEFIELD-gated).  pfs3 ignores the field once the flag is
-           clear, but DiskPart's own SHRINKINFO/SHRINK read it as the
+           clear, but AmiPart's own SHRINKINFO/SHRINK read it as the
            volume size - a second grow after the flag was cleared (by a
            previous grow or a shrink) left it stale and skewed every later
            size calculation.  Found by the grow/shrink fuzz loop. */

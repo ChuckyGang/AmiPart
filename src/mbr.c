@@ -1,5 +1,5 @@
 /*
- * mbr.c - PC Master Boot Record read / write for DiskPart.
+ * mbr.c - PC Master Boot Record read / write for AmiPart.
  */
 
 #include <exec/memory.h>

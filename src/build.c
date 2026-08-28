@@ -2,4 +2,4 @@
  * so __DATE__ and __TIME__ reflect the current build, not whenever
  * this file last changed. */
 
-const char DiskPart_BuildStamp[] = __DATE__ " " __TIME__;
+const char AmiPart_BuildStamp[] = __DATE__ " " __TIME__;

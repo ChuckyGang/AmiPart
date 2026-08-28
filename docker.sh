@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build DiskPart using the Bebbo amiga-gcc toolchain via Docker.
+# Build AmiPart using the Bebbo amiga-gcc toolchain via Docker.
 #
 # Usage:
 #   ./docker.sh                # build (forwards to: make TOOLCHAIN=bebbo)

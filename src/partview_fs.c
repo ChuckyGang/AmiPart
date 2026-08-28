@@ -1,5 +1,5 @@
 /*
- * partview_fs.c - Filesystem manager dialog for DiskPart.
+ * partview_fs.c - Filesystem manager dialog for AmiPart.
  *
  * Contains: build_fs_list, fs_load_file, fs_addedit_dialog,
  *           filesystem_manager_dialog.

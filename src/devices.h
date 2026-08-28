@@ -1,5 +1,5 @@
 /*
- * devices.h - Block device enumeration for DiskPart.
+ * devices.h - Block device enumeration for AmiPart.
  */
 
 #ifndef DEVICES_H

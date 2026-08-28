@@ -1,5 +1,5 @@
 /*
- * partview.c - Partition view window for DiskPart.
+ * partview.c - Partition view window for AmiPart.
  *
  * Layout mirrors AmigaPart:
  *   ┌─ Disk Information ──────────────────────────────────┐
@@ -67,7 +67,7 @@ extern struct IntuitionBase *IntuitionBase;
 extern struct GfxBase       *GfxBase;
 extern struct Library       *GadToolsBase;
 extern struct Library       *IconBase;
-extern struct WBStartup     *DiskPart_WBStartup;
+extern struct WBStartup     *AmiPart_WBStartup;
 
 /* ------------------------------------------------------------------ */
 /* Mouse button codes (from devices/inputevent.h IECODE_* values)     */
@@ -397,7 +397,7 @@ static void offer_reboot(struct Window *win, const char *msg)
     struct EasyStruct es;
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
-    es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+    es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
     es.es_TextFormat   = (UBYTE *)msg;
     es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_REBOOT_LATER);
     if (EasyRequest(win, &es, NULL) == 1) {
@@ -1691,7 +1691,7 @@ static BOOL build_gadgets(APTR vi,
 
 static struct NewMenu partview_menu_def[] = {
     /* Menu 0 - application */
-    { NM_TITLE, DISKPART_VERTITLE,        NULL,         0, 0, NULL },
+    { NM_TITLE, AMIPART_VERTITLE,        NULL,         0, 0, NULL },
     { NM_ITEM,  "About...",              NULL,         0, 0, NULL },  /* ITEM 0 */
     /* Menu 1 - Advanced: backup / restore operations */
     { NM_TITLE, "Advanced",              NULL,         0, 0, NULL },
@@ -1739,13 +1739,13 @@ static struct NewMenu partview_menu_def[] = {
 };
 
 /* Replace the built-in English nm_Label strings above with their localized
-   forms before the menu is created.  NM_TITLE for menu 0 keeps DISKPART_VERTITLE
+   forms before the menu is created.  NM_TITLE for menu 0 keeps AMIPART_VERTITLE
    (a version constant); NM_BARLABEL separators and the NM_END terminator are
    left alone.  The message ids are listed in the same order as the table. */
 static void localize_partview_menu(void)
 {
     static const LONG ids[] = {
-        -1,                          /* DISKPART_VERTITLE (menu 0 title)   */
+        -1,                          /* AMIPART_VERTITLE (menu 0 title)   */
         MSG_PV_MENU_ABOUT,
         MSG_PV_MENU_ADVANCED,
         MSG_PV_MENU_BACKUP_RDB,
@@ -1850,7 +1850,7 @@ static BOOL format_pending_partitions(struct Window *win, struct BlockDev *bd,
         struct EasyStruct es;
         es.es_StructSize   = sizeof(es);
         es.es_Flags        = 0;
-        es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+        es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
         es.es_TextFormat   = (UBYTE *)report;
         es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
         EasyRequest(win, &es, NULL);
@@ -1873,7 +1873,7 @@ static void set_title_dirty(struct Window *win, const char *devname, ULONG unit,
                             BOOL dirty)
 {
     static char t[96];
-    int n = DP_SNPRINTF(t, "%s", DISKPART_VERTITLE);
+    int n = DP_SNPRINTF(t, "%s", AMIPART_VERTITLE);
     sprintf(t + n, GS(MSG_PV_TITLE_UNIT_FMT),
             devname, (unsigned long)unit,
             dirty ? GS(MSG_PV_TITLE_UNSAVED) : "");
@@ -1949,7 +1949,7 @@ static BOOL unmount_deleted_partitions(struct Window *win, struct RDBInfo *rdb)
         struct EasyStruct es;
         es.es_StructSize   = sizeof(es);
         es.es_Flags        = 0;
-        es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+        es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
         es.es_TextFormat   = (UBYTE *)report;
         es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
         EasyRequest(win, &es, NULL);
@@ -1973,11 +1973,11 @@ static BOOL load_window_geom(WORD *x, WORD *y, UWORD *w, UWORD *h)
     long    vals[4];
     int     i;
 
-    if (!IconBase || !DiskPart_WBStartup || DiskPart_WBStartup->sm_NumArgs < 1)
+    if (!IconBase || !AmiPart_WBStartup || AmiPart_WBStartup->sm_NumArgs < 1)
         return FALSE;
 
     {
-        struct WBArg *wa = &DiskPart_WBStartup->sm_ArgList[0];
+        struct WBArg *wa = &AmiPart_WBStartup->sm_ArgList[0];
         prev_dir = CurrentDir(wa->wa_Lock);
         dobj = GetDiskObject((STRPTR)wa->wa_Name);
         CurrentDir(prev_dir);
@@ -2107,7 +2107,7 @@ BOOL partview_run(const char *devname, ULONG unit)
         ULONG fmtargs[1];
         fmtargs[0] = bd->device_type;
         es.es_StructSize=sizeof(es); es.es_Flags=0;
-        es.es_Title=(UBYTE*)DISKPART_VERTITLE;
+        es.es_Title=(UBYTE*)AMIPART_VERTITLE;
         es.es_TextFormat=(UBYTE*)GS(MSG_PV_NOT_A_HARDDISK);
         es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
         EasyRequestArgs(NULL, &es, NULL, fmtargs);
@@ -2189,7 +2189,7 @@ BOOL partview_run(const char *devname, ULONG unit)
         }
 
         {
-            int n = DP_SNPRINTF(win_title, "%s", DISKPART_VERTITLE);
+            int n = DP_SNPRINTF(win_title, "%s", AMIPART_VERTITLE);
             sprintf(win_title + n, GS(MSG_PV_TITLE_UNIT_FMT),
                     devname, (unsigned long)unit, "");
         }
@@ -2468,7 +2468,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                     LONG r;
                     es.es_StructSize = sizeof(es);
                     es.es_Flags      = 0;
-                    es.es_Title      = (UBYTE *)DISKPART_VERTITLE;
+                    es.es_Title      = (UBYTE *)AMIPART_VERTITLE;
                     if (dirty) {
                         es.es_TextFormat   = (UBYTE *)GS(MSG_PV_UNSAVED_BODY);
                         es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_WRITE_DISCARD_CANCEL);
@@ -3470,7 +3470,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                             struct EasyStruct es;
                             es.es_StructSize   = sizeof(es);
                             es.es_Flags        = 0;
-                            es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+                            es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
                             es.es_TextFormat   = (UBYTE *)GS(MSG_PV_NO_RDB_INIT_FIRST);
                             es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                             EasyRequest(win, &es, NULL);
@@ -3485,7 +3485,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                         BOOL write_ok;
                         es.es_StructSize   = sizeof(es);
                         es.es_Flags        = 0;
-                        es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+                        es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
                         es.es_TextFormat   = (UBYTE *)GS(MSG_PV_WRITE_CONFIRM_BODY);
                         es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_WRITE_CANCEL);
                         if (EasyRequest(win, &es, NULL) != 1) break;
@@ -3598,7 +3598,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                             LONG r;
                             es.es_StructSize   = sizeof(es);
                             es.es_Flags        = 0;
-                            es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+                            es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
                             es.es_TextFormat   = (UBYTE *)GS(MSG_PV_UNSAVED_BODY);
                             es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_WRITE_DISCARD_CANCEL);
                             r = EasyRequest(win, &es, NULL);

@@ -1,7 +1,7 @@
 /*
  * partclone.h - Partition dump-to-file, restore-from-file, and clone.
  *
- * Dump writes a self-describing file: a 512-byte DiskPart header (geometry,
+ * Dump writes a self-describing file: a 512-byte AmiPart header (geometry,
  * dostype, block count, full DosEnvec) followed by the partition's raw
  * device blocks.  Restore/clone can therefore validate that a target fits
  * and recreate a partition whose filesystem addresses line up.

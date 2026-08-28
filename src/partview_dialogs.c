@@ -1,5 +1,5 @@
 /*
- * partview_dialogs.c - Partition and geometry dialogs for DiskPart.
+ * partview_dialogs.c - Partition and geometry dialogs for AmiPart.
  *
  * Contains:
  *   FriendlyDosType, parse helpers (parse_num/long/dostype),
@@ -842,7 +842,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                         ULONG new_dos_type   = dlg_fs_dostypes[cur_fs];
                         ULONG new_fs_bsz     = blocksize_values[cur_bsz];
                         /* Keep device sector = 512; spb absorbs the multiple.
-                           (DiskPart only supports 512-byte device sectors.) */
+                           (AmiPart only supports 512-byte device sectors.) */
                         ULONG new_dev_bsz    = 512;
                         ULONG new_spb        = new_fs_bsz / new_dev_bsz;
                         if (new_spb == 0) new_spb = 1;
@@ -852,7 +852,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                         if (destructive) {
                             static char warn_title[80]; /* Intuition keeps ptr */
                             struct EasyStruct es;
-                            DP_SNPRINTF(warn_title, "%s%s", DISKPART_VERTITLE,
+                            DP_SNPRINTF(warn_title, "%s%s", AMIPART_VERTITLE,
                                     GS(MSG_DLG_WARN_SUFFIX));
                             es.es_StructSize   = sizeof(es);
                             es.es_Flags        = 0;
@@ -957,7 +957,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             struct EasyStruct es;
             es.es_StructSize   = sizeof(es);
             es.es_Flags        = 0;
-            es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+            es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
             es.es_TextFormat   = (UBYTE *)GS(MSG_DLG_REBOOT_BODY);
             es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
             EasyRequest(win, &es, NULL, TAG_DONE);
@@ -979,8 +979,8 @@ void show_about(struct Window *win)
     char body[512];
     static char about_title[80];   /* Intuition keeps the pointer */
     DP_SNPRINTF(body, GS(MSG_DLG_ABOUT_BODY),
-        DISKPART_VERSION, DiskPart_BuildStamp);
-    DP_SNPRINTF(about_title, "%s%s", GS(MSG_DLG_ABOUT_PREFIX), DISKPART_VERTITLE);
+        AMIPART_VERSION, AmiPart_BuildStamp);
+    DP_SNPRINTF(about_title, "%s%s", GS(MSG_DLG_ABOUT_PREFIX), AMIPART_VERTITLE);
 
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;

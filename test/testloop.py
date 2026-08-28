@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DiskPart grow/shrink fuzz loop (v2).
+"""AmiPart grow/shrink fuzz loop (v2).
 
 Per iteration, all randomized:
   geometry     heads in {1,2,4,8,16} x sectors in {32,63} (blocks/cylinder!)
@@ -25,7 +25,7 @@ from the directory tree between operations (parametrized for both 512- and
 """
 import os, sys, struct, random, hashlib, subprocess, shutil, time
 
-DP    = "/home/john/Documents/Code/DiskPart/out/DiskPart"
+DP    = "/home/john/Documents/Code/AmiPart/out/AmiPart"
 HERE  = os.path.dirname(os.path.abspath(__file__))
 LOG   = os.path.join(HERE, "testloop.log")
 

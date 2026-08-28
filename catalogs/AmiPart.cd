@@ -1,9 +1,9 @@
-## DiskPart.cd - catalog description (single source of truth for all
+## AmiPart.cd - catalog description (single source of truth for all
 ## translatable strings).  CatComp/FlexCat-compatible.
 ##
-## Generate the C header:   python3 support/gencat.py header DiskPart.cd ../src/diskpart_strings.h
-## Make a translation tmpl:  python3 support/gencat.py ct DiskPart.cd deutsch.ct deutsch
-## Compile a .catalog:        python3 support/gencat.py catalog DiskPart.cd deutsch.ct DiskPart.catalog
+## Generate the C header:   python3 support/gencat.py header AmiPart.cd ../src/amipart_strings.h
+## Make a translation tmpl:  python3 support/gencat.py ct AmiPart.cd deutsch.ct deutsch
+## Compile a .catalog:        python3 support/gencat.py catalog AmiPart.cd deutsch.ct AmiPart.catalog
 ##
 ## RULES FOR EDITORS:
 ##   * Append new messages at the END of their section, never insert in the
@@ -12,7 +12,7 @@
 ##
 #language english
 #version 1
-#name DiskPart
+#name AmiPart
 ;
 ;==========================================================================
 ; Common / shared
@@ -51,19 +51,19 @@ MSG_CONTINUE_ABORT
 Continue|Abort
 ;
 MSG_ERROR_TITLE
-DiskPart Error
+AmiPart Error
 ;
 MSG_WARNING_TITLE
-DiskPart Warning
+AmiPart Warning
 ;
 MSG_INFO_TITLE
-DiskPart
+AmiPart
 ;
 ;==========================================================================
 ; main.c - device/unit selection, image-file creation, startup warning
 ;==========================================================================
 MSG_MAIN_EXIT_BODY
-Exit DiskPart?
+Exit AmiPart?
 ;
 MSG_MAIN_MANUAL_DEV
 Manual device name:
@@ -86,7 +86,7 @@ Quit
 MSG_MAIN_BACK
 Back
 ;
-; Window-title suffixes appended to "DiskPart Vx.y"
+; Window-title suffixes appended to "AmiPart Vx.y"
 MSG_MAIN_TITLE_SELECT_DEV
  - Select Device
 ;
@@ -124,7 +124,7 @@ MSG_MAIN_CREATE
 Create
 ;
 MSG_MAIN_NEW_IMAGE_TITLE
-DiskPart - New Image
+AmiPart - New Image
 ;
 MSG_MAIN_SIZE_MIN
 Size must be at least 512 bytes.
@@ -136,10 +136,10 @@ MSG_MAIN_IMG_CREATE_FAIL_FMT
 Failed to create image file:\n%s
 ;
 MSG_MAIN_WARN_TITLE
-DiskPart - WARNING
+AmiPart - WARNING
 ;
 MSG_MAIN_WARN_BODY
-EXPERIMENTAL SOFTWARE\nDiskPart %s  (built %s)\n\nDiskPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.
+EXPERIMENTAL SOFTWARE\nAmiPart %s  (built %s)\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.
 ;
 MSG_MAIN_WARN_GADGETS
 I have a backup - Continue|Quit
@@ -809,7 +809,7 @@ MSG_PV_REBOOT_LAYOUT
 Disk layout has changed.\nReboot now for changes to take effect.
 ;
 MSG_PV_EXIT_BODY
-Exit DiskPart?
+Exit AmiPart?
 ;
 MSG_PV_NORESIZE_START_TITLE
 Cannot Resize From Start
@@ -1004,7 +1004,7 @@ MSG_DLG_ABOUT_PREFIX
 About 
 ;
 MSG_DLG_ABOUT_BODY
-DiskPart %s\nBuilt: %s\nAmigaOS 2.x RDB Hard Disk Partition Editor\n\nA native GadTools application with full RDB support.\nNo external library dependencies beyond the ROM.\n\nDirector: John Hertell\nCode: Claude Code (Anthropic)\n\nhttps://github.com/ChuckyGang/DiskPart\n\nMIT License \xa9 2026 John Hertell
+AmiPart %s\nBuilt: %s\nAmigaOS 2.x RDB Hard Disk Partition Editor\n(formerly known as "DiskPart")\n\nA native GadTools application with full RDB support.\nNo external library dependencies beyond the ROM.\n\nDirector: John Hertell\nCode: Claude Code (Anthropic)\n\nhttps://github.com/ChuckyGang/AmiPart\n\nMIT License \xa9 2026 John Hertell
 ;
 MSG_DLG_CYLINDERS
 Cylinders
@@ -1550,7 +1550,7 @@ MSG_SCR_UNKNOWN_CMD_FMT
 Unknown command \"%s\".
 ;
 MSG_SCR_PRINTFAULT_HDR
-DiskPart SCRIPT
+AmiPart SCRIPT
 ;
 MSG_SCR_DRYRUN_SUPPRESSED
 DRYRUN: disk writes suppressed.\n\n
@@ -1646,7 +1646,7 @@ MSG_MOVE_WARN_TIME2
 1 GB ~ 20-60 min.  Large disks may take MUCH longer.
 ;
 MSG_MOVE_WARN_TIME3
-Do NOT power off, interrupt or close DiskPart!
+Do NOT power off, interrupt or close AmiPart!
 ;
 MSG_MOVE_NEW_START_CYL
 New start cyl
@@ -3808,7 +3808,7 @@ MSG_PC_SHORT_FILE
 Dump file is truncated or not a partition dump.\n
 ;
 MSG_PC_BAD_MAGIC
-Not a DiskPart partition dump (bad header).\n
+Not a AmiPart partition dump (bad header).\n
 ;
 MSG_PC_BAD_VERSION_FMT
 Unsupported dump version %lu.\n

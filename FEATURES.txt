@@ -1,8 +1,8 @@
 ================================================================================
-                            DiskPart - Feature List
+                            AmiPart - Feature List
 ================================================================================
 
-DiskPart is a GadTools-based RDB (Rigid Disk Block) partition editor for
+AmiPart is a GadTools-based RDB (Rigid Disk Block) partition editor for
 AmigaOS 2.x and later (Kickstart 2.04+), with a full command-line and
 scripting interface.
 
@@ -53,7 +53,7 @@ scripting interface.
 --------------------------------------------------------------------------------
  * Add a filesystem driver to the RDB.
  * DosType may be entered as ASCII (e.g. DOS3, PFS\3) or as a 0x / $ hex value.
- * DiskPart will try to guess the DosType from the handler file name.
+ * AmiPart will try to guess the DosType from the handler file name.
  * Filesystem driver version word and stack size are configurable.
 
 
@@ -223,11 +223,11 @@ scripting interface.
 --------------------------------------------------------------------------------
  * Full locale.library catalog support: the entire GUI, CLI and script
    interface (~1000 strings) can be translated.
- * Translatable strings live in catalogs/DiskPart.cd (CatComp/FlexCat format);
+ * Translatable strings live in catalogs/AmiPart.cd (CatComp/FlexCat format);
    see catalogs/README.txt for the translator workflow.
  * Catalogs are searched in LOCALE:Catalogs/<lang>/ and PROGDIR:Catalogs/<lang>/.
  * Graceful fallback: locale.library exists only on AmigaOS 2.1 (V38)+.  On
-   Kickstart 2.04 (V37) DiskPart runs unchanged with built-in English - no
+   Kickstart 2.04 (V37) AmiPart runs unchanged with built-in English - no
    catalog is loaded and nothing fails, so full 2.x compatibility is kept.
 
 

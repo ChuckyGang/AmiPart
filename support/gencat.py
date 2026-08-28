@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gencat.py - DiskPart catalog toolchain (CatComp/FlexCat-compatible .cd workflow).
+gencat.py - AmiPart catalog toolchain (CatComp/FlexCat-compatible .cd workflow).
 
 The .cd "catalog description" file is the single source of truth for every
 translatable string.  This script replaces the parts of the FlexCat/CatComp
@@ -90,7 +90,7 @@ def _unescape(s):
 
 def parse_cd(path, want_text=True):
     """Parse a .cd (or .ct) file.  Returns (header_dict, [Msg, ...])."""
-    header = {"language": "english", "version": "0", "name": "DiskPart"}
+    header = {"language": "english", "version": "0", "name": "AmiPart"}
     msgs = []
     next_id = 0
     pending_comments = []
@@ -200,8 +200,8 @@ def gen_header(cd, out):
     count = len(msgs)
     lines = []
     lines.append("/* Auto-generated from %s by support/gencat.py. DO NOT EDIT. */" % cd)
-    lines.append("#ifndef DISKPART_STRINGS_H")
-    lines.append("#define DISKPART_STRINGS_H")
+    lines.append("#ifndef AMIPART_STRINGS_H")
+    lines.append("#define AMIPART_STRINGS_H")
     lines.append("")
     lines.append("/* Message ids - also the locale.library catalog string numbers. */")
     for m in msgs:
@@ -209,7 +209,7 @@ def gen_header(cd, out):
     lines.append("")
     lines.append("#define MSG_COUNT %d" % count)
     lines.append("")
-    lines.append("#endif /* DISKPART_STRINGS_H */")
+    lines.append("#endif /* AMIPART_STRINGS_H */")
     lines.append("")
     lines.append("/* Built-in (English) defaults - used when no catalog is loaded, e.g.")
     lines.append(" * on Kickstart 2.04 where locale.library is absent.  The table is")
@@ -276,7 +276,7 @@ def gen_catalog(cd, ct, out):
     cd_header, cd_msgs = parse_cd(cd)
     ct_header, ct_msgs = parse_cd(ct)
     lang = ct_header.get("language", "unknown")
-    name = cd_header.get("name", "DiskPart")
+    name = cd_header.get("name", "AmiPart")
     ver = cd_header.get("version", "0")
 
     fver = ("$VER: %s.catalog %s (%s)" % (name, ver, "01.01.2026")).encode("latin-1") + b"\x00"

@@ -1,9 +1,9 @@
 /*
- * cli.c - DiskPart CLI mode.
+ * cli.c - AmiPart CLI mode.
  *
  * Invoked by main() when the program is run from a shell with arguments.
  * ReadArgs() parses the command line; output goes to the current console
- * (redirectable: DiskPart LISTDEV >ram:devs.txt).
+ * (redirectable: AmiPart LISTDEV >ram:devs.txt).
  *
  * Adding a new command:
  *   1. Add a keyword to CLI_TEMPLATE + a matching ARG_ enum value.
@@ -3119,7 +3119,7 @@ LONG cli_run(void)
 
     rdargs = ReadArgs((STRPTR)CLI_TEMPLATE, args, NULL);
     if (!rdargs) {
-        PrintFault(IoErr(), (STRPTR)"DiskPart");
+        PrintFault(IoErr(), (STRPTR)"AmiPart");
         return RETURN_ERROR;
     }
 

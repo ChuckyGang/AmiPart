@@ -6,7 +6,7 @@ Level-0 headers — compatible with all Amiga LhA/LhArc versions.
 Usage:
   python3 support/make_lha.py output.lha arcdir/file1 arcdir/file2 ...
   The archive path inside the LHA is taken from the argument as given,
-  so pass  DiskPart/DiskPart.exe  to store under that path.
+  so pass  AmiPart/AmiPart.exe  to store under that path.
 """
 
 import struct, sys, os
@@ -44,7 +44,7 @@ def _lha0_entry(arcpath: str, filedata: bytes) -> bytes:
 def create(output_path: str, entries: list) -> None:
     """
     entries: list of (arcpath, real_filepath) tuples.
-    arcpath is the path stored inside the archive (e.g. 'DiskPart/DiskPart.exe').
+    arcpath is the path stored inside the archive (e.g. 'AmiPart/AmiPart.exe').
     """
     with open(output_path, 'wb') as f:
         for arcpath, real_path in entries:
@@ -57,7 +57,7 @@ def create(output_path: str, entries: list) -> None:
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} output.lha [arcpath:realpath ...]")
-        print(f"  e.g. {sys.argv[0]} out.lha DiskPart/DiskPart.exe:out/DiskPart.exe")
+        print(f"  e.g. {sys.argv[0]} out.lha AmiPart/AmiPart.exe:out/AmiPart.exe")
         sys.exit(1)
 
     output = sys.argv[1]

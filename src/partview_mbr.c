@@ -1,5 +1,5 @@
 /*
- * partview_mbr.c - MBR partition add/edit/zero dialogs for DiskPart.
+ * partview_mbr.c - MBR partition add/edit/zero dialogs for AmiPart.
  */
 
 #include <exec/types.h>
@@ -648,7 +648,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                     if (heads == 0 || sectors == 0) {
                         es.es_StructSize   = sizeof(es);
                         es.es_Flags        = 0;
-                        es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+                        es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
                         es.es_TextFormat   = (UBYTE *)GS(MSG_MBR_GEOM_ZERO);
                         es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                         EasyRequest(win, &es, NULL);
@@ -660,7 +660,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                     if (err) {
                         es.es_StructSize   = sizeof(es);
                         es.es_Flags        = 0;
-                        es.es_Title        = (UBYTE *)DISKPART_VERTITLE;
+                        es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
                         es.es_TextFormat   = (UBYTE *)err;
                         es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                         EasyRequest(win, &es, NULL);
@@ -705,7 +705,7 @@ void offer_add_mbr_part(struct Window *win, struct BlockDev *bd,
 
     es.es_StructSize = sizeof(es);
     es.es_Flags      = 0;
-    es.es_Title      = (UBYTE *)DISKPART_VERTITLE;
+    es.es_Title      = (UBYTE *)AMIPART_VERTITLE;
 
     if (!mbr || !mbr->valid) {
         es.es_TextFormat   = (UBYTE *)GS(MSG_MBR_NO_MBR);

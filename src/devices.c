@@ -1,5 +1,5 @@
 /*
- * devices.c - Block device enumeration for DiskPart.
+ * devices.c - Block device enumeration for AmiPart.
  *
  * Devices_Scan:            instant two-phase discovery (DosList + exec DeviceList).
  *                          No I/O - pure kernel memory walk.

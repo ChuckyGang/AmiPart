@@ -1,5 +1,5 @@
 /*
- * guilv.h - Shared GadTools ListView helpers for DiskPart's GUI (main.c,
+ * guilv.h - Shared GadTools ListView helpers for AmiPart's GUI (main.c,
  * partview.c). Not a general utility header - only include from files that
  * already use GadTools listviews.
  */

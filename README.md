@@ -1,16 +1,18 @@
-# DiskPart
+# AmiPart
 
 A native AmigaOS 2.x hard disk partition editor with full RDB (Rigid Disk Block) support.
 
+> **Note:** AmiPart is the software formerly known as **DiskPart** — renamed to avoid confusion with the unrelated Microsoft Windows tool of the same name. Same program, same author, new name.
+
 ## Download
 
-**[Latest build](https://github.com/ChuckyGang/DiskPart/releases/latest)** — including the executable and an autoboot ADF. Click **Assets** on that page to see the downloadable files.
+**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable and an autoboot ADF. Click **Assets** on that page to see the downloadable files.
 
 ---
 
 ## About
 
-DiskPart is a partition management tool for the Amiga, built as a clean GadTools application that runs directly on Kickstart 2.x with no external library dependencies beyond the ROM. It was created out of a simple conviction: the Amiga deserves a good, modern partition editor — and it is better to have one now than never.
+AmiPart is a partition management tool for the Amiga, built as a clean GadTools application that runs directly on Kickstart 2.x with no external library dependencies beyond the ROM. It was created out of a simple conviction: the Amiga deserves a good, modern partition editor — and it is better to have one now than never.
 
 > *"Vibecoded software might be argued with, but this is an experiment in what AI-assisted development can produce when given a clear goal and a demanding user."*
 
@@ -30,7 +32,7 @@ DiskPart is a partition management tool for the Amiga, built as a clean GadTools
 
 ## Usage
 
-Run `DiskPart` from the Shell or double-click from Workbench.
+Run `AmiPart` from the Shell or double-click from Workbench.
 
 1. A device selector appears listing all detected disk controllers.
    Use **Filter / Show All** to toggle between storage-only and full device lists.
@@ -41,10 +43,10 @@ Run `DiskPart` from the Shell or double-click from Workbench.
 
 ### Workbench icon tooltypes
 
-When launched by double-clicking its icon, DiskPart reads these tooltypes from the icon (set them via the icon's **Information** window, or `NOWARNING` on the CLI):
+When launched by double-clicking its icon, AmiPart reads these tooltypes from the icon (set them via the icon's **Information** window, or `NOWARNING` on the CLI):
 
 - `NOWARNING` — suppresses the startup disclaimer.
-- `WINDOW=left/top/width/height` — restores the partition editor window to this position and size on open, e.g. `WINDOW=50/30/640/400`. Ignored (falls back to the default centered size) if the saved geometry no longer fits the current screen — for example after switching to a smaller resolution. Not read when DiskPart is run from the Shell.
+- `WINDOW=left/top/width/height` — restores the partition editor window to this position and size on open, e.g. `WINDOW=50/30/640/400`. Ignored (falls back to the default centered size) if the saved geometry no longer fits the current screen — for example after switching to a smaller resolution. Not read when AmiPart is run from the Shell.
 
 ---
 
@@ -67,11 +69,11 @@ Or build with the Bebbo toolchain via Docker (no host install required):
 ./docker.sh
 ```
 
-`make adf` builds `out/DiskPart.adf`, an autoboot floppy image that boots
-straight into DiskPart (no Workbench needed). Requires amitools
+`make adf` builds `out/AmiPart.adf`, an autoboot floppy image that boots
+straight into AmiPart (no Workbench needed). Requires amitools
 (`pip install amitools`) for its xdftool.
 
-Output: `out/DiskPart`
+Output: `out/AmiPart`
 
 ---
 

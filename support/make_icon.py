@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate DiskPart.info — Amiga WBTool icon.
+Generate AmiPart.info — Amiga WBTool icon.
 
 Converts hdicon.png (in support/) to a 36x40, 2-bitplane Amiga .info file.
 
@@ -11,7 +11,7 @@ Colour mapping (Workbench 3.x default palette):
   3 = blue  (selection highlight — used for selected state background)
 
 Usage:  python3 support/make_icon.py [output_path]
-Output: out/DiskPart.info  (default), or the path passed as the first arg.
+Output: out/AmiPart.info  (default), or the path passed as the first arg.
 """
 
 import struct, os, sys
@@ -24,7 +24,7 @@ WPL    = (W + 15) // 16   # words per line = 3
 
 REPO_ROOT       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_PNG         = os.path.join(REPO_ROOT, 'support', 'hdicon.png')
-DEFAULT_OUTPUT  = os.path.join(REPO_ROOT, 'out', 'DiskPart.info')
+DEFAULT_OUTPUT  = os.path.join(REPO_ROOT, 'out', 'AmiPart.info')
 
 
 # --- Image conversion -------------------------------------------------

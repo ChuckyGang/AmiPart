@@ -1,5 +1,5 @@
 /*
- * script.c - DiskPart script engine.
+ * script.c - AmiPart script engine.
  *
  * Reads a text file and executes commands one line at a time.
  * All partition/filesystem changes are held in memory; only WRITE

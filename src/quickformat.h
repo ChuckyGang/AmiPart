@@ -1,7 +1,7 @@
 /*
  * quickformat.h - OS-assisted quick format of a freshly written partition.
  *
- * Instead of hand-writing filesystem metadata, DiskPart temporarily mounts the
+ * Instead of hand-writing filesystem metadata, AmiPart temporarily mounts the
  * new partition (MakeDosNode + AddDosNode) and asks the real filesystem handler
  * to initialise an empty volume via dos.library Format().  The device is LEFT
  * MOUNTED on success, so no reboot is needed for the new partition.

@@ -7,7 +7,7 @@
 extern struct ExecBase* SysBase;
 
 /* Defined in main.c; set here so main can read tooltypes on a WB launch. */
-extern struct WBStartup *DiskPart_WBStartup;
+extern struct WBStartup *AmiPart_WBStartup;
 
 unsigned long strlen(const char* s) {
 	unsigned long t=0;
@@ -138,7 +138,7 @@ __attribute__((used)) __attribute__((section(".text.unlikely"))) void _start() {
 		   runs, so GetMsg is sufficient — no need to block with WaitPort.
 		   If NULL (e.g. Bartman debug launcher), skip WB reply gracefully. */
 		wb_msg = GetMsg(&proc->pr_MsgPort);
-		DiskPart_WBStartup = (struct WBStartup *)wb_msg;
+		AmiPart_WBStartup = (struct WBStartup *)wb_msg;
 	}
 
 	// initialize globals, ctors etc.
