@@ -542,7 +542,11 @@ static LONG cmd_listdev(BOOL probe_units)
 
     for (i = 0; i < s_devnames.count; i++) {
 
-        if (s_devnames.vers[i] > 0)
+        /* The host scan pre-formats display[]; the Amiga scan leaves it
+           empty (it is filled later, by the GUI, from font metrics). */
+        if (s_devnames.display[i][0])
+            DP_SNPRINTF(outbuf, "%s\n", s_devnames.display[i]);
+        else if (s_devnames.vers[i] > 0)
             DP_SNPRINTF(outbuf, "%-32s v%u.%u\n",
                     s_devnames.names[i],
                     (unsigned)s_devnames.vers[i],

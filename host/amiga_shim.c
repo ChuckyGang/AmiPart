@@ -339,18 +339,7 @@ BOOL QuickFormat_PFS3Tune(const char *mounted_name, ULONG dostype,
     return FALSE;
 }
 
-/* ---- device enumeration / reboot: no exec devices on the host ---- */
-#include "devices.h"
-void Devices_Scan(struct DevNameList *nl)
-{
-    if (nl) nl->count = 0;   /* host build: use IMAGE=<file> targets */
-}
-void Devices_GetUnitsForName(const char *devname, struct UnitList *ul,
-                             UnitProbeCallback cb, void *cb_data)
-{
-    (void)devname; (void)cb; (void)cb_data;
-    if (ul) ul->count = 0;
-}
+/* ---- device enumeration lives in host_devices.c (sysfs scan) ---- */
 void ColdReboot(void)
 {
     printf("(host build: REBOOT ignored)\n");

@@ -37,8 +37,15 @@ Raw devices (DEV=/dev/...):
   * Reported geometry is the conventional 16 heads x 63 sectors at
     512 bytes/block, identical to image mode - the same disk prepped
     via DEV= or via an image dd'd onto it ends up byte-identical.
-  * LISTDEV still reports no devices - raw targets are always named
-    explicitly, never picked from a scan.
+  * LISTDEV lists the machine's whole-disk block devices from sysfs
+    (path, size, model, [IN USE] when mounted/swapped/held) - no disk
+    I/O, so it never spins anything up.  Virtual devices (dm/md/ram/
+    zram), CD/DVD drives and bare loop devices are skipped; a loop
+    device WITH a backing file is listed (shown as "loop: <file>").
+    LISTDEV UNITS additionally read-probes each disk (read-only,
+    non-exclusive) and reports what is on it: RDB @ block N with the
+    partition names, or GPT/MBR, or no signature.  The listed /dev
+    path is exactly what DEV= takes.
 
 Scope (KISS):
   * Quick-format (VOLNAME=) is Amiga-only: it needs the real filesystem

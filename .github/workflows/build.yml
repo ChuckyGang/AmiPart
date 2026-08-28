@@ -121,6 +121,9 @@ jobs:
           sudo ./amipart DEV=$LOOP INIT NEW FORCE
           sudo ./amipart DEV=$LOOP ADDPART NAME=DH0 LOW=2 HIGH=8 TYPE=DOS3 BOOTABLE FORCE
           sudo ./amipart DEV=$LOOP INFO
+          sudo ./amipart LISTDEV UNITS | tee lsdev.out
+          grep -F "$LOOP" lsdev.out
+          grep -F "RDB @ block" lsdev.out | grep -F "DH0"
           sudo losetup -d "$LOOP"
           ./amipart IMAGE=ref.img INIT NEW FORCE
           ./amipart IMAGE=ref.img ADDPART NAME=DH0 LOW=2 HIGH=8 TYPE=DOS3 BOOTABLE FORCE
