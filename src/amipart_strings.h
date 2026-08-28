@@ -1338,8 +1338,13 @@
 #define MSG_CLI_COPYDISK_DONE        1332
 #define MSG_CLI_COPYDISK_FAILED_FMT  1333
 #define MSG_CLI_COPYDISK_ASK         1334
+#define MSG_CLI_BBSCAN_START_FMT     1335
+#define MSG_CLI_BBSCAN_NO_SIZE       1336
+#define MSG_CLI_BBSCAN_BAD_FMT       1337
+#define MSG_CLI_BBSCAN_DONE_FMT      1338
+#define MSG_CLI_BBSCAN_HEALTHY       1339
 
-#define MSG_COUNT 1335
+#define MSG_COUNT 1340
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2686,5 +2691,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1332 MSG_CLI_COPYDISK_DONE */ "\nDisk copy complete. Reboot before mounting the destination.\n",
     /* 1333 MSG_CLI_COPYDISK_FAILED_FMT */ "\nCOPYDISK FAILED: %s\n",
     /* 1334 MSG_CLI_COPYDISK_ASK */ "Are you sure you want to copy the whole disk?",
+    /* 1335 MSG_CLI_BBSCAN_START_FMT */ "Scanning %lu blocks for read errors (Ctrl+C to cancel)...\n",
+    /* 1336 MSG_CLI_BBSCAN_NO_SIZE */ "ERROR: Cannot determine disk size.\n",
+    /* 1337 MSG_CLI_BBSCAN_BAD_FMT */ "  BAD block %lu (0x%08lX)\n",
+    /* 1338 MSG_CLI_BBSCAN_DONE_FMT */ "\nScanned %lu of %lu blocks: %lu bad block(s).\n",
+    /* 1339 MSG_CLI_BBSCAN_HEALTHY */ "No read errors - disk surface looks healthy.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

@@ -191,6 +191,17 @@ SMART
   Example:  AmiPart DEV uaehf.device:0 SMART
             AmiPart DEV uaehf.device:0 SMART >ram:smart.txt
 
+BADBLOCKS
+  Read every block of the target and report blocks that fail to read.
+  READ-ONLY - never writes anything.  Each bad block is printed as it
+  is found (so a redirected log is useful even if the scan is
+  interrupted), with progress every 5%.  Ctrl+C cancels.  Returns WARN
+  when bad blocks were found, OK when the surface is clean - so a
+  script can test the result.  CLI form of the GUI's Health menu
+  "Bad Block Scan" (writing a BADB chain to the RDB stays GUI-only).
+
+  Example:  AmiPart DEV scsi.device:0 BADBLOCKS >ram:scan.log
+
 BACKUP <file>
   Read the RDSK block and save it as a raw 512-byte backup file.
   Safe — read-only operation.

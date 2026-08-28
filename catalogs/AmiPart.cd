@@ -4119,3 +4119,18 @@ MSG_CLI_COPYDISK_FAILED_FMT
 MSG_CLI_COPYDISK_ASK
 Are you sure you want to copy the whole disk?
 ;
+MSG_CLI_BBSCAN_START_FMT
+Scanning %lu blocks for read errors (Ctrl+C to cancel)...\n
+;
+MSG_CLI_BBSCAN_NO_SIZE
+ERROR: Cannot determine disk size.\n
+;
+MSG_CLI_BBSCAN_BAD_FMT
+  BAD block %lu (0x%08lX)\n
+;
+MSG_CLI_BBSCAN_DONE_FMT
+\nScanned %lu of %lu blocks: %lu bad block(s).\n
+;
+MSG_CLI_BBSCAN_HEALTHY
+No read errors - disk surface looks healthy.\n
+;

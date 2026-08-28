@@ -70,7 +70,7 @@ extern struct DosLibrary *DOSBase;
     "ZEROPART/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
-    "TODEV/K,DELDIR/K,COPYDISK/S"
+    "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S"
 
 enum {
     ARG_LISTDEV = 0,
@@ -129,6 +129,7 @@ enum {
     ARG_TODEV,
     ARG_DELDIR,
     ARG_COPYDISK,
+    ARG_BADBLOCKS,
     ARG_COUNT
 };
 
@@ -3013,6 +3014,61 @@ static LONG cmd_copydisk(const char *devname, ULONG unit,
 }
 
 /* ------------------------------------------------------------------ */
+/* BADBLOCKS - read every block of the disk, reporting read failures. */
+/* Report-only: never writes.  Each bad block is printed as it is     */
+/* found so an overnight scan's log is useful even if interrupted.    */
+/* ------------------------------------------------------------------ */
+
+static LONG cmd_badblock(const char *devname, ULONG unit)
+{
+    struct BlockDev *bd;
+    struct CliProg prog;
+    UBYTE *buf;
+    ULONG  total, blk, bad = 0;
+    BOOL   cancelled = FALSE;
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), devname, unit);
+    cli_puts(outbuf);
+    bd = cli_open_target(devname, unit);
+    if (!bd) return RETURN_ERROR;
+
+    total = (bd->block_size > 0)
+          ? (ULONG)(bd->total_bytes / bd->block_size) : 0;
+    if (total == 0) {
+        cli_puts(GS(MSG_CLI_BBSCAN_NO_SIZE));
+        BlockDev_Close(bd);
+        return RETURN_ERROR;
+    }
+
+    buf = (UBYTE *)AllocVec(bd->block_size, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!buf) { cli_puts(GS(MSG_CLI_OUT_OF_MEMORY)); BlockDev_Close(bd); return RETURN_ERROR; }
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_BBSCAN_START_FMT), (unsigned long)total);
+    cli_puts(outbuf);
+
+    prog.last_pct = 0; prog.last_blocks = 0;
+    for (blk = 0; blk < total; blk++) {
+        if (!cli_prog_cb(&prog, blk, total)) { cancelled = TRUE; break; }
+        if (!BlockDev_ReadBlock(bd, blk, buf)) {
+            bad++;
+            DP_SNPRINTF(outbuf, GS(MSG_CLI_BBSCAN_BAD_FMT),
+                    (unsigned long)blk, (unsigned long)blk);
+            cli_puts(outbuf);
+        }
+    }
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_BBSCAN_DONE_FMT),
+            (unsigned long)blk, (unsigned long)total, (unsigned long)bad);
+    cli_puts(outbuf);
+    if (bad == 0 && !cancelled)
+        cli_puts(GS(MSG_CLI_BBSCAN_HEALTHY));
+
+    FreeVec(buf);
+    BlockDev_Close(bd);
+    return (bad || cancelled) ? RETURN_WARN : RETURN_OK;
+}
+
+/* ------------------------------------------------------------------ */
 /* ADDMBR MBRTYPE=<t> STARTCYL=<cyl> ENDCYL=<cyl|+size> [ACTIVE]     */
 /* ------------------------------------------------------------------ */
 
@@ -3208,7 +3264,7 @@ LONG cli_run(void)
         !args[ARG_ZEROPART] && !args[ARG_ADDMBR] && !args[ARG_DELMBR] &&
         !args[ARG_SHRINKINFO] && !args[ARG_SHRINK] &&
         !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE] &&
-        !args[ARG_COPYDISK]) {
+        !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS]) {
         FreeArgs(rdargs);
         return CLI_NO_ARGS;
     }
@@ -3250,7 +3306,7 @@ LONG cli_run(void)
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
          args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
-         args[ARG_COPYDISK])) {
+         args[ARG_COPYDISK] || args[ARG_BADBLOCKS])) {
 
         char  devname[64];
         ULONG unit;
@@ -3342,6 +3398,9 @@ LONG cli_run(void)
             if (rc == RETURN_OK && args[ARG_COPYDISK])
                 rc = cmd_copydisk(devname, unit,
                                   (const char *)args[ARG_TODEV], force);
+
+            if (rc == RETURN_OK && args[ARG_BADBLOCKS])
+                rc = cmd_badblock(devname, unit);
 
             if (rc == RETURN_OK && args[ARG_DELPART])
                 rc = cmd_delpart(devname, unit, force,
