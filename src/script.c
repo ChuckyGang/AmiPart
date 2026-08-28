@@ -42,6 +42,7 @@
 #include "clib.h"
 #include "locale_support.h"
 #include "rdb.h"
+#include "rdbbe.h"
 #include "mbr.h"
 #include "partmove.h"
 #include "imagecopy.h"
@@ -965,15 +966,15 @@ static LONG do_verifyext(ULONG ln, char **tok, UWORD ntok)
     if (!fh) { sc_err(ln, GS(MSG_SCR_VERIFYEXT_CANT_OPEN)); return RETURN_ERROR; }
 
     if (Read(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ ||
-        hdr[0] != ERDB_MAGIC || hdr[1] != ERDB_VERSION) {
+        BE32R(hdr[0]) != ERDB_MAGIC || BE32R(hdr[1]) != ERDB_VERSION) {
         Close(fh);
         sc_err(ln, GS(MSG_SCR_VERIFYEXT_BAD_MAGIC));
         return RETURN_ERROR;
     }
 
-    block_lo   = hdr[2];
-    block_size = hdr[3];
-    num_blocks = hdr[4];
+    block_lo   = BE32R(hdr[2]);
+    block_size = BE32R(hdr[3]);
+    num_blocks = BE32R(hdr[4]);
 
     if (block_size != s_st.bd->block_size) {
         Close(fh);
@@ -1209,7 +1210,7 @@ static LONG do_backupext(ULONG ln, char **tok, UWORD ntok)
     }
     rdsk = (struct RigidDiskBlock *)buf;
     block_lo  = s_st.rdb.rdb_block_lo;
-    block_hi  = rdsk->rdb_HighRDSKBlock;
+    block_hi  = BE32R(rdsk->rdb_HighRDSKBlock);
     if (block_hi == RDB_END_MARK || block_hi < block_lo) block_hi = block_lo;
     num_blocks = block_hi - block_lo + 1;
 
@@ -1219,9 +1220,9 @@ static LONG do_backupext(ULONG ln, char **tok, UWORD ntok)
         sc_err(ln, GS(MSG_SCR_BACKUPEXT_CANT_CREATE)); return RETURN_ERROR;
     }
 
-    hdr[0] = ERDB_MAGIC;  hdr[1] = ERDB_VERSION;
-    hdr[2] = block_lo;    hdr[3] = s_st.bd->block_size;
-    hdr[4] = num_blocks;  hdr[5] = hdr[6] = hdr[7] = 0;
+    BE32W(hdr[0], ERDB_MAGIC);  BE32W(hdr[1], ERDB_VERSION);
+    BE32W(hdr[2], block_lo);    BE32W(hdr[3], s_st.bd->block_size);
+    BE32W(hdr[4], num_blocks);  hdr[5] = hdr[6] = hdr[7] = 0;
     if (Write(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ) {
         sc_err(ln, GS(MSG_SCR_BACKUPEXT_WRITE_ERR));
         goto backupext_done;
@@ -1279,13 +1280,13 @@ static LONG do_restoreext(ULONG ln, char **tok, UWORD ntok)
 
     if (fsize < ERDB_HDR_SZ ||
         Read(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ ||
-        hdr[0] != ERDB_MAGIC || hdr[1] != ERDB_VERSION) {
+        BE32R(hdr[0]) != ERDB_MAGIC || BE32R(hdr[1]) != ERDB_VERSION) {
         Close(fh);
         sc_err(ln, GS(MSG_SCR_RESTOREEXT_BAD_MAGIC)); return RETURN_ERROR;
     }
-    block_lo   = hdr[2];
-    block_size = hdr[3];
-    num_blocks = hdr[4];
+    block_lo   = BE32R(hdr[2]);
+    block_size = BE32R(hdr[3]);
+    num_blocks = BE32R(hdr[4]);
 
     if (block_size != s_st.bd->block_size) {
         Close(fh);

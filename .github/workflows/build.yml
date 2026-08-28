@@ -71,8 +71,51 @@ jobs:
             out/AmiPart.adf
           if-no-files-found: error
 
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build native Linux CLI
+        run: make linux
+
+      - name: Smoke test (image round-trip)
+        run: |
+          cd host
+          dd if=/dev/zero of=ci.hdf bs=1M count=8 status=none
+          cat > ci.script <<'EOF'
+          OPEN FILE ci.hdf
+          INIT NEW
+          ADDPART NAME=DH0 LOW=2 HIGH=8 TYPE=DOS3 BOOTABLE
+          ADDPART NAME=DH1 LOW=9 HIGH=15 TYPE=PDS3
+          WRITE
+          BACKUPEXT FILE=ci.erdb
+          VERIFYEXT FILE=ci.erdb
+          CLOSE
+          EOF
+          ./amipart SCRIPT ci.script FORCE
+          ./amipart IMAGE=ci.hdf INFO
+          ./amipart IMAGE=ci.hdf CHECK
+
+      - name: Endian regression harness
+        run: |
+          ./test/host/build.sh
+          cd host
+          dd if=/dev/zero of=rt.hdf bs=1M count=8 status=none
+          ../test/host/hostrdb ci.hdf rt.hdf
+          cmp ci.hdf rt.hdf && echo "round-trip byte-identical"
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: amipart-linux-x86_64
+          path: host/amipart
+          if-no-files-found: error
+
   release:
-    needs: build
+    needs: [build, build-linux]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -87,6 +130,12 @@ jobs:
         with:
           name: AmiPart
           path: out
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: amipart-linux-x86_64
+          path: linux-out
 
       - name: Set release date
         id: date
@@ -120,4 +169,5 @@ jobs:
             --notes "Automated prototype build from commit \`${{ github.sha }}\`." \
             --prerelease \
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
-            "out/AmiPart.adf#AmiPart-autoboot.adf"
+            "out/AmiPart.adf#AmiPart-autoboot.adf" \
+            "linux-out/amipart#amipart-linux-x86_64"

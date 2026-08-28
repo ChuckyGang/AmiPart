@@ -23,6 +23,7 @@
 #include "clib.h"
 #include "devices.h"
 #include "rdb.h"
+#include "rdbbe.h"
 #include "mbr.h"
 #include "partmove.h"
 #include "imagecopy.h"
@@ -1067,7 +1068,7 @@ static LONG cmd_backupext(const char *devname, ULONG unit, const char *path)
     }
     rdsk = (struct RigidDiskBlock *)buf;
     block_lo  = s_rdb.rdb_block_lo;
-    block_hi  = rdsk->rdb_HighRDSKBlock;
+    block_hi  = BE32R(rdsk->rdb_HighRDSKBlock);
     if (block_hi == RDB_END_MARK || block_hi < block_lo) block_hi = block_lo;
     num_blocks = block_hi - block_lo + 1;
 
@@ -1078,9 +1079,9 @@ static LONG cmd_backupext(const char *devname, ULONG unit, const char *path)
     fh = Open((STRPTR)path, MODE_NEWFILE);
     if (!fh) { cli_puts(GS(MSG_CLI_CANNOT_CREATE_FILE)); goto backupext_done; }
 
-    hdr[0]=ERDB_MAGIC; hdr[1]=ERDB_VERSION;
-    hdr[2]=block_lo;   hdr[3]=bd->block_size;
-    hdr[4]=num_blocks; hdr[5]=hdr[6]=hdr[7]=0;
+    BE32W(hdr[0], ERDB_MAGIC); BE32W(hdr[1], ERDB_VERSION);
+    BE32W(hdr[2], block_lo);   BE32W(hdr[3], bd->block_size);
+    BE32W(hdr[4], num_blocks); hdr[5]=hdr[6]=hdr[7]=0;
     if (Write(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ) {
         cli_puts(GS(MSG_CLI_WRITE_ERROR_HEADER)); Close(fh); goto backupext_done;
     }
@@ -1144,13 +1145,13 @@ static LONG cmd_restoreext(const char *devname, ULONG unit,
 
     if (fsize < ERDB_HDR_SZ ||
         Read(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ ||
-        hdr[0] != ERDB_MAGIC || hdr[1] != ERDB_VERSION) {
+        BE32R(hdr[0]) != ERDB_MAGIC || BE32R(hdr[1]) != ERDB_VERSION) {
         cli_puts(GS(MSG_CLI_NOT_VALID_EXT_BACKUP));
         goto restoreext_done;
     }
-    block_lo   = hdr[2];
-    block_size = hdr[3];
-    num_blocks = hdr[4];
+    block_lo   = BE32R(hdr[2]);
+    block_size = BE32R(hdr[3]);
+    num_blocks = BE32R(hdr[4]);
 
     if (block_size != bd->block_size) {
         cli_puts(GS(MSG_CLI_BLOCKSIZE_MISMATCH_ABORT)); goto restoreext_done;
@@ -2370,15 +2371,15 @@ static LONG cmd_verifyext(const char *devname, ULONG unit, const char *path)
     }
 
     if (Read(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ ||
-        hdr[0] != ERDB_MAGIC || hdr[1] != ERDB_VERSION) {
+        BE32R(hdr[0]) != ERDB_MAGIC || BE32R(hdr[1]) != ERDB_VERSION) {
         Close(fh); BlockDev_Close(bd);
         cli_puts(GS(MSG_CLI_NOT_VALID_ERDB));
         return RETURN_ERROR;
     }
 
-    block_lo   = hdr[2];
-    block_size = hdr[3];
-    num_blocks = hdr[4];
+    block_lo   = BE32R(hdr[2]);
+    block_size = BE32R(hdr[3]);
+    num_blocks = BE32R(hdr[4]);
 
     if (block_size != bd->block_size) {
         DP_SNPRINTF(outbuf, GS(MSG_CLI_BLOCKSIZE_MISMATCH_DETAIL),

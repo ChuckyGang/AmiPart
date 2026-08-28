@@ -6,7 +6,26 @@ A native AmigaOS 2.x hard disk partition editor with full RDB (Rigid Disk Block)
 
 ## Download
 
-**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable and an autoboot ADF. Click **Assets** on that page to see the downloadable files.
+**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable, an autoboot ADF, and a native Linux CLI binary. Click **Assets** on that page to see the downloadable files.
+
+## Linux CLI
+
+AmiPart also builds as a **native Linux command-line tool** from the same
+source — the full CLI and script engine, operating on disk image files
+(`.hdf`), with backups made on the Amiga verifiable on Linux and vice
+versa:
+
+```
+make linux                          # builds host/amipart (plain gcc, no deps)
+./host/amipart IMAGE=disk.hdf INFO
+./host/amipart SCRIPT prep.script FORCE
+./host/amipart ?
+```
+
+Same commands and syntax as the Amiga version (see `cmdline.txt`).
+Image files only for now — no raw `/dev` access yet — and quick-format
+stays Amiga-only since it needs the real filesystem handlers.  See
+`host/README.txt` for details.
 
 ---
 
