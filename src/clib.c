@@ -123,6 +123,13 @@ static int do_fmt(char *buf, size_t size, const char *fmt, va_list ap)
         int width = 0;
         while (*f >= '0' && *f <= '9') { width = width * 10 + (*f - '0'); f++; }
 
+        /* Precision: only %.Ns (string truncation) is supported. */
+        int prec = -1;
+        if (*f == '.') {
+            f++; prec = 0;
+            while (*f >= '0' && *f <= '9') { prec = prec * 10 + (*f - '0'); f++; }
+        }
+
         int is_long = 0;
         if (*f == 'l') { is_long = 1; f++; }
 
@@ -135,9 +142,10 @@ static int do_fmt(char *buf, size_t size, const char *fmt, va_list ap)
             const char *sv = va_arg(ap, const char *);
             int slen, i;
             if (!sv) sv = "(null)";
-            slen = 0; { const char *p = sv; while (*p++) slen++; }
+            slen = 0; { const char *p = sv;
+                        while (*p++ && (prec < 0 || slen < prec)) slen++; }
             if (!left) for (i = slen; i < width; i++) PUT(' ');
-            while (*sv) PUT(*sv++);
+            for (i = 0; i < slen; i++) PUT(sv[i]);
             if ( left) for (i = slen; i < width; i++) PUT(' ');
             continue;
         }
@@ -145,18 +153,21 @@ static int do_fmt(char *buf, size_t size, const char *fmt, va_list ap)
         char tmp[32];
         int len = 0, neg = 0;
 
+        /* Read %l arguments as 32-bit LONG/ULONG, not host long: on the
+           Amiga they are the same type, but on a 64-bit host build a
+           `long` va_arg would read 8 bytes for a 32-bit value. */
         if (spec == 'd') {
-            long sv = is_long ? va_arg(ap, long) : (long)va_arg(ap, int);
+            int sv = is_long ? (int)va_arg(ap, int) : va_arg(ap, int);
             if (sv < 0) { neg = 1; sv = -sv; }
-            len = fmt_ulong(tmp, (unsigned long)sv, 10, 0);
+            len = fmt_ulong(tmp, (unsigned long)(unsigned int)sv, 10, 0);
         } else if (spec == 'u') {
-            unsigned long uv = is_long ? va_arg(ap, unsigned long) : (unsigned long)va_arg(ap, unsigned int);
+            unsigned int uv = va_arg(ap, unsigned int);
             len = fmt_ulong(tmp, uv, 10, 0);
         } else if (spec == 'x') {
-            unsigned long uv = is_long ? va_arg(ap, unsigned long) : (unsigned long)va_arg(ap, unsigned int);
+            unsigned int uv = va_arg(ap, unsigned int);
             len = fmt_ulong(tmp, uv, 16, 0);
         } else if (spec == 'X') {
-            unsigned long uv = is_long ? va_arg(ap, unsigned long) : (unsigned long)va_arg(ap, unsigned int);
+            unsigned int uv = va_arg(ap, unsigned int);
             len = fmt_ulong(tmp, uv, 16, 1);
         } else {
             PUT('%'); PUT(spec); continue;

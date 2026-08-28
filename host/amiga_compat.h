@@ -22,6 +22,11 @@ typedef const char    *CONST_STRPTR;
 typedef long           BPTR;     /* host: holds a FILE* cast to long */
 typedef unsigned long long UQUAD;
 
+/* Pointer-width signed int for ReadArgs slots (see src/clib.h). */
+#include <stdint.h>
+#define DP_SIPTR_DEFINED
+typedef intptr_t SIPTR;
+
 #ifndef TRUE
 #define TRUE  1
 #endif
@@ -217,3 +222,48 @@ struct IORequest *CreateIORequest(struct MsgPort *p, ULONG size);
 void  DeleteIORequest(APTR io);
 
 #endif /* AMIGA_COMPAT_H */
+
+#ifndef AMIGA_COMPAT_PROBE_H
+#define AMIGA_COMPAT_PROBE_H
+/* ---- probe additions: dos return codes / signals ---- */
+#ifndef RETURN_OK
+#define RETURN_OK    0
+#define RETURN_WARN  5
+#define RETURN_ERROR 10
+#define RETURN_FAIL  20
+#endif
+#ifndef DOSTRUE
+#define DOSTRUE  (-1L)
+#define DOSFALSE (0L)
+#endif
+#ifndef SIGBREAKF_CTRL_C
+#define SIGBREAKF_CTRL_C (1L<<12)
+#endif
+
+/* ---- probe additions round 2 ---- */
+struct DateStamp { LONG ds_Days, ds_Minute, ds_Tick; };
+struct FileInfoBlock {
+    LONG  fib_DiskKey;
+    LONG  fib_DirEntryType;
+    char  fib_FileName[108];
+    LONG  fib_Protection;
+    LONG  fib_EntryType;
+    LONG  fib_Size;
+    LONG  fib_NumBlocks;
+    struct DateStamp fib_Date;
+    char  fib_Comment[80];
+    UWORD fib_OwnerUID, fib_OwnerGID;
+    char  fib_Reserved[32];
+};
+#define ST_ROOT      1
+#define ST_USERDIR   2
+#define ST_FILE      (-3)
+BOOL Examine(BPTR lock, struct FileInfoBlock *fib);
+BPTR Lock(CONST_STRPTR name, LONG mode);
+void UnLock(BPTR lock);
+#ifndef ACCESS_READ
+#define ACCESS_READ  (-2)
+#define ACCESS_WRITE (-1)
+#endif
+
+#endif /* AMIGA_COMPAT_PROBE_H */

@@ -3,3 +3,5 @@ out/
 test/*.hdf
 review.txt
 test/host/hostrdb
+host/amipart
+test/host/hostrdb

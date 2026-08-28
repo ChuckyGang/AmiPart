@@ -10,6 +10,16 @@
 #ifndef CLIB_H
 #define CLIB_H
 
+/* Pointer-sized signed integer for ReadArgs result slots.  On the Amiga
+   pointers are 32-bit and this is plain LONG (zero change); on a 64-bit
+   host build the compat layer defines DP_SIPTR_DEFINED and provides a
+   pointer-width type instead, so string pointers stored in the args
+   array are not truncated. */
+#ifndef DP_SIPTR_DEFINED
+#define DP_SIPTR_DEFINED
+typedef signed long SIPTR;   /* m68k: 32-bit, same as LONG */
+#endif
+
 #include <stddef.h>   /* size_t */
 
 extern size_t strlen(const char *s);

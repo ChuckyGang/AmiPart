@@ -214,7 +214,7 @@ static BOOL valid_block_size(ULONG n)
 /* printed an error message in that case).                            */
 /* ------------------------------------------------------------------ */
 
-static BOOL resolve_target(LONG *args, char *devname, ULONG *unit)
+static BOOL resolve_target(SIPTR *args, char *devname, ULONG *unit)
 {
     if (args[ARG_IMAGE]) {
         const char *path = (const char *)args[ARG_IMAGE];
@@ -270,7 +270,7 @@ static struct BlockDev *cli_open_target(const char *devname, ULONG unit)
 /* Returns RETURN_OK (created or no-op), or RETURN_ERROR.             */
 /* ------------------------------------------------------------------ */
 
-static LONG maybe_create_image(LONG *args)
+static LONG maybe_create_image(SIPTR *args)
 {
     const char     *path;
     UQUAD           size_bytes;
@@ -3237,7 +3237,7 @@ static LONG cmd_delmbr(const char *devname, ULONG unit, const char *name)
 
 LONG cli_run(void)
 {
-    LONG args[ARG_COUNT];
+    SIPTR args[ARG_COUNT];
     struct RDArgs *rdargs;
     LONG rc = RETURN_OK;
 
