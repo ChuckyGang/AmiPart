@@ -1296,8 +1296,37 @@
 #define MSG_QF_PFS3_NOT_SUPPORTED    1290
 #define MSG_DLG_DELDIR               1291
 #define MSG_SCR_DELDIR_NEEDS_VOLNAME 1292
+#define MSG_SCR_BACKUP_NEED_FILE     1293
+#define MSG_SCR_BACKUP_DISK_ERR      1294
+#define MSG_SCR_BACKUP_CANT_CREATE   1295
+#define MSG_SCR_BACKUP_WRITE_ERR     1296
+#define MSG_SCR_BACKUP_OK_FMT        1297
+#define MSG_SCR_RESTORE_NEED_FILE    1298
+#define MSG_SCR_RESTORE_CANT_OPEN    1299
+#define MSG_SCR_RESTORE_SIZE_FMT     1300
+#define MSG_SCR_RESTORE_READ_ERR     1301
+#define MSG_SCR_RESTORE_WRITE_ERR    1302
+#define MSG_SCR_RESTORE_OK           1303
+#define MSG_SCR_BACKUPEXT_NEED_FILE  1304
+#define MSG_SCR_BACKUPEXT_RDSK_ERR   1305
+#define MSG_SCR_BACKUPEXT_CANT_CREATE 1306
+#define MSG_SCR_BACKUPEXT_WRITE_ERR  1307
+#define MSG_SCR_BACKUPEXT_OK_FMT     1308
+#define MSG_SCR_RESTOREEXT_NEED_FILE 1309
+#define MSG_SCR_RESTOREEXT_CANT_OPEN 1310
+#define MSG_SCR_RESTOREEXT_BAD_MAGIC 1311
+#define MSG_SCR_RESTOREEXT_BSIZE_FMT 1312
+#define MSG_SCR_RESTOREEXT_BAD_COUNT 1313
+#define MSG_SCR_RESTOREEXT_SIZE_MISMATCH 1314
+#define MSG_SCR_RESTOREEXT_FILE_RERR_FMT 1315
+#define MSG_SCR_RESTOREEXT_WRITE_ERR_FMT 1316
+#define MSG_SCR_RESTOREEXT_OK_FMT    1317
+#define MSG_SCR_BACKUP_DRYRUN_FMT    1318
+#define MSG_SCR_BACKUPEXT_DRYRUN_FMT 1319
+#define MSG_SCR_RESTORE_DRYRUN       1320
+#define MSG_SCR_RESTOREEXT_DRYRUN_FMT 1321
 
-#define MSG_COUNT 1293
+#define MSG_COUNT 1322
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2602,5 +2631,34 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1290 MSG_QF_PFS3_NOT_SUPPORTED */ "PFS3: handler too old for setfnsize/setdeldir - defaults kept",
     /* 1291 MSG_DLG_DELDIR */ "PFS3 deldir (undelete)",
     /* 1292 MSG_SCR_DELDIR_NEEDS_VOLNAME */ "DELDIR has no effect without VOLNAME (partition is not formatted)",
+    /* 1293 MSG_SCR_BACKUP_NEED_FILE */ "BACKUP: FILE=<path> required.",
+    /* 1294 MSG_SCR_BACKUP_DISK_ERR */ "BACKUP: Cannot read RDB block from disk.",
+    /* 1295 MSG_SCR_BACKUP_CANT_CREATE */ "BACKUP: Cannot create output file.",
+    /* 1296 MSG_SCR_BACKUP_WRITE_ERR */ "BACKUP: File write error.",
+    /* 1297 MSG_SCR_BACKUP_OK_FMT */ "BACKUP: RDB block %lu saved.\n",
+    /* 1298 MSG_SCR_RESTORE_NEED_FILE */ "RESTORE: FILE=<path> required.",
+    /* 1299 MSG_SCR_RESTORE_CANT_OPEN */ "RESTORE: Cannot open backup file.",
+    /* 1300 MSG_SCR_RESTORE_SIZE_FMT */ "RESTORE: File size (%ld) != block size (%lu).",
+    /* 1301 MSG_SCR_RESTORE_READ_ERR */ "RESTORE: File read error.",
+    /* 1302 MSG_SCR_RESTORE_WRITE_ERR */ "RESTORE: Write to block 0 FAILED.",
+    /* 1303 MSG_SCR_RESTORE_OK */ "RESTORE: Block 0 written. Reboot required for the OS to see it.\n",
+    /* 1304 MSG_SCR_BACKUPEXT_NEED_FILE */ "BACKUPEXT: FILE=<path> required.",
+    /* 1305 MSG_SCR_BACKUPEXT_RDSK_ERR */ "BACKUPEXT: Cannot read RDSK block from disk.",
+    /* 1306 MSG_SCR_BACKUPEXT_CANT_CREATE */ "BACKUPEXT: Cannot create output file.",
+    /* 1307 MSG_SCR_BACKUPEXT_WRITE_ERR */ "BACKUPEXT: File write error.",
+    /* 1308 MSG_SCR_BACKUPEXT_OK_FMT */ "BACKUPEXT: %lu blocks (%lu-%lu) saved.\n",
+    /* 1309 MSG_SCR_RESTOREEXT_NEED_FILE */ "RESTOREEXT: FILE=<path> required.",
+    /* 1310 MSG_SCR_RESTOREEXT_CANT_OPEN */ "RESTOREEXT: Cannot open backup file.",
+    /* 1311 MSG_SCR_RESTOREEXT_BAD_MAGIC */ "RESTOREEXT: Not a valid ERDB backup (bad magic/version).",
+    /* 1312 MSG_SCR_RESTOREEXT_BSIZE_FMT */ "RESTOREEXT: Block size mismatch: backup=%lu, device=%lu.",
+    /* 1313 MSG_SCR_RESTOREEXT_BAD_COUNT */ "RESTOREEXT: Unreasonable block count in header.",
+    /* 1314 MSG_SCR_RESTOREEXT_SIZE_MISMATCH */ "RESTOREEXT: File size mismatch - backup may be corrupt.",
+    /* 1315 MSG_SCR_RESTOREEXT_FILE_RERR_FMT */ "RESTOREEXT: File read error at block %lu.",
+    /* 1316 MSG_SCR_RESTOREEXT_WRITE_ERR_FMT */ "RESTOREEXT: Write FAILED at block %lu.",
+    /* 1317 MSG_SCR_RESTOREEXT_OK_FMT */ "RESTOREEXT: %lu blocks restored. Reboot required.\n",
+    /* 1318 MSG_SCR_BACKUP_DRYRUN_FMT */ "DRYRUN: would save RDB block to %s.\n",
+    /* 1319 MSG_SCR_BACKUPEXT_DRYRUN_FMT */ "DRYRUN: would save extended RDB backup to %s.\n",
+    /* 1320 MSG_SCR_RESTORE_DRYRUN */ "DRYRUN: would write backup to block 0.\n",
+    /* 1321 MSG_SCR_RESTOREEXT_DRYRUN_FMT */ "DRYRUN: would restore %lu blocks starting at block %lu.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

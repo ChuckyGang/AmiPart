@@ -442,6 +442,33 @@ ADDFS TYPE=<dostype> [VERSION=<hex>] [FILE=<path>] [STACKSIZE=<n>]
   VERSION is a 32-bit hex version word (e.g. 0x00130000 for v19.0).
   Requires WRITE to commit to disk.
 
+BACKUP FILE=<path>
+  Save the RDSK block (one block) of the open device to a file.
+  Read-only on disk.  In DRYRUN mode, prints the target and writes nothing.
+
+BACKUPEXT FILE=<path>
+  Save the complete RDB area (RDSK + partition/filesystem/LSEG blocks)
+  to a file in ERDB format.  Read-only on disk.  Pair with VERIFYEXT to
+  check a backup later.  In DRYRUN mode, writes nothing.
+
+    OPEN scsi.device 0
+    BACKUPEXT FILE=ram:disk0.erdb    ; snapshot before changing anything
+    ...
+    VERIFYEXT FILE=ram:disk0.erdb    ; confirm what's on disk
+
+RESTORE FILE=<path>
+  Write a single-block BACKUP file to block 0 of the open device.
+  The file size must equal the device block size.  The in-memory RDB is
+  re-read from disk afterwards; a reboot is required before the OS sees
+  the restored layout.  In DRYRUN mode, validates the file and writes
+  nothing.
+
+RESTOREEXT FILE=<path>
+  Restore a full ERDB backup (all RDB blocks) to the open device.  The
+  backup's block size must match the device and the file must pass the
+  built-in corruption checks.  The in-memory RDB is re-read afterwards;
+  reboot required.  In DRYRUN mode, validates the file and writes nothing.
+
 GROW <drive> <size[KMG]|END> [NOUNMOUNT]
   Extend an existing partition and grow its filesystem to match, in one
   step.  Works on FFS/OFS, SFS and PFS3/PFS2 partitions.

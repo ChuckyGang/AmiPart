@@ -19,6 +19,10 @@
  *   CHECKRDB
  *   VERIFYRDB FILE=<path>
  *   VERIFYEXT FILE=<path>
+ *   BACKUP FILE=<path>          ; save the RDSK block to a file
+ *   RESTORE FILE=<path>         ; write a single-block backup to block 0
+ *   BACKUPEXT FILE=<path>       ; save all RDB blocks (ERDB format)
+ *   RESTOREEXT FILE=<path>      ; restore all RDB blocks from an ERDB file
  *   ADDFS TYPE=<t> [VERSION=<hex>] [FILE=<path>] [STACKSIZE=<n>]
  *   WRITE
  *   INFO
@@ -1033,6 +1037,313 @@ static LONG do_verifyext(ULONG ln, char **tok, UWORD ntok)
                 (unsigned long)bad_blocks, (unsigned long)num_blocks);
         sc_puts(s_msg); return RETURN_WARN;
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* BACKUP - save the single RDSK block to a file                      */
+/*   BACKUP FILE=<path>                                               */
+/* ------------------------------------------------------------------ */
+
+static LONG do_backup(ULONG ln, char **tok, UWORD ntok)
+{
+    const char *path;
+    UBYTE *buf;
+    BPTR   fh;
+    LONG   rc = RETURN_ERROR;
+
+    if (!s_st.bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+    if (!s_st.rdb_ready || !s_st.rdb.valid)
+        { sc_err(ln, GS(MSG_SCR_NO_RDB_OPEN)); return RETURN_ERROR; }
+
+    path = kwarg(tok, ntok, "FILE");
+    if (!path || !path[0])
+        { sc_err(ln, GS(MSG_SCR_BACKUP_NEED_FILE)); return RETURN_ERROR; }
+
+    if (s_st.dryrun) {
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_BACKUP_DRYRUN_FMT), path);
+        sc_puts(s_msg);
+        return RETURN_OK;
+    }
+
+    buf = (UBYTE *)AllocVec(s_st.bd->block_size, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!buf) return RETURN_ERROR;
+
+    if (!BlockDev_ReadBlock(s_st.bd, s_st.rdb.block_num, buf)) {
+        FreeVec(buf);
+        sc_err(ln, GS(MSG_SCR_BACKUP_DISK_ERR)); return RETURN_ERROR;
+    }
+
+    fh = Open((UBYTE *)path, MODE_NEWFILE);
+    if (!fh) {
+        FreeVec(buf);
+        sc_err(ln, GS(MSG_SCR_BACKUP_CANT_CREATE)); return RETURN_ERROR;
+    }
+    if (Write(fh, buf, (LONG)s_st.bd->block_size) != (LONG)s_st.bd->block_size) {
+        sc_err(ln, GS(MSG_SCR_BACKUP_WRITE_ERR));
+    } else {
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_BACKUP_OK_FMT),
+                (unsigned long)s_st.rdb.block_num);
+        sc_puts(s_msg);
+        rc = RETURN_OK;
+    }
+    Close(fh);
+    FreeVec(buf);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* After a restore the on-disk RDB is authoritative: drop the         */
+/* in-memory copy (including any unwritten edits) and re-read it.     */
+/* ------------------------------------------------------------------ */
+
+static void restore_reload_rdb(void)
+{
+    RDB_FreeCode(&s_st.rdb);
+    memset(&s_st.rdb, 0, sizeof(s_st.rdb));
+    if (!(RDB_Read(s_st.bd, &s_st.rdb) && s_st.rdb.valid))
+        s_st.rdb.valid = FALSE;
+    s_st.rdb_ready = TRUE;
+    s_st.dirty     = FALSE;
+    memset(&s_st.s_mbr, 0, sizeof(s_st.s_mbr));
+    MBR_Read(s_st.bd, &s_st.s_mbr);
+}
+
+/* ------------------------------------------------------------------ */
+/* RESTORE - write a single-block backup to block 0                   */
+/*   RESTORE FILE=<path>                                              */
+/* ------------------------------------------------------------------ */
+
+static LONG do_restore(ULONG ln, char **tok, UWORD ntok)
+{
+    const char *path;
+    UBYTE *buf;
+    BPTR   fh;
+    LONG   fsize;
+    LONG   rc = RETURN_ERROR;
+
+    if (!s_st.bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+
+    path = kwarg(tok, ntok, "FILE");
+    if (!path || !path[0])
+        { sc_err(ln, GS(MSG_SCR_RESTORE_NEED_FILE)); return RETURN_ERROR; }
+
+    fh = Open((UBYTE *)path, MODE_OLDFILE);
+    if (!fh) { sc_err(ln, GS(MSG_SCR_RESTORE_CANT_OPEN)); return RETURN_ERROR; }
+    Seek(fh, 0, OFFSET_END);
+    fsize = Seek(fh, 0, OFFSET_BEGINNING);
+    if (fsize != (LONG)s_st.bd->block_size) {
+        Close(fh);
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTORE_SIZE_FMT),
+                (long)fsize, (unsigned long)s_st.bd->block_size);
+        sc_err(ln, s_msg); return RETURN_ERROR;
+    }
+
+    buf = (UBYTE *)AllocVec(s_st.bd->block_size, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!buf) { Close(fh); return RETURN_ERROR; }
+
+    if (Read(fh, buf, fsize) != fsize) {
+        Close(fh); FreeVec(buf);
+        sc_err(ln, GS(MSG_SCR_RESTORE_READ_ERR)); return RETURN_ERROR;
+    }
+    Close(fh);
+
+    if (s_st.dryrun) {
+        FreeVec(buf);
+        sc_puts(GS(MSG_SCR_RESTORE_DRYRUN));
+        return RETURN_OK;
+    }
+
+    if (s_st.dirty)
+        sc_warn(ln, GS(MSG_SCR_PREV_UNSAVED));
+
+    if (!BlockDev_WriteBlock(s_st.bd, 0, buf)) {
+        sc_err(ln, GS(MSG_SCR_RESTORE_WRITE_ERR));
+    } else {
+        sc_puts(GS(MSG_SCR_RESTORE_OK));
+        restore_reload_rdb();
+        rc = RETURN_OK;
+    }
+    FreeVec(buf);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* BACKUPEXT - save all RDB blocks (ERDB format)                      */
+/*   BACKUPEXT FILE=<path>                                            */
+/* ------------------------------------------------------------------ */
+
+static LONG do_backupext(ULONG ln, char **tok, UWORD ntok)
+{
+    const char *path;
+    struct RigidDiskBlock *rdsk;
+    UBYTE *buf;
+    ULONG  hdr[8];
+    ULONG  block_lo, block_hi, num_blocks, blk;
+    BPTR   fh;
+    LONG   rc = RETURN_ERROR;
+
+    if (!s_st.bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+    if (!s_st.rdb_ready || !s_st.rdb.valid)
+        { sc_err(ln, GS(MSG_SCR_NO_RDB_OPEN)); return RETURN_ERROR; }
+
+    path = kwarg(tok, ntok, "FILE");
+    if (!path || !path[0])
+        { sc_err(ln, GS(MSG_SCR_BACKUPEXT_NEED_FILE)); return RETURN_ERROR; }
+
+    if (s_st.dryrun) {
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_BACKUPEXT_DRYRUN_FMT), path);
+        sc_puts(s_msg);
+        return RETURN_OK;
+    }
+
+    buf = (UBYTE *)AllocVec(s_st.bd->block_size, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!buf) return RETURN_ERROR;
+
+    if (!BlockDev_ReadBlock(s_st.bd, s_st.rdb.block_num, buf)) {
+        FreeVec(buf);
+        sc_err(ln, GS(MSG_SCR_BACKUPEXT_RDSK_ERR)); return RETURN_ERROR;
+    }
+    rdsk = (struct RigidDiskBlock *)buf;
+    block_lo  = s_st.rdb.rdb_block_lo;
+    block_hi  = rdsk->rdb_HighRDSKBlock;
+    if (block_hi == RDB_END_MARK || block_hi < block_lo) block_hi = block_lo;
+    num_blocks = block_hi - block_lo + 1;
+
+    fh = Open((UBYTE *)path, MODE_NEWFILE);
+    if (!fh) {
+        FreeVec(buf);
+        sc_err(ln, GS(MSG_SCR_BACKUPEXT_CANT_CREATE)); return RETURN_ERROR;
+    }
+
+    hdr[0] = ERDB_MAGIC;  hdr[1] = ERDB_VERSION;
+    hdr[2] = block_lo;    hdr[3] = s_st.bd->block_size;
+    hdr[4] = num_blocks;  hdr[5] = hdr[6] = hdr[7] = 0;
+    if (Write(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ) {
+        sc_err(ln, GS(MSG_SCR_BACKUPEXT_WRITE_ERR));
+        goto backupext_done;
+    }
+
+    for (blk = block_lo; blk <= block_hi; blk++) {
+        ULONG k;
+        if (!BlockDev_ReadBlock(s_st.bd, blk, buf))
+            for (k = 0; k < s_st.bd->block_size; k++) buf[k] = 0;
+        if (Write(fh, buf, (LONG)s_st.bd->block_size) !=
+            (LONG)s_st.bd->block_size) {
+            sc_err(ln, GS(MSG_SCR_BACKUPEXT_WRITE_ERR));
+            goto backupext_done;
+        }
+    }
+
+    DP_SNPRINTF(s_msg, GS(MSG_SCR_BACKUPEXT_OK_FMT),
+            (unsigned long)num_blocks,
+            (unsigned long)block_lo, (unsigned long)block_hi);
+    sc_puts(s_msg);
+    rc = RETURN_OK;
+
+backupext_done:
+    Close(fh);
+    FreeVec(buf);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* RESTOREEXT - restore all RDB blocks from an ERDB file              */
+/*   RESTOREEXT FILE=<path>                                           */
+/* ------------------------------------------------------------------ */
+
+static LONG do_restoreext(ULONG ln, char **tok, UWORD ntok)
+{
+    const char *path;
+    UBYTE *buf;
+    ULONG  hdr[8];
+    ULONG  block_lo, block_size, num_blocks, blk;
+    BPTR   fh;
+    LONG   fsize;
+    LONG   rc = RETURN_ERROR;
+
+    if (!s_st.bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+
+    path = kwarg(tok, ntok, "FILE");
+    if (!path || !path[0])
+        { sc_err(ln, GS(MSG_SCR_RESTOREEXT_NEED_FILE)); return RETURN_ERROR; }
+
+    fh = Open((UBYTE *)path, MODE_OLDFILE);
+    if (!fh) { sc_err(ln, GS(MSG_SCR_RESTOREEXT_CANT_OPEN)); return RETURN_ERROR; }
+    Seek(fh, 0, OFFSET_END);
+    fsize = Seek(fh, 0, OFFSET_BEGINNING);
+
+    if (fsize < ERDB_HDR_SZ ||
+        Read(fh, hdr, ERDB_HDR_SZ) != ERDB_HDR_SZ ||
+        hdr[0] != ERDB_MAGIC || hdr[1] != ERDB_VERSION) {
+        Close(fh);
+        sc_err(ln, GS(MSG_SCR_RESTOREEXT_BAD_MAGIC)); return RETURN_ERROR;
+    }
+    block_lo   = hdr[2];
+    block_size = hdr[3];
+    num_blocks = hdr[4];
+
+    if (block_size != s_st.bd->block_size) {
+        Close(fh);
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTOREEXT_BSIZE_FMT),
+                (unsigned long)block_size,
+                (unsigned long)s_st.bd->block_size);
+        sc_err(ln, s_msg); return RETURN_ERROR;
+    }
+    /* Cap before the size check: num_blocks * block_size is a 32-bit
+       product and a crafted huge count could wrap to match a small
+       fsize, bypassing the corruption check (same cap as VERIFYEXT). */
+    if (num_blocks == 0 || num_blocks > 1024) {
+        Close(fh);
+        sc_err(ln, GS(MSG_SCR_RESTOREEXT_BAD_COUNT)); return RETURN_ERROR;
+    }
+    if (fsize != (LONG)(ERDB_HDR_SZ + num_blocks * block_size)) {
+        Close(fh);
+        sc_err(ln, GS(MSG_SCR_RESTOREEXT_SIZE_MISMATCH)); return RETURN_ERROR;
+    }
+
+    if (s_st.dryrun) {
+        Close(fh);
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTOREEXT_DRYRUN_FMT),
+                (unsigned long)num_blocks, (unsigned long)block_lo);
+        sc_puts(s_msg);
+        return RETURN_OK;
+    }
+
+    buf = (UBYTE *)AllocVec(block_size, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!buf) { Close(fh); return RETURN_ERROR; }
+
+    if (s_st.dirty)
+        sc_warn(ln, GS(MSG_SCR_PREV_UNSAVED));
+
+    for (blk = 0; blk < num_blocks; blk++) {
+        if (Read(fh, buf, (LONG)block_size) != (LONG)block_size) {
+            DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTOREEXT_FILE_RERR_FMT),
+                    (unsigned long)(block_lo + blk));
+            sc_err(ln, s_msg);
+            goto restoreext_done;
+        }
+        if (!BlockDev_WriteBlock(s_st.bd, block_lo + blk, buf)) {
+            DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTOREEXT_WRITE_ERR_FMT),
+                    (unsigned long)(block_lo + blk));
+            sc_err(ln, s_msg);
+            goto restoreext_done;
+        }
+    }
+
+    DP_SNPRINTF(s_msg, GS(MSG_SCR_RESTOREEXT_OK_FMT),
+            (unsigned long)num_blocks);
+    sc_puts(s_msg);
+    restore_reload_rdb();
+    rc = RETURN_OK;
+
+restoreext_done:
+    Close(fh);
+    FreeVec(buf);
+    return rc;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2380,6 +2691,10 @@ static LONG run_line(char *line, ULONG ln)
     if (ci_eq(tok[0], "CHECKRDB")) return do_checkrdb(ln);
     if (ci_eq(tok[0], "VERIFYRDB")) return do_verifyrdb(ln, tok, ntok);
     if (ci_eq(tok[0], "VERIFYEXT")) return do_verifyext(ln, tok, ntok);
+    if (ci_eq(tok[0], "BACKUP"))   return do_backup(ln, tok, ntok);
+    if (ci_eq(tok[0], "RESTORE"))  return do_restore(ln, tok, ntok);
+    if (ci_eq(tok[0], "BACKUPEXT")) return do_backupext(ln, tok, ntok);
+    if (ci_eq(tok[0], "RESTOREEXT")) return do_restoreext(ln, tok, ntok);
     if (ci_eq(tok[0], "ADDFS"))    return do_addfs(ln, tok, ntok);
     if (ci_eq(tok[0], "GROW"))     return do_grow(ln, tok, ntok);
     if (ci_eq(tok[0], "SHRINK"))   return do_shrink(ln, tok, ntok);

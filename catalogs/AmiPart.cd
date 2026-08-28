@@ -3990,3 +3990,93 @@ PFS3 deldir (undelete)
 MSG_SCR_DELDIR_NEEDS_VOLNAME
 DELDIR has no effect without VOLNAME (partition is not formatted)
 ;
+;==========================================================================
+; Script engine - BACKUP / RESTORE / BACKUPEXT / RESTOREEXT
+;==========================================================================
+MSG_SCR_BACKUP_NEED_FILE
+BACKUP: FILE=<path> required.
+;
+MSG_SCR_BACKUP_DISK_ERR
+BACKUP: Cannot read RDB block from disk.
+;
+MSG_SCR_BACKUP_CANT_CREATE
+BACKUP: Cannot create output file.
+;
+MSG_SCR_BACKUP_WRITE_ERR
+BACKUP: File write error.
+;
+MSG_SCR_BACKUP_OK_FMT
+BACKUP: RDB block %lu saved.\n
+;
+MSG_SCR_RESTORE_NEED_FILE
+RESTORE: FILE=<path> required.
+;
+MSG_SCR_RESTORE_CANT_OPEN
+RESTORE: Cannot open backup file.
+;
+MSG_SCR_RESTORE_SIZE_FMT
+RESTORE: File size (%ld) != block size (%lu).
+;
+MSG_SCR_RESTORE_READ_ERR
+RESTORE: File read error.
+;
+MSG_SCR_RESTORE_WRITE_ERR
+RESTORE: Write to block 0 FAILED.
+;
+MSG_SCR_RESTORE_OK
+RESTORE: Block 0 written. Reboot required for the OS to see it.\n
+;
+MSG_SCR_BACKUPEXT_NEED_FILE
+BACKUPEXT: FILE=<path> required.
+;
+MSG_SCR_BACKUPEXT_RDSK_ERR
+BACKUPEXT: Cannot read RDSK block from disk.
+;
+MSG_SCR_BACKUPEXT_CANT_CREATE
+BACKUPEXT: Cannot create output file.
+;
+MSG_SCR_BACKUPEXT_WRITE_ERR
+BACKUPEXT: File write error.
+;
+MSG_SCR_BACKUPEXT_OK_FMT
+BACKUPEXT: %lu blocks (%lu-%lu) saved.\n
+;
+MSG_SCR_RESTOREEXT_NEED_FILE
+RESTOREEXT: FILE=<path> required.
+;
+MSG_SCR_RESTOREEXT_CANT_OPEN
+RESTOREEXT: Cannot open backup file.
+;
+MSG_SCR_RESTOREEXT_BAD_MAGIC
+RESTOREEXT: Not a valid ERDB backup (bad magic/version).
+;
+MSG_SCR_RESTOREEXT_BSIZE_FMT
+RESTOREEXT: Block size mismatch: backup=%lu, device=%lu.
+;
+MSG_SCR_RESTOREEXT_BAD_COUNT
+RESTOREEXT: Unreasonable block count in header.
+;
+MSG_SCR_RESTOREEXT_SIZE_MISMATCH
+RESTOREEXT: File size mismatch - backup may be corrupt.
+;
+MSG_SCR_RESTOREEXT_FILE_RERR_FMT
+RESTOREEXT: File read error at block %lu.
+;
+MSG_SCR_RESTOREEXT_WRITE_ERR_FMT
+RESTOREEXT: Write FAILED at block %lu.
+;
+MSG_SCR_RESTOREEXT_OK_FMT
+RESTOREEXT: %lu blocks restored. Reboot required.\n
+;
+MSG_SCR_BACKUP_DRYRUN_FMT
+DRYRUN: would save RDB block to %s.\n
+;
+MSG_SCR_BACKUPEXT_DRYRUN_FMT
+DRYRUN: would save extended RDB backup to %s.\n
+;
+MSG_SCR_RESTORE_DRYRUN
+DRYRUN: would write backup to block 0.\n
+;
+MSG_SCR_RESTOREEXT_DRYRUN_FMT
+DRYRUN: would restore %lu blocks starting at block %lu.\n
+;
