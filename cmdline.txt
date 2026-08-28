@@ -442,6 +442,20 @@ ADDFS TYPE=<dostype> [VERSION=<hex>] [FILE=<path>] [STACKSIZE=<n>]
   VERSION is a 32-bit hex version word (e.g. 0x00130000 for v19.0).
   Requires WRITE to commit to disk.
 
+PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]
+  Clone the contents of partition <src> into the EXISTING partition
+  <dst> - on the same disk, or on a second device given with TODEV=.
+  Script form of the CLI CLONE command: block copy plus destination
+  geometry adoption; on a cross-device clone the filesystem driver is
+  copied to the destination RDB when it is missing there.  Writes the
+  destination RDB itself - no separate WRITE needed.  Reboot before
+  using the destination.  In DRYRUN mode, prints the plan only.
+
+    OPEN scsi.device 0
+    PARTCLONE DH1 TO=DH2                     ; same disk
+    PARTCLONE DH1 TO=BK1 TODEV=scsi.device:2 ; to another disk
+    CLOSE
+
 BACKUP FILE=<path>
   Save the RDSK block (one block) of the open device to a file.
   Read-only on disk.  In DRYRUN mode, prints the target and writes nothing.

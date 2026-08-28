@@ -4080,3 +4080,18 @@ DRYRUN: would write backup to block 0.\n
 MSG_SCR_RESTOREEXT_DRYRUN_FMT
 DRYRUN: would restore %lu blocks starting at block %lu.\n
 ;
+MSG_SCR_PARTCLONE_USAGE
+PARTCLONE: usage: PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]
+;
+MSG_SCR_PARTCLONE_DRYRUN_FMT
+DRYRUN: would clone %s to %s.\n
+;
+MSG_SCR_PARTCLONE_TODEV_ERR
+PARTCLONE: cannot open TODEV device.
+;
+MSG_SCR_PARTCLONE_NO_RDB_DEST
+PARTCLONE: no valid RDB on the destination device.
+;
+MSG_SCR_PARTCLONE_OK_FMT
+PARTCLONE: %s -> %s cloned. Reboot before using the destination.\n
+;

@@ -1325,8 +1325,13 @@
 #define MSG_SCR_BACKUPEXT_DRYRUN_FMT 1319
 #define MSG_SCR_RESTORE_DRYRUN       1320
 #define MSG_SCR_RESTOREEXT_DRYRUN_FMT 1321
+#define MSG_SCR_PARTCLONE_USAGE      1322
+#define MSG_SCR_PARTCLONE_DRYRUN_FMT 1323
+#define MSG_SCR_PARTCLONE_TODEV_ERR  1324
+#define MSG_SCR_PARTCLONE_NO_RDB_DEST 1325
+#define MSG_SCR_PARTCLONE_OK_FMT     1326
 
-#define MSG_COUNT 1322
+#define MSG_COUNT 1327
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2660,5 +2665,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1319 MSG_SCR_BACKUPEXT_DRYRUN_FMT */ "DRYRUN: would save extended RDB backup to %s.\n",
     /* 1320 MSG_SCR_RESTORE_DRYRUN */ "DRYRUN: would write backup to block 0.\n",
     /* 1321 MSG_SCR_RESTOREEXT_DRYRUN_FMT */ "DRYRUN: would restore %lu blocks starting at block %lu.\n",
+    /* 1322 MSG_SCR_PARTCLONE_USAGE */ "PARTCLONE: usage: PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]",
+    /* 1323 MSG_SCR_PARTCLONE_DRYRUN_FMT */ "DRYRUN: would clone %s to %s.\n",
+    /* 1324 MSG_SCR_PARTCLONE_TODEV_ERR */ "PARTCLONE: cannot open TODEV device.",
+    /* 1325 MSG_SCR_PARTCLONE_NO_RDB_DEST */ "PARTCLONE: no valid RDB on the destination device.",
+    /* 1326 MSG_SCR_PARTCLONE_OK_FMT */ "PARTCLONE: %s -> %s cloned. Reboot before using the destination.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

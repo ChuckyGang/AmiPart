@@ -19,6 +19,7 @@
  *   CHECKRDB
  *   VERIFYRDB FILE=<path>
  *   VERIFYEXT FILE=<path>
+ *   PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]
  *   BACKUP FILE=<path>          ; save the RDSK block to a file
  *   RESTORE FILE=<path>         ; write a single-block backup to block 0
  *   BACKUPEXT FILE=<path>       ; save all RDB blocks (ERDB format)
@@ -1343,6 +1344,127 @@ static LONG do_restoreext(ULONG ln, char **tok, UWORD ntok)
 restoreext_done:
     Close(fh);
     FreeVec(buf);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* PARTCLONE - clone a partition into an existing one, optionally on  */
+/* a second device.                                                   */
+/*   PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]                 */
+/* ------------------------------------------------------------------ */
+
+static void script_move_progress(void *ud, ULONG done, ULONG total,
+                                 const char *phase);
+static struct PartInfo *sc_find_part(const char *name_s, char *namebuf);
+
+/* Destination RDB for a cross-device clone (too big for the stack). */
+static struct RDBInfo s_clone_rdb;
+
+static LONG do_partclone(ULONG ln, char **tok, UWORD ntok)
+{
+    struct PartInfo *src, *dst = NULL;
+    struct BlockDev *dbd = NULL;
+    struct RDBInfo  *drdb;
+    const char *dst_s, *todev_s;
+    char  sname[32], err[128];
+    BOOL  cross;
+    LONG  rc = RETURN_ERROR;
+
+    if (!s_st.bd)  { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+    if (!s_st.rdb_ready || !s_st.rdb.valid)
+        { sc_err(ln, GS(MSG_SCR_NO_RDB_OPEN_INIT)); return RETURN_ERROR; }
+    if (ntok < 2) { sc_puts(GS(MSG_SCR_PARTCLONE_USAGE)); return RETURN_ERROR; }
+
+    src = sc_find_part(tok[1], sname);
+    if (!src) { DP_SNPRINTF(s_msg, GS(MSG_PC_NOT_FOUND_FMT), sname);
+                sc_puts(s_msg); return RETURN_ERROR; }
+    if (!src->heads)   src->heads   = s_st.rdb.heads;
+    if (!src->sectors) src->sectors = s_st.rdb.sectors;
+
+    dst_s = kwarg(tok, ntok, "TO");
+    if (!dst_s || !dst_s[0])
+        { sc_puts(GS(MSG_SCR_PARTCLONE_USAGE)); return RETURN_ERROR; }
+    todev_s = kwarg(tok, ntok, "TODEV");
+    cross = (todev_s && todev_s[0]) ? TRUE : FALSE;
+
+    if (s_st.dryrun) {
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_PARTCLONE_DRYRUN_FMT),
+                src->drive_name, dst_s);
+        sc_puts(s_msg);
+        return RETURN_OK;
+    }
+
+    if (cross) {
+        char  ddevname[64];
+        ULONG dunit = 0;
+        const char *colon = NULL;
+        const char *p;
+        for (p = todev_s; *p; p++) if (*p == ':') { colon = p; break; }
+
+        if (colon) {
+            UWORD l = (UWORD)(colon - todev_s);
+            if (l > 63) l = 63;
+            memcpy(ddevname, todev_s, l); ddevname[l] = '\0';
+            if (!parse_dec_strict(colon + 1, &dunit)) {
+                sc_puts(GS(MSG_SCR_PARTCLONE_USAGE)); return RETURN_ERROR;
+            }
+        } else {
+            strncpy(ddevname, todev_s, 63); ddevname[63] = '\0';
+        }
+
+        dbd = BlockDev_Open(ddevname, dunit);
+        if (!dbd) { sc_err(ln, GS(MSG_SCR_PARTCLONE_TODEV_ERR)); return RETURN_ERROR; }
+        memset(&s_clone_rdb, 0, sizeof(s_clone_rdb));
+        if (!RDB_Read(dbd, &s_clone_rdb) || !s_clone_rdb.valid) {
+            sc_err(ln, GS(MSG_SCR_PARTCLONE_NO_RDB_DEST));
+            BlockDev_Close(dbd); return RETURN_ERROR;
+        }
+        drdb = &s_clone_rdb;
+        { UWORD i, l; char tmp[32];
+          strncpy(tmp, dst_s, 30); tmp[30] = 0;
+          l = (UWORD)strlen(tmp); if (l && tmp[l-1] == ':') tmp[l-1] = 0;
+          for (i = 0; i < s_clone_rdb.num_parts; i++)
+              if (ci_eq(s_clone_rdb.parts[i].drive_name, tmp))
+                  { dst = &s_clone_rdb.parts[i]; break; }
+        }
+    } else {
+        char dname[32];
+        dbd  = s_st.bd;
+        drdb = &s_st.rdb;
+        dst  = sc_find_part(dst_s, dname);
+    }
+    if (!dst) { DP_SNPRINTF(s_msg, GS(MSG_PC_NOT_FOUND_FMT), dst_s);
+                sc_puts(s_msg); goto clone_cleanup; }
+    if (dbd == s_st.bd && src == dst)
+        { sc_puts(GS(MSG_PC_CLONE_SAME)); goto clone_cleanup; }
+
+    err[0] = '\0';
+    if (!PartClone_PartToPart(s_st.bd, src, dbd, drdb, dst,
+                              script_move_progress, NULL, err, sizeof(err))) {
+        sc_puts(err); goto clone_cleanup;
+    }
+    /* Bring the filesystem driver along if the destination lacks it. */
+    if (cross && PartClone_DestNeedsFS(&s_st.rdb, drdb, src->dos_type) == 1) {
+        char dt[16];
+        if (PartClone_CopyFS(&s_st.rdb, drdb, src->dos_type, err, sizeof(err))) {
+            FormatDosType(src->dos_type, dt);
+            DP_SNPRINTF(s_msg, GS(MSG_PC_FS_COPIED_FMT), dt);
+            sc_puts(s_msg);
+        } else {
+            sc_puts(err);   /* non-fatal - clone still written */
+        }
+    }
+    sc_puts(GS(MSG_SCR_WRITING_RDB));
+    if (!RDB_Write(dbd, drdb)) { sc_puts(GS(MSG_SCR_FAILED)); goto clone_cleanup; }
+    sc_puts(GS(MSG_SCR_OK_DOT));
+    if (!cross) s_st.dirty = FALSE;
+    DP_SNPRINTF(s_msg, GS(MSG_SCR_PARTCLONE_OK_FMT),
+            src->drive_name, dst->drive_name);
+    sc_puts(s_msg);
+    rc = RETURN_OK;
+
+clone_cleanup:
+    if (cross && dbd) { RDB_FreeCode(&s_clone_rdb); BlockDev_Close(dbd); }
     return rc;
 }
 
@@ -2695,6 +2817,7 @@ static LONG run_line(char *line, ULONG ln)
     if (ci_eq(tok[0], "RESTORE"))  return do_restore(ln, tok, ntok);
     if (ci_eq(tok[0], "BACKUPEXT")) return do_backupext(ln, tok, ntok);
     if (ci_eq(tok[0], "RESTOREEXT")) return do_restoreext(ln, tok, ntok);
+    if (ci_eq(tok[0], "PARTCLONE")) return do_partclone(ln, tok, ntok);
     if (ci_eq(tok[0], "ADDFS"))    return do_addfs(ln, tok, ntok);
     if (ci_eq(tok[0], "GROW"))     return do_grow(ln, tok, ntok);
     if (ci_eq(tok[0], "SHRINK"))   return do_shrink(ln, tok, ntok);
