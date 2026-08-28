@@ -29,14 +29,24 @@ DP    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "A
 HERE  = os.path.dirname(os.path.abspath(__file__))
 LOG   = os.path.join(HERE, "testloop.log")
 
+# AMIPART_HOST=1 runs the whole fuzz matrix against the native Linux
+# binary (host/amipart) instead of the m68k binary under vamos - same
+# commands, same Python-side filesystem verification.
+HOSTBIN = os.path.join(HERE, "..", "host", "amipart")
+USE_HOST = bool(os.environ.get("AMIPART_HOST"))
+
 def log(msg):
     line = f"{time.strftime('%H:%M:%S')} {msg}"
     print(line, flush=True)
     with open(LOG, "a") as f: f.write(line + "\n")
 
 def run_dp(args):
-    r = subprocess.run(["vamos", "-q", "-O", "locale.library=mode:off", DP] + args,
-                       capture_output=True, text=True, timeout=300, cwd=HERE)
+    if USE_HOST:
+        r = subprocess.run([HOSTBIN] + args,
+                           capture_output=True, text=True, timeout=300, cwd=HERE)
+    else:
+        r = subprocess.run(["vamos", "-q", "-O", "locale.library=mode:off", DP] + args,
+                           capture_output=True, text=True, timeout=300, cwd=HERE)
     return r.returncode, r.stdout + r.stderr
 
 def sh(cmd):

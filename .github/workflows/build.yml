@@ -107,6 +107,11 @@ jobs:
           ../test/host/hostrdb ci.hdf rt.hdf
           cmp ci.hdf rt.hdf && echo "round-trip byte-identical"
 
+      - name: Native fuzz (grow/shrink matrix, FFS/SFS/PFS3)
+        run: |
+          pip install amitools -q
+          cd test && AMIPART_HOST=1 python3 testloop.py 6 20260828
+
       - name: Raw device backend test (loop device)
         run: |
           cd host
