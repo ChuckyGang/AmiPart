@@ -23,9 +23,10 @@ make linux                          # builds host/amipart (plain gcc, no deps)
 ```
 
 Same commands and syntax as the Amiga version (see `cmdline.txt`).
-Image files only for now — no raw `/dev` access yet — and quick-format
-stays Amiga-only since it needs the real filesystem handlers.  See
-`host/README.txt` for details.
+Raw devices work too — `sudo ./host/amipart DEV=/dev/sdb INFO` — with
+the disk opened exclusively (mounted disks are refused by the kernel).
+Quick-format stays Amiga-only since it needs the real filesystem
+handlers.  See `host/README.txt` for details.
 
 ---
 

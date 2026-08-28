@@ -107,6 +107,21 @@ jobs:
           ../test/host/hostrdb ci.hdf rt.hdf
           cmp ci.hdf rt.hdf && echo "round-trip byte-identical"
 
+      - name: Raw device backend test (loop device)
+        run: |
+          cd host
+          dd if=/dev/zero of=loop.img bs=1M count=8 status=none
+          dd if=/dev/zero of=ref.img  bs=1M count=8 status=none
+          LOOP=$(sudo losetup --find --show loop.img)
+          sudo ./amipart DEV=$LOOP INIT NEW FORCE
+          sudo ./amipart DEV=$LOOP ADDPART NAME=DH0 LOW=2 HIGH=8 TYPE=DOS3 BOOTABLE FORCE
+          sudo ./amipart DEV=$LOOP INFO
+          sudo losetup -d "$LOOP"
+          ./amipart IMAGE=ref.img INIT NEW FORCE
+          ./amipart IMAGE=ref.img ADDPART NAME=DH0 LOW=2 HIGH=8 TYPE=DOS3 BOOTABLE FORCE
+          cmp loop.img ref.img
+          echo "raw-device RDB byte-identical to image mode"
+
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:

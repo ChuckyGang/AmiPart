@@ -83,12 +83,166 @@ LONG Seek(BPTR fh, LONG pos, LONG mode) {
 LONG SetFileSize(BPTR fh, LONG pos, LONG mode) { (void)fh;(void)pos;(void)mode; return 0; }
 LONG IoErr(void) { return g_ioerr; }
 
-/* Device path: stubbed to fail (never reached for BD_FILE). */
+/* ------------------------------------------------------------------ */
+/* Device path: trackdisk.device emulation over a raw block device.   */
+/*                                                                     */
+/* OpenDevice("/dev/sdX", ...) opens the node with O_EXCL, so a disk  */
+/* that is mounted (or held by LVM/another process) is REFUSED by the */
+/* kernel - the same guard mkfs/wipefs rely on.  Only real block      */
+/* devices are accepted; regular files must go through IMAGE=<file>.  */
+/* DoIO serves the commands rdb.c's device backend uses:              */
+/* TD_GETGEOMETRY, TD_READ64/CMD_READ, TD_WRITE64/CMD_WRITE (pread/   */
+/* pwrite, full 64-bit offsets).  Everything else - HD_SCSICMD,       */
+/* NSCMD_DEVICEQUERY - returns IOERR_NOCMD, which rdb.c already       */
+/* handles gracefully on the Amiga for drivers without those commands.*/
+/* ------------------------------------------------------------------ */
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+#include <stdint.h>
+
+struct HostDev {
+    int      fd;
+    int      read_only;
+    uint64_t bytes;
+    uint32_t sector;
+};
+
 struct MsgPort *CreateMsgPort(void) { return NULL; }
 void DeleteMsgPort(struct MsgPort *p) { (void)p; }
-LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f) { (void)n;(void)u;(void)io;(void)f; return -1; }
-void CloseDevice(struct IORequest *io) { (void)io; }
-BYTE DoIO(struct IORequest *io) { (void)io; return -1; }
+
+LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
+{
+    const char *name = (const char *)n;
+    struct HostDev *hd;
+    struct stat st;
+    int fd, ro = 0;
+    (void)u; (void)f;
+
+    if (!name || name[0] != '/' || !io) return -1;
+
+    if (stat(name, &st) != 0) {
+        fprintf(stderr, "%s: %s\n", name, strerror(errno));
+        return -1;
+    }
+    if (!S_ISBLK(st.st_mode)) {
+        fprintf(stderr, "%s: not a block device (use IMAGE=<file> for image files)\n", name);
+        return -1;
+    }
+
+    fd = open(name, O_RDWR | O_EXCL);
+    if (fd < 0 && errno == EACCES) {
+        fd = open(name, O_RDONLY | O_EXCL);
+        ro = 1;
+    }
+    if (fd < 0) {
+        if (errno == EBUSY)
+            fprintf(stderr, "%s: device is busy - a partition is mounted or "
+                    "another program holds it. Unmount it first.\n", name);
+        else if (errno == EACCES)
+            fprintf(stderr, "%s: permission denied (try sudo, or add yourself "
+                    "to the 'disk' group)\n", name);
+        else
+            fprintf(stderr, "%s: %s\n", name, strerror(errno));
+        return -1;
+    }
+    if (ro)
+        fprintf(stderr, "%s: opened READ-ONLY (no write permission) - "
+                "writes will fail\n", name);
+
+    hd = (struct HostDev *)calloc(1, sizeof(*hd));
+    if (!hd) { close(fd); return -1; }
+    hd->fd = fd;
+    hd->read_only = ro;
+    {
+        unsigned long long b = 0;
+        int ssz = 512;
+        if (ioctl(fd, BLKGETSIZE64, &b) != 0) {
+            off_t end = lseek(fd, 0, SEEK_END);
+            b = (end > 0) ? (unsigned long long)end : 0;
+            lseek(fd, 0, SEEK_SET);
+        }
+        ioctl(fd, BLKSSZGET, &ssz);
+        hd->bytes  = b;
+        hd->sector = (ssz >= 512) ? (uint32_t)ssz : 512;
+    }
+    io->io_Device = (APTR)hd;
+    io->io_Error  = 0;
+    return 0;
+}
+
+void CloseDevice(struct IORequest *io)
+{
+    struct HostDev *hd = io ? (struct HostDev *)io->io_Device : NULL;
+    if (hd) { close(hd->fd); free(hd); io->io_Device = NULL; }
+}
+
+BYTE DoIO(struct IORequest *io)
+{
+    struct IOStdReq *req = (struct IOStdReq *)io;
+    struct IOExtTD  *td  = (struct IOExtTD *)io;
+    struct HostDev  *hd  = io ? (struct HostDev *)io->io_Device : NULL;
+    uint64_t off;
+    ssize_t  n;
+
+    if (!hd) { if (io) io->io_Error = -1; return -1; }
+    req->io_Error = 0;
+
+    switch (req->io_Command) {
+
+    case TD_GETGEOMETRY: {
+        struct DriveGeometry *dg = (struct DriveGeometry *)req->io_Data;
+        /* Report a conventional 512-byte-sector, 16 heads x 63 sectors
+           geometry (the same convention the BD_FILE backend synthesizes)
+           so a raw device and an image of the same size produce
+           identical RDBs.  Linux block I/O is buffered, so 512-byte
+           access works regardless of the drive's real sector size. */
+        uint64_t sectors = hd->bytes / 512;
+        memset(dg, 0, sizeof(*dg));
+        dg->dg_SectorSize   = 512;
+        /* dg fields are 32-bit; clamp huge disks rather than wrap. */
+        dg->dg_TotalSectors = (sectors > 0xFFFFFFFFULL)
+                              ? 0xFFFFFFFFUL : (ULONG)sectors;
+        dg->dg_Heads        = 16;
+        dg->dg_TrackSectors = 63;
+        dg->dg_CylSectors   = 16 * 63;
+        dg->dg_Cylinders    = dg->dg_TotalSectors / (16 * 63);
+        dg->dg_DeviceType   = DG_DIRECT_ACCESS;
+        req->io_Actual = sizeof(*dg);
+        return 0;
+    }
+
+    case TD_READ64:
+    case CMD_READ:
+        off = (req->io_Command == TD_READ64)
+              ? ((uint64_t)req->io_Actual << 32) | req->io_Offset
+              : (uint64_t)req->io_Offset;
+        n = pread(hd->fd, req->io_Data, req->io_Length, (off_t)off);
+        if (n != (ssize_t)req->io_Length) { req->io_Error = 20; return 20; }
+        req->io_Actual = req->io_Length;
+        return 0;
+
+    case TD_WRITE64:
+    case CMD_WRITE:
+        if (hd->read_only) { req->io_Error = 28; return 28; } /* write protect */
+        off = (req->io_Command == TD_WRITE64)
+              ? ((uint64_t)((struct IOExtTD *)req)->iotd_Req.io_Actual << 32) | req->io_Offset
+              : (uint64_t)req->io_Offset;
+        (void)td;
+        n = pwrite(hd->fd, req->io_Data, req->io_Length, (off_t)off);
+        if (n != (ssize_t)req->io_Length) { req->io_Error = 20; return 20; }
+        req->io_Actual = req->io_Length;
+        return 0;
+
+    default:
+        req->io_Error = IOERR_NOCMD;
+        return IOERR_NOCMD;
+    }
+}
+
 struct IORequest *CreateIORequest(struct MsgPort *p, ULONG s) { (void)p;(void)s; return NULL; }
 void DeleteIORequest(APTR io) { (void)io; }
 

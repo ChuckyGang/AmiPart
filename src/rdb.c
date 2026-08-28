@@ -615,6 +615,13 @@ BOOL BlockDev_ReadBlock(struct BlockDev *bd, ULONG blocknum, void *buf)
        DMA timing issues with SD card adapters that corrupt data; those devices
        succeed on the HD_SCSICMD path above and never reach this fallback. */
     {
+        /* Refuse rather than wrap past 4 GB - the same gate the CMD_WRITE
+           fallback has.  Without it the capacity probe reads a wrapped
+           offset (block 0) "successfully" and reports a huge disk. */
+        if ((ULONG)(((UQUAD)blocknum * bd->block_size) >> 32) != 0)
+            return FALSE;
+    }
+    {
         ULONG byte_off = blocknum * (ULONG)bd->block_size;
         bd->iotd.iotd_Req.io_Command = CMD_READ;
         bd->iotd.iotd_Req.io_Length  = bd->block_size;

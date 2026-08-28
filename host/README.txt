@@ -21,11 +21,26 @@ Build:  make          (produces ./amipart; plain gcc, no dependencies)
 Usage examples:
   ./amipart IMAGE=disk.hdf INFO
   ./amipart IMAGE=disk.hdf SCRIPT prep.script FORCE
+  sudo ./amipart DEV=/dev/sdb INFO          # raw device (CF card reader etc.)
+  sudo ./amipart DEV=/dev/sdb SCRIPT prep.script FORCE
   ./amipart ?
 
+Raw devices (DEV=/dev/...):
+  * The device node is opened with O_EXCL, so the kernel REFUSES the
+    open while the disk (or any of its partitions) is mounted or held
+    by another program - the same guard mkfs and wipefs rely on.
+    Unmount first (e.g. udisksctl unmount / umount).
+  * Regular files are rejected - use IMAGE=<file> for those.
+  * Needs write permission on the node: sudo, or membership in the
+    'disk' group.  Without it the device opens read-only (INFO works,
+    writes fail cleanly).
+  * Reported geometry is the conventional 16 heads x 63 sectors at
+    512 bytes/block, identical to image mode - the same disk prepped
+    via DEV= or via an image dd'd onto it ends up byte-identical.
+  * LISTDEV still reports no devices - raw targets are always named
+    explicitly, never picked from a scan.
+
 Scope (KISS):
-  * Image files only - no /dev/sdX access yet (that arrives as its own
-    reviewed backend).  LISTDEV reports no devices by design.
   * Quick-format (VOLNAME=) is Amiga-only: it needs the real filesystem
     handlers.  The host build reports it as unavailable.
   * REBOOT is ignored.

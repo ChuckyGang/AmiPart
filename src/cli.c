@@ -163,6 +163,17 @@ static BOOL parse_dev(const char *str, char *devname, ULONG *unit)
     const char *p = str;
     ULONG len;
 
+    /* Host raw-device path (DEV=/dev/sdb): no Amiga device name starts
+       with '/', so take the whole string as the name, unit 0.  On the
+       Amiga this branch simply never matches. */
+    if (str[0] == '/') {
+        len = (ULONG)strlen(str);
+        if (len == 0 || len > 63) return FALSE;
+        memcpy(devname, str, len + 1);
+        *unit = 0;
+        return TRUE;
+    }
+
     while (*p && *p != ':') p++;
     len = (ULONG)(p - str);
     if (len == 0 || len > 63) return FALSE;
