@@ -101,7 +101,12 @@ LONG IoErr(void) { return g_ioerr; }
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <linux/fs.h>
+#ifdef __linux
+	#include <linux/fs.h>
+#endif
+#ifdef __APPLE__
+	#include <sys/disk.h>
+#endif
 #include <stdint.h>
 
 struct HostDev {
@@ -160,12 +165,30 @@ LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
     {
         unsigned long long b = 0;
         int ssz = 512;
-        if (ioctl(fd, BLKGETSIZE64, &b) != 0) {
+#ifdef __APPLE__
+    // macOS Implementation
+    uint64_t block_count = 0;
+    uint32_t block_size = 0;
+
+    if (ioctl(fd, DKIOCGETBLOCKCOUNT, &block_count) == 0 &&
+        ioctl(fd, DKIOCGETBLOCKSIZE, &block_size) == 0) {
+        b = block_count * block_size;
+        ssz = block_size;
+    } else {
+        // Fallback to lseek if ioctls fail
+        off_t end = lseek(fd, 0, SEEK_END);
+        b = (end > 0) ? (unsigned long long)end : 0;
+        lseek(fd, 0, SEEK_SET);
+        ssz = 512; // Default safe assumption for sector size
+    }
+#else /* linux */    
+    if (ioctl(fd, BLKGETSIZE64, &b) != 0) {
             off_t end = lseek(fd, 0, SEEK_END);
             b = (end > 0) ? (unsigned long long)end : 0;
             lseek(fd, 0, SEEK_SET);
         }
         ioctl(fd, BLKSSZGET, &ssz);
+#endif
         hd->bytes  = b;
         hd->sector = (ssz >= 512) ? (uint32_t)ssz : 512;
     }
