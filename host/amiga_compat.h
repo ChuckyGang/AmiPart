@@ -266,4 +266,20 @@ void UnLock(BPTR lock);
 #define ACCESS_WRITE (-1)
 #endif
 
+/* ---- probe additions round 3: console I/O, dos misc, host helpers
+ * (implemented in amiga_shim.c) ---- */
+void  PutStr(CONST_STRPTR s);
+BPTR  Output(void);
+BPTR  Input(void);
+LONG  Flush(BPTR fh);
+LONG  FGetC(BPTR fh);
+void  PrintFault(LONG code, CONST_STRPTR hdr);
+BOOL  ExamineFH(BPTR fh, struct FileInfoBlock *fib);
+void  Delay(LONG ticks);
+ULONG SetSignal(ULONG new_sig, ULONG mask);
+LONG  Inhibit(CONST_STRPTR name, LONG onoff);
+void  ColdReboot(void);
+void  SetIoErr(LONG err);
+void  host_set_ioerr(LONG err);
+
 #endif /* AMIGA_COMPAT_PROBE_H */
