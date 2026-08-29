@@ -731,13 +731,13 @@ static LONG cmd_smart(const char *devname, ULONG unit)
             DP_SNPRINTF(outbuf, "%3u %-25s %3u %3u %04lx%08lx%s\n",
                     (unsigned)id, smart_name(id),
                     (unsigned)val, (unsigned)worst,
-                    raw_hi, raw_lo,
+                    (unsigned long)raw_hi, (unsigned long)raw_lo,
                     (flags & 0x01) ? GS(MSG_CLI_SMART_PREFAIL) : "");
         else
             DP_SNPRINTF(outbuf, "%3u %-25s %3u %3u %10lu%s\n",
                     (unsigned)id, smart_name(id),
                     (unsigned)val, (unsigned)worst,
-                    raw_lo,
+                    (unsigned long)raw_lo,
                     (flags & 0x01) ? GS(MSG_CLI_SMART_PREFAIL) : "");
         cli_puts(outbuf);
     }
@@ -840,16 +840,16 @@ static LONG cmd_info(const char *devname, ULONG unit)
             if (fi->version)
                 DP_SNPRINTF(outbuf, "  %2u: %-8s  v%lu.%lu  %s\n",
                         (unsigned)i, dtbuf,
-                        (ULONG)(fi->version >> 16),
-                        (ULONG)(fi->version & 0xFFFF), szbuf);
+                        (unsigned long)(fi->version >> 16),
+                        (unsigned long)(fi->version & 0xFFFF), szbuf);
             else
                 DP_SNPRINTF(outbuf, "  %2u: %-8s  %s\n", (unsigned)i, dtbuf, szbuf);
         } else {
             if (fi->version)
                 DP_SNPRINTF(outbuf, "  %2u: %-8s  v%lu.%lu\n",
                         (unsigned)i, dtbuf,
-                        (ULONG)(fi->version >> 16),
-                        (ULONG)(fi->version & 0xFFFF));
+                        (unsigned long)(fi->version >> 16),
+                        (unsigned long)(fi->version & 0xFFFF));
             else
                 DP_SNPRINTF(outbuf, "  %2u: %-8s\n", (unsigned)i, dtbuf);
         }
