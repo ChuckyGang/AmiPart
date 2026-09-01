@@ -3202,6 +3202,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                             mbr_store.valid = TRUE;
                                             s_mbr = &mbr_store;
                                         }
+                                    } else {
+                                        /* Fresh RDB goes to block 0, which destroys
+                                           any MBR/FAT table on Write - drop the
+                                           stale entries so they don't linger as
+                                           phantom partitions in the list. */
+                                        memset(&mbr_store, 0, sizeof(mbr_store));
+                                        s_mbr = NULL;
                                     }
                                     sel   = -1;
                                     dirty = TRUE;
@@ -3282,6 +3289,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                             mbr_store.valid = TRUE;
                                             s_mbr = &mbr_store;
                                         }
+                                    } else {
+                                        /* Fresh RDB goes to block 0, which destroys
+                                           any MBR/FAT table on Write - drop the
+                                           stale entries so they don't linger as
+                                           phantom partitions in the list. */
+                                        memset(&mbr_store, 0, sizeof(mbr_store));
+                                        s_mbr = NULL;
                                     }
                                     sel   = -1;
                                     dirty = TRUE;

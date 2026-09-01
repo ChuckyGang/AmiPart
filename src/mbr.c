@@ -212,6 +212,14 @@ BOOL MBR_Write(struct BlockDev *bd, struct MBRInfo *mbr)
     if (!BlockDev_ReadBlock(bd, 0, buf))
         memset(buf, 0, 512);
 
+    /* Refuse if block 0 holds a RigidDiskBlock: stamping partition entries
+       and the 0x55AA signature into its tail breaks the RDSK checksum and
+       kills the RDB.  An MBR may only coexist with an RDB at block 1+. */
+    if (buf[0] == 'R' && buf[1] == 'D' && buf[2] == 'S' && buf[3] == 'K') {
+        FreeVec(buf);
+        return FALSE;
+    }
+
     for (i = 0; i < MBR_MAX_PARTS; i++) {
         UBYTE *e = buf + 446 + i * 16;
         struct MBRPart *p = &mbr->parts[i];

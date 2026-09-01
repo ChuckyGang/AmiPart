@@ -575,6 +575,11 @@ static LONG do_init(ULONG ln, char **tok, UWORD ntok)
                 s_st.s_mbr.valid = TRUE;
                 sc_puts(GS(MSG_SCR_INIT_MBR_WRITTEN));
             }
+        } else {
+            /* Plain INIT NEW: the fresh RDB goes to block 0, which destroys
+               any MBR/FAT table when WRITE runs - drop the stale entries so
+               later MBR commands don't act on phantom partitions. */
+            memset(&s_st.s_mbr, 0, sizeof(s_st.s_mbr));
         }
         return RETURN_OK;
     }
