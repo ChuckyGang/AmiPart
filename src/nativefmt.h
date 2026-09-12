@@ -15,10 +15,12 @@
  * and falls back to the OS formatter for the rest; with safe=TRUE (the SAFE
  * keyword) it always uses the OS formatter.
  *
- * Filesystem coverage of the internal formatter:
- *   FFS/OFS  DOS\0..DOS\7   done (this file)
- *   PFS3     PFS\x/PDS\x    not yet - falls back to the OS formatter
- *   SFS      SFS\0/SFS\2    not yet - falls back to the OS formatter
+ * Filesystem coverage of the internal formatter (each verified
+ * byte-for-byte against the real handler, see test/fmttest.py):
+ *   FFS/OFS  DOS\0..DOS\7   any block size
+ *   PFS3     PFS\x/PDS\x    pfs3aio 19.2 layout, 512-byte blocks only
+ *   SFS      SFS\0/SFS\2    SmartFilesystem 1.279 layout, any block size
+ * Anything else falls back to the OS formatter.
  */
 #ifndef NATIVEFMT_H
 #define NATIVEFMT_H

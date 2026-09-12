@@ -1395,8 +1395,14 @@
 #define MSG_NF_NOTE_OS_SAFE_FMT      1389
 #define MSG_NF_NOTE_OS_FALLBACK_FMT  1390
 #define MSG_SCR_SAFE_NEEDS_VOLNAME   1391
+#define MSG_DLG_OS_FORMAT            1392
+#define MSG_NF_PFS_512_ONLY          1393
+#define MSG_NF_PFS_TOO_LARGE         1394
+#define MSG_NF_WRITE_FAIL_PFS        1395
+#define MSG_NF_WRITE_FAIL_SFS        1396
+#define MSG_NF_SFS_VARIANT           1397
 
-#define MSG_COUNT 1392
+#define MSG_COUNT 1398
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2800,5 +2806,11 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1389 MSG_NF_NOTE_OS_SAFE_FMT */ "OS %s formatter (SAFE); left mounted.",
     /* 1390 MSG_NF_NOTE_OS_FALLBACK_FMT */ "No internal %s formatter yet - OS formatter used; left mounted.",
     /* 1391 MSG_SCR_SAFE_NEEDS_VOLNAME */ "SAFE has no effect without VOLNAME= (nothing is formatted)",
+    /* 1392 MSG_DLG_OS_FORMAT */ "OS format (real handler)",
+    /* 1393 MSG_NF_PFS_512_ONLY */ "PFS3: the internal formatter writes 512-byte blocks only (like pfs3aio 19.2) - use BLOCKSIZE=512, or SAFE for the OS formatter",
+    /* 1394 MSG_NF_PFS_TOO_LARGE */ "PFS3: partition too large for the internal formatter",
+    /* 1395 MSG_NF_WRITE_FAIL_PFS */ "PFS3: write failed",
+    /* 1396 MSG_NF_WRITE_FAIL_SFS */ "SFS: write failed",
+    /* 1397 MSG_NF_SFS_VARIANT */ "SFS: only SFS\000 and SFS2 are supported by the internal formatter - use SAFE for the OS formatter",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

@@ -55,6 +55,7 @@
 #include "partmove.h"
 #include "partview_internal.h"
 #include "quickformat.h"
+#include "nativefmt.h"
 
 
 /* ------------------------------------------------------------------ */
@@ -1817,27 +1818,23 @@ static BOOL format_pending_partitions(struct Window *win, struct BlockDev *bd,
         if (!pi->want_format || pi->volume_name[0] == '\0') continue;
         any = 1;
 
-        if (!bd || bd->backend == BD_FILE) {
-            DP_SNPRINTF(line, GS(MSG_PV_FMT_SKIPPED_IMAGE), pi->drive_name);
-            need_reboot = TRUE;   /* exists in RDB but not mounted */
-        } else {
-            char err[80], mounted[40];
-            err[0] = '\0';
-            if (QuickFormat_EnsureHandler(rdb, pi->dos_type,
-                                          err, sizeof(err)) &&
-                QuickFormat_Partition(bd, pi, mounted, err, sizeof(err))) {
-                char  tnote[160];
+        {
+            /* Internal formatter by default, OS formatter when the "OS
+               format" checkbox was set (see nativefmt.h). */
+            char err[200], mounted[40], note[240];
+            if (bd && Format_Partition(bd, rdb, pi, pi->format_safe != 0, mounted,
+                                       err, sizeof(err), note, sizeof(note))) {
                 ULONG ll;
                 DP_SNPRINTF(line, GS(MSG_PV_FMT_FORMATTED),
                         mounted[0] ? mounted : pi->drive_name, pi->volume_name);
-                if (QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
-                                         pi->dos_type, pi->deldir_blocks,
-                                         tnote, sizeof(tnote)) && tnote[0]) {
+                if (note[0]) {
                     ll = strlen(line);
-                    snprintf(line + ll, sizeof(line) - ll, "%s\n", tnote);
+                    snprintf(line + ll, sizeof(line) - ll, "%s\n", note);
                 }
+                if (!mounted[0]) need_reboot = TRUE;   /* in the RDB, not mounted */
             } else {
-                DP_SNPRINTF(line, GS(MSG_PV_FMT_FAILED), pi->drive_name, err);
+                DP_SNPRINTF(line, GS(MSG_PV_FMT_FAILED), pi->drive_name,
+                            bd ? err : "no device");
                 need_reboot = TRUE;   /* not mounted - reboot to pick it up */
             }
         }

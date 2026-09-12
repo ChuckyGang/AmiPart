@@ -280,11 +280,13 @@ ULONG parse_dostype(const char *s)
 #define PDLG_VOLNAME     14
 #define PDLG_NOFORMAT    15
 #define PDLG_DELDIR      16
+#define PDLG_OSFORMAT    17
 
 /* Rows: Name, LoCyl, SizeMB, FS, BlockSize, BootPri, Bootable+Automount, DirSCSI+SyncSCSI */
 #define PDLG_ROWS 8
-/* New partitions add two more rows: Volume name + Do not format. */
-#define PDLG_NEW_EXTRA_ROWS 2
+/* New partitions add three more rows: Volume name, Do not format + deldir,
+   OS format. */
+#define PDLG_NEW_EXTRA_ROWS 3
 
 void partition_advanced_dialog(struct PartInfo *pi)
 {
@@ -502,6 +504,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
     struct Gadget  *volname_gad   = NULL;
     struct Gadget  *noformat_gad  = NULL;
     struct Gadget  *deldir_gad    = NULL;
+    struct Gadget  *osformat_gad  = NULL;
     struct Window  *win          = NULL;
     BOOL            result       = FALSE;
     UWORD           cur_fs       = 1;   /* default FFS */
@@ -787,6 +790,21 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                     if (!deldir_gad) { goto cleanup; } prev=deldir_gad;
                 }
                 row++;
+
+                /* "OS format": let the real filesystem handler format the
+                   partition (temp-mount + dos.library Format) instead of
+                   AmiPart's internal formatter.  See nativefmt.h. */
+                {
+                    struct TagItem cbt[] = { { GTCB_Checked, 0 }, { TAG_DONE, 0 } };
+                    cbt[0].ti_Data = (ULONG)FALSE;   /* internal formatter by default */
+                    ng.ng_LeftEdge=bor_l+pad; ng.ng_TopEdge=ROW_Y(row);
+                    ng.ng_Width=inner_w - pad * 2; ng.ng_Height=row_h;
+                    ng.ng_GadgetText=GS(MSG_DLG_OS_FORMAT); ng.ng_GadgetID=PDLG_OSFORMAT;
+                    ng.ng_Flags=PLACETEXT_RIGHT;
+                    osformat_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
+                    if (!osformat_gad) { goto cleanup; } prev=osformat_gad;
+                }
+                row++;
             }
 
 #undef STR_GAD
@@ -990,6 +1008,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                         pi->volume_name[0] = '\0';
                         pi->want_format    = 0;
                         pi->deldir_blocks  = 0;
+                        pi->format_safe    = 0;
                         if (is_new && volname_gad) {
                             BOOL no_format = (noformat_gad &&
                                 (noformat_gad->Flags & GFLG_SELECTED));
@@ -999,6 +1018,8 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                             pi->volume_name[sizeof(pi->volume_name) - 1] = '\0';
                             pi->want_format = (!no_format &&
                                                pi->volume_name[0] != '\0');
+                            pi->format_safe = (osformat_gad &&
+                                (osformat_gad->Flags & GFLG_SELECTED)) ? 1 : 0;
                             /* PFS3 deldir: 32 blocks (the maximum) when the
                                checkbox is on and the format will happen. */
                             if (pi->want_format && deldir_gad &&

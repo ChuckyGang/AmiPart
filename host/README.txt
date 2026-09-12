@@ -51,11 +51,12 @@ Raw devices (DEV=/dev/...):
 
 Scope (KISS):
   * Quick-format (VOLNAME=) uses the internal formatter (src/nativefmt.c):
-    FFS/OFS DOS\0..DOS\7 volumes are written directly, on image files and
-    raw devices alike (test/fmttest.py proves them byte-identical to
-    xdftool's).  PFS3/SFS have no internal formatter yet and the OS
-    formatter (the SAFE keyword) needs a real Amiga, so those report an
-    error here.
+    FFS/OFS DOS\0..DOS\7, PFS3 (PFS\x/PDS\x, 512-byte blocks) and SFS\0/
+    SFS\2 volumes are written directly, on image files and raw devices
+    alike.  test/fmttest.py proves them byte-identical to xdftool's FFS
+    and to the real pfs3aio / SmartFilesystem handlers formatting the same
+    partition under AmiFUSE.  The OS formatter (the SAFE keyword) needs a
+    real Amiga, so SAFE and other dostypes report an error here.
   * REBOOT is ignored.
 
 Correctness: the reference partitioning script produces a byte-identical

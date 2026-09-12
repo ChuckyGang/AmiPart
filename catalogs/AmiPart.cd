@@ -4294,3 +4294,21 @@ No internal %s formatter yet - OS formatter used; left mounted.
 MSG_SCR_SAFE_NEEDS_VOLNAME
 SAFE has no effect without VOLNAME= (nothing is formatted)
 ;
+MSG_DLG_OS_FORMAT
+OS format (real handler)
+;
+MSG_NF_PFS_512_ONLY
+PFS3: the internal formatter writes 512-byte blocks only (like pfs3aio 19.2) - use BLOCKSIZE=512, or SAFE for the OS formatter
+;
+MSG_NF_PFS_TOO_LARGE
+PFS3: partition too large for the internal formatter
+;
+MSG_NF_WRITE_FAIL_PFS
+PFS3: write failed
+;
+MSG_NF_WRITE_FAIL_SFS
+SFS: write failed
+;
+MSG_NF_SFS_VARIANT
+SFS: only SFS\0 and SFS\2 are supported by the internal formatter - use SAFE for the OS formatter
+;

@@ -51,10 +51,20 @@ Bugs this loop has caught on day one (2026-07-20):
 Internal formatter test (fmttest.py)
 ------------------------------------
 python3 fmttest.py formats a partition with the internal formatter
-(src/nativefmt.c; ADDPART ... VOLNAME= without SAFE) for every FFS/OFS
-variant DOS\0..DOS\7 plus a partition large enough to need a bitmap
-extension block, and compares the result byte-for-byte with an
-xdftool-formatted volume of the same geometry (only the root block's
-timestamps/checksum and the DOS\6/7 fstype long are masked).  xdftool then
-opens and lists the partition, and when vamos + out/AmiPart are present the
-m68k binary must produce the identical image.  Runs in CI.
+(src/nativefmt.c; ADDPART ... VOLNAME= without SAFE) and compares the
+result byte-for-byte with a reference made by an independent, real
+implementation of the same geometry (only timestamps, the checksums over
+them and PFS3's AmiPart-set fnsize are masked):
+  FFS  every DOS\0..DOS\7 variant + a bitmap-extension case vs xdftool;
+       xdftool then opens and lists the volume.
+  PFS3 several sizes/geometries + a sparse 6 GB supermode partition vs the
+       real pfs3aio 19.2 handler formatting under AmiFUSE
+       (pipx install amifuse; handler auto-found in ~/UAE/*/L/pfs3aio or
+       AMIPART_PFS3_HANDLER=...).
+  SFS  SFS\0 at 512 and 1024-byte blocks + SFS\2 vs the real
+       SmartFilesystem 1.279 handler (AMIPART_SFS_HANDLER=...).
+For PFS3/SFS the real handler afterwards writes a file into the
+AmiPart-formatted volume and reads it back.  PFS3/SFS cases are skipped
+when amifuse or the handler binaries are missing (CI only runs the FFS
+part).  With vamos + out/AmiPart present the m68k binary must produce the
+identical image.
