@@ -48,6 +48,7 @@
 #include "imagecopy.h"
 #include "mountlist.h"
 #include "quickformat.h"
+#include "nativefmt.h"
 #include "ffsresize.h"
 #include "sfsresize.h"
 #include "pfsresize.h"
@@ -806,6 +807,12 @@ static LONG do_addpart(ULONG ln, char **tok, UWORD ntok)
         pi->heads   = s_st.rdb.heads;
         pi->sectors = s_st.rdb.sectors;
     }
+
+    /* SAFE (optional flag) - format with the OS formatter (the real handler,
+       Amiga + real device only) instead of the internal one.  See nativefmt.h. */
+    pi->format_safe = has_flag(tok, ntok, "SAFE") ? 1 : 0;
+    if (pi->format_safe && !pi->want_format)
+        sc_warn(ln, GS(MSG_SCR_SAFE_NEEDS_VOLNAME));
 
     /* DELDIR (optional) - PFS3 only: deldir blocks to enable after the
        quick-format (needs VOLNAME; silently capped at 32). */
@@ -2374,37 +2381,26 @@ static LONG do_write(ULONG ln)
     sc_puts(GS(MSG_SCR_OK_DOT));
     s_st.dirty = FALSE;
 
-    /* Quick-format any partition that was given a VOLNAME (device backend only). */
+    /* Quick-format any partition that was given a VOLNAME: internal
+       formatter by default, OS formatter with SAFE (see nativefmt.h). */
     {
         UWORD i;
         for (i = 0; i < s_st.rdb.num_parts; i++) {
             struct PartInfo *pi = &s_st.rdb.parts[i];
-            char tnote[160];
-            tnote[0] = '\0';
+            char err[200], mounted[40], note[240];
             if (!pi->want_format || pi->volume_name[0] == '\0') continue;
-            if (s_st.bd->backend == BD_FILE) {
-                DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_SKIPPED_FMT),
-                        pi->drive_name);
+            if (Format_Partition(s_st.bd, &s_st.rdb, pi, pi->format_safe != 0,
+                                 mounted, err, sizeof(err), note, sizeof(note))) {
+                DP_SNPRINTF(s_msg, GS(MSG_SCR_FORMATTED_FMT),
+                        mounted[0] ? mounted : pi->drive_name,
+                        pi->volume_name);
             } else {
-                char err[80], mounted[40];
-                err[0] = '\0';
-                if (QuickFormat_EnsureHandler(&s_st.rdb, pi->dos_type,
-                                              err, sizeof(err)) &&
-                    QuickFormat_Partition(s_st.bd, pi, mounted, err, sizeof(err))) {
-                    DP_SNPRINTF(s_msg, GS(MSG_SCR_FORMATTED_FMT),
-                            mounted[0] ? mounted : pi->drive_name,
-                            pi->volume_name);
-                    QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
-                                         pi->dos_type, pi->deldir_blocks,
-                                         tnote, sizeof(tnote));
-                } else {
-                    DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_FAILED_FMT),
-                            pi->drive_name, err);
-                }
+                DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_FAILED_FMT),
+                        pi->drive_name, err);
             }
             sc_puts(s_msg);
-            if (tnote[0]) {
-                DP_SNPRINTF(s_msg, "  %s\n", tnote);
+            if (note[0]) {
+                DP_SNPRINTF(s_msg, "  %s\n", note);
                 sc_puts(s_msg);
             }
             pi->want_format = 0;

@@ -50,8 +50,12 @@ Raw devices (DEV=/dev/...):
     path is exactly what DEV= takes.
 
 Scope (KISS):
-  * Quick-format (VOLNAME=) is Amiga-only: it needs the real filesystem
-    handlers.  The host build reports it as unavailable.
+  * Quick-format (VOLNAME=) uses the internal formatter (src/nativefmt.c):
+    FFS/OFS DOS\0..DOS\7 volumes are written directly, on image files and
+    raw devices alike (test/fmttest.py proves them byte-identical to
+    xdftool's).  PFS3/SFS have no internal formatter yet and the OS
+    formatter (the SAFE keyword) needs a real Amiga, so those report an
+    error here.
   * REBOOT is ignored.
 
 Correctness: the reference partitioning script produces a byte-identical

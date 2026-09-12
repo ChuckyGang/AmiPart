@@ -183,6 +183,8 @@ struct PartInfo {
     UBYTE want_format;     /* TRUE only for a new partition the user opted to format */
     UBYTE deldir_blocks;   /* PFS3 only: deldir blocks to enable after the format
                               (0 = leave disabled, max 32; 31 entries per block) */
+    UBYTE format_safe;     /* SAFE keyword: use the OS formatter (real handler)
+                              instead of the internal one (nativefmt.c) */
 };
 
 struct FSInfo {

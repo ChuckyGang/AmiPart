@@ -47,3 +47,14 @@ Bugs this loop has caught on day one (2026-07-20):
   - SFS SHRINKINFO reported a floor below what the no-relocation v1
     shrink can deliver on strategy-B-grown volumes (bitmap sits high);
     the floor now respects bitmapbase+num_bmb+1.
+
+Internal formatter test (fmttest.py)
+------------------------------------
+python3 fmttest.py formats a partition with the internal formatter
+(src/nativefmt.c; ADDPART ... VOLNAME= without SAFE) for every FFS/OFS
+variant DOS\0..DOS\7 plus a partition large enough to need a bitmap
+extension block, and compares the result byte-for-byte with an
+xdftool-formatted volume of the same geometry (only the root block's
+timestamps/checksum and the DOS\6/7 fstype long are masked).  xdftool then
+opens and lists the partition, and when vamos + out/AmiPart are present the
+m68k binary must produce the identical image.  Runs in CI.

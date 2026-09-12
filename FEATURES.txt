@@ -63,9 +63,17 @@ scripting interface.
  * Add a partition with the "Add" button, or by click-and-dragging in an empty
    area of the partition map.
  * Quick-format a newly added partition immediately (Volume name + "Do not
-   format" option in the Add dialog; VOLNAME= on the CLI / in scripts).  The
-   partition is temp-mounted and formatted by its real filesystem handler, then
-   left mounted - no reboot needed.  Real devices only (not image files).
+   format" option in the Add dialog; VOLNAME= on the CLI / in scripts).
+   CLI and scripts default to AmiPart's INTERNAL formatter (nativefmt.c): it
+   writes the empty volume itself, so it also works on image files, on the
+   Linux build and without the filesystem handler being resident; on the
+   Amiga with a real device the volume is then mounted - no reboot needed.
+   Internal coverage so far: FFS/OFS DOS\0..DOS\7 (any block size); PFS3
+   and SFS fall back to the OS formatter until theirs is written.
+   SAFE (CLI switch / script keyword) forces the OS formatter: the partition
+   is temp-mounted and formatted by its real filesystem handler, then left
+   mounted.  Real devices on the Amiga only.  The GUI Add dialog still uses
+   the OS formatter.
  * PFS3 partitions are tuned right after the quick-format: the maximum
    filename length is raised to 107, and optionally a deldir (hidden
    deleted-file history, up to 32 blocks / 992 files) is enabled - same as
@@ -219,7 +227,9 @@ scripting interface.
      an MBR partition (device must already have an MBR from INIT=NEWMBR).
    - DELMBR NAME=<MBR1..MBR4>: removes an MBR partition.
  * INFO (CLI and script) now includes MBR partition table when present.
- * ADDPART VOLNAME=<label> (CLI and script) quick-formats the new partition.
+ * ADDPART VOLNAME=<label> (CLI and script) quick-formats the new partition
+   with the internal formatter (FFS/OFS; PFS3/SFS fall back to the OS one);
+   SAFE forces the OS formatter (Amiga + real device only).
    DELDIR=<1-32> additionally enables a PFS3 deldir of that many blocks.
  * DRYRUN mode previews actions without writing.
  * FORCE option suppresses confirmation prompts for unattended runs.

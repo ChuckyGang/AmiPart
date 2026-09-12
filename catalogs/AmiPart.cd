@@ -4236,3 +4236,61 @@ Partition %s dumped to\n%s\n\n%s
 MSG_DLG_NAME_BAD_BODY
 The partition needs a name that is not empty\nand not already used by another partition\non this disk (e.g. DH0, DH1, Work).
 ;
+;
+;==========================================================================
+; nativefmt.c - internal formatter + format dispatcher (SAFE keyword)
+;==========================================================================
+MSG_NF_BAD_GEOMETRY_FMT
+invalid geometry (heads %lu, sectors %lu)
+;
+MSG_NF_ONLY_512_SECTORS
+only 512-byte device sectors are supported
+;
+MSG_NF_BAD_BLOCKSIZE_FMT
+unsupported filesystem block size %lu (512..16384, power of two)
+;
+MSG_NF_BAD_NAME
+volume name must be 1-30 characters without ':' or '/'
+;
+MSG_NF_TOO_SMALL_FMT
+partition too small to format (%lu blocks)
+;
+MSG_NF_OUT_OF_MEMORY
+out of memory
+;
+MSG_NF_WRITE_FAIL_FMT
+write failed at partition block %lu (device block %lu)
+;
+MSG_NF_UNSUPPORTED_FMT
+no internal %s formatter yet
+;
+MSG_NF_UNSUPPORTED_IMAGE_FMT
+no internal %s formatter yet, and image files can't be OS-formatted
+;
+MSG_NF_UNSUPPORTED_OS_FAIL_FMT
+no internal %s formatter yet, and the OS formatter failed: %s
+;
+MSG_NF_IMAGE_NO_OS
+image files can't be OS-formatted (SAFE) - drop SAFE to use the internal formatter
+;
+MSG_NF_NOTE_IMAGE_FMT
+Internal %s formatter (image file, not mounted).
+;
+MSG_NF_NOTE_DEVICE_FMT
+Internal %s formatter.
+;
+MSG_NF_NOTE_MOUNTED_FMT
+Internal %s formatter; mounted as %s: (no reboot needed).
+;
+MSG_NF_NOTE_NOT_MOUNTED_FMT
+Internal %s formatter; not mounted live (%s) - available after a reboot.
+;
+MSG_NF_NOTE_OS_SAFE_FMT
+OS %s formatter (SAFE); left mounted.
+;
+MSG_NF_NOTE_OS_FALLBACK_FMT
+No internal %s formatter yet - OS formatter used; left mounted.
+;
+MSG_SCR_SAFE_NEEDS_VOLNAME
+SAFE has no effect without VOLNAME= (nothing is formatted)
+;

@@ -25,8 +25,9 @@ make linux                          # builds host/amipart (plain gcc, no deps)
 Same commands and syntax as the Amiga version (see `cmdline.txt`).
 Raw devices work too — `sudo ./host/amipart DEV=/dev/sdb INFO` — with
 the disk opened exclusively (mounted disks are refused by the kernel).
-Quick-format stays Amiga-only since it needs the real filesystem
-handlers.  See `host/README.txt` for details.
+Quick-format works here too for FFS/OFS partitions (AmiPart's internal
+formatter writes the volume itself; PFS3/SFS still need the Amiga).
+See `host/README.txt` for details.
 
 ---
 

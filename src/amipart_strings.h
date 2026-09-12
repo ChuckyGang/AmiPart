@@ -1377,8 +1377,26 @@
 #define MSG_DC_OK_WARN_FMT           1371
 #define MSG_PV_PC_DUMP_OK_WARN_FMT   1372
 #define MSG_DLG_NAME_BAD_BODY        1373
+#define MSG_NF_BAD_GEOMETRY_FMT      1374
+#define MSG_NF_ONLY_512_SECTORS      1375
+#define MSG_NF_BAD_BLOCKSIZE_FMT     1376
+#define MSG_NF_BAD_NAME              1377
+#define MSG_NF_TOO_SMALL_FMT         1378
+#define MSG_NF_OUT_OF_MEMORY         1379
+#define MSG_NF_WRITE_FAIL_FMT        1380
+#define MSG_NF_UNSUPPORTED_FMT       1381
+#define MSG_NF_UNSUPPORTED_IMAGE_FMT 1382
+#define MSG_NF_UNSUPPORTED_OS_FAIL_FMT 1383
+#define MSG_NF_IMAGE_NO_OS           1384
+#define MSG_NF_NOTE_IMAGE_FMT        1385
+#define MSG_NF_NOTE_DEVICE_FMT       1386
+#define MSG_NF_NOTE_MOUNTED_FMT      1387
+#define MSG_NF_NOTE_NOT_MOUNTED_FMT  1388
+#define MSG_NF_NOTE_OS_SAFE_FMT      1389
+#define MSG_NF_NOTE_OS_FALLBACK_FMT  1390
+#define MSG_SCR_SAFE_NEEDS_VOLNAME   1391
 
-#define MSG_COUNT 1374
+#define MSG_COUNT 1392
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2764,5 +2782,23 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1371 MSG_DC_OK_WARN_FMT */ "Disk copied.\n\n%s",
     /* 1372 MSG_PV_PC_DUMP_OK_WARN_FMT */ "Partition %s dumped to\n%s\n\n%s",
     /* 1373 MSG_DLG_NAME_BAD_BODY */ "The partition needs a name that is not empty\nand not already used by another partition\non this disk (e.g. DH0, DH1, Work).",
+    /* 1374 MSG_NF_BAD_GEOMETRY_FMT */ "invalid geometry (heads %lu, sectors %lu)",
+    /* 1375 MSG_NF_ONLY_512_SECTORS */ "only 512-byte device sectors are supported",
+    /* 1376 MSG_NF_BAD_BLOCKSIZE_FMT */ "unsupported filesystem block size %lu (512..16384, power of two)",
+    /* 1377 MSG_NF_BAD_NAME */ "volume name must be 1-30 characters without ':' or '/'",
+    /* 1378 MSG_NF_TOO_SMALL_FMT */ "partition too small to format (%lu blocks)",
+    /* 1379 MSG_NF_OUT_OF_MEMORY */ "out of memory",
+    /* 1380 MSG_NF_WRITE_FAIL_FMT */ "write failed at partition block %lu (device block %lu)",
+    /* 1381 MSG_NF_UNSUPPORTED_FMT */ "no internal %s formatter yet",
+    /* 1382 MSG_NF_UNSUPPORTED_IMAGE_FMT */ "no internal %s formatter yet, and image files can't be OS-formatted",
+    /* 1383 MSG_NF_UNSUPPORTED_OS_FAIL_FMT */ "no internal %s formatter yet, and the OS formatter failed: %s",
+    /* 1384 MSG_NF_IMAGE_NO_OS */ "image files can't be OS-formatted (SAFE) - drop SAFE to use the internal formatter",
+    /* 1385 MSG_NF_NOTE_IMAGE_FMT */ "Internal %s formatter (image file, not mounted).",
+    /* 1386 MSG_NF_NOTE_DEVICE_FMT */ "Internal %s formatter.",
+    /* 1387 MSG_NF_NOTE_MOUNTED_FMT */ "Internal %s formatter; mounted as %s: (no reboot needed).",
+    /* 1388 MSG_NF_NOTE_NOT_MOUNTED_FMT */ "Internal %s formatter; not mounted live (%s) - available after a reboot.",
+    /* 1389 MSG_NF_NOTE_OS_SAFE_FMT */ "OS %s formatter (SAFE); left mounted.",
+    /* 1390 MSG_NF_NOTE_OS_FALLBACK_FMT */ "No internal %s formatter yet - OS formatter used; left mounted.",
+    /* 1391 MSG_SCR_SAFE_NEEDS_VOLNAME */ "SAFE has no effect without VOLNAME= (nothing is formatted)",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

@@ -232,7 +232,7 @@ RESTOREEXT <file>
 
 ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
          [TYPE=<dostype>] [BOOTPRI=<n>] [BOOTABLE] [ENFORCESIZE]
-         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>]
+         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>] [SAFE]
   Add a partition to the existing RDB, then ask Y/N before writing.
   FORCE skips the write question.  See SCRIPT COMMANDS for full
   description of LOW/HIGH/TYPE/BLOCKSIZE syntax.
@@ -463,7 +463,7 @@ INIT NEWGEO
 
 ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
          [TYPE=<dostype>] [BOOTPRI=<n>] [BOOTABLE] [ENFORCESIZE]
-         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>]
+         [BLOCKSIZE=<n>] [VOLNAME=<label>] [DELDIR=<blocks>] [SAFE]
   Add a partition entry to the in-memory RDB.
   TYPE defaults to DOS3 (0x444F5303) if not specified.
   TYPE can be a hex value (0x444F5303 or $444F5303) or a short
@@ -504,10 +504,24 @@ ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
   the GUI's Advanced dialog if a controller needs different values.
 
   VOLNAME=<label>  Quick-format the new partition after WRITE, with this
-                 volume label.  The partition is temp-mounted and formatted
-                 by its real filesystem handler, then left mounted - no
-                 reboot needed.  Real devices only (not image files).
-                 Omitted or empty = no format.
+                 volume label.  Omitted or empty = no format.
+                 By default AmiPart's INTERNAL formatter writes the empty
+                 volume itself (no filesystem handler involved), so this
+                 works on image files, on the Linux build and with
+                 non-resident filesystems alike.  On the Amiga with a real
+                 device the new volume is then mounted so it is usable
+                 without a reboot.  Internal formatter coverage: FFS/OFS
+                 DOS\0..DOS\7 (all block sizes).  Other filesystems (PFS3,
+                 SFS) fall back to the OS formatter below until their
+                 internal formatter exists.
+
+  SAFE           With VOLNAME: use the OS formatter instead of the internal
+                 one.  The partition is temp-mounted and formatted by its
+                 real filesystem handler (dos.library Format), then left
+                 mounted.  Amiga + real device only: image files and the
+                 Linux build can't use it.  Pick SAFE when you want the
+                 handler's own idea of a fresh volume, e.g. for a
+                 filesystem variant the internal formatter does not know.
 
   DELDIR=<blocks>  PFS3/PDS3 partitions with VOLNAME only: after the
                  format, enable the deldir (a hidden directory that keeps

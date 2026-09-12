@@ -128,6 +128,13 @@ jobs:
         run: |
           cd test && python3 difftest.py 20260912
 
+      # Internal FFS formatter: byte-identical to xdftool for DOS\0..DOS\7
+      # (timestamps masked), readable by xdftool, and identical between the
+      # m68k and the native binary.
+      - name: Internal formatter test
+        run: |
+          cd test && python3 fmttest.py
+
       - name: Raw device backend test (loop device)
         run: |
           cd host

@@ -30,6 +30,7 @@
 #include "mountlist.h"
 #include "script.h"
 #include "quickformat.h"
+#include "nativefmt.h"
 #include "ffsresize.h"
 #include "sfsresize.h"
 #include "pfsresize.h"
@@ -71,7 +72,7 @@ extern struct DosLibrary *DOSBase;
     "ZEROPART/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
-    "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S"
+    "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S,SAFE/S"
 
 enum {
     ARG_LISTDEV = 0,
@@ -131,6 +132,7 @@ enum {
     ARG_DELDIR,
     ARG_COPYDISK,
     ARG_BADBLOCKS,
+    ARG_SAFE,
     ARG_COUNT
 };
 
@@ -1304,7 +1306,8 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
                         const char *high_s,    const char *type_s,
                         const char *bootpri_s, BOOL bootable,
                         const char *volname_s, BOOL enforcesize,
-                        const char *blocksize_s, const char *deldir_s)
+                        const char *blocksize_s, const char *deldir_s,
+                        BOOL safe)
 {
     struct BlockDev *bd;
     struct PartInfo *pi;
@@ -1454,37 +1457,30 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
     cli_puts(rc == RETURN_OK ? GS(MSG_CLI_OK) : GS(MSG_CLI_FAILED));
 
     /* Quick-format the new partition if VOLNAME was given (empty = no format).
-       pi still points at the partition we just added. */
+       pi still points at the partition we just added.  Internal formatter by
+       default, the OS formatter with SAFE (see nativefmt.h). */
     if (rc == RETURN_OK && volname_s && volname_s[0]) {
-        if (bd->backend == BD_FILE) {
-            cli_puts(GS(MSG_CLI_VOLNAME_IGNORED));
+        char err[200], mounted[40], note[240];
+        strncpy(pi->volume_name, volname_s, sizeof(pi->volume_name) - 1);
+        pi->volume_name[sizeof(pi->volume_name) - 1] = '\0';
+        if (deldir_s) {
+            ULONG n = strtoul(deldir_s, NULL, 10);
+            pi->deldir_blocks = (UBYTE)(n > 32 ? 32 : n);
+        }
+        pi->format_safe = safe ? 1 : 0;
+        if (!pi->heads)   pi->heads   = s_rdb.heads;
+        if (!pi->sectors) pi->sectors = s_rdb.sectors;
+        if (Format_Partition(bd, &s_rdb, pi, safe, mounted,
+                             err, sizeof(err), note, sizeof(note))) {
+            DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMATTED_AS),
+                    mounted[0] ? mounted : pi->drive_name, pi->volume_name);
         } else {
-            char err[80], mounted[40], tnote[160];
-            err[0] = '\0'; tnote[0] = '\0';
-            strncpy(pi->volume_name, volname_s, sizeof(pi->volume_name) - 1);
-            pi->volume_name[sizeof(pi->volume_name) - 1] = '\0';
-            if (deldir_s) {
-                ULONG n = strtoul(deldir_s, NULL, 10);
-                pi->deldir_blocks = (UBYTE)(n > 32 ? 32 : n);
-            }
-            if (!pi->heads)   pi->heads   = s_rdb.heads;
-            if (!pi->sectors) pi->sectors = s_rdb.sectors;
-            if (QuickFormat_EnsureHandler(&s_rdb, pi->dos_type,
-                                          err, sizeof(err)) &&
-                QuickFormat_Partition(bd, pi, mounted, err, sizeof(err))) {
-                DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMATTED_AS),
-                        mounted[0] ? mounted : pi->drive_name, pi->volume_name);
-                QuickFormat_PFS3Tune(mounted[0] ? mounted : pi->drive_name,
-                                     pi->dos_type, pi->deldir_blocks,
-                                     tnote, sizeof(tnote));
-            } else {
-                DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMAT_FAILED), err);
-            }
+            DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMAT_FAILED), err);
+        }
+        cli_puts(outbuf);
+        if (note[0]) {
+            DP_SNPRINTF(outbuf, "%s\n", note);
             cli_puts(outbuf);
-            if (tnote[0]) {
-                DP_SNPRINTF(outbuf, "%s\n", tnote);
-                cli_puts(outbuf);
-            }
         }
     }
 
@@ -3512,7 +3508,8 @@ LONG cli_run(void)
                                  (const char *)args[ARG_VOLNAME],
                                  (BOOL)args[ARG_ENFORCESIZE],
                                  (const char *)args[ARG_BLOCKSIZE],
-                                 (const char *)args[ARG_DELDIR]);
+                                 (const char *)args[ARG_DELDIR],
+                                 (BOOL)args[ARG_SAFE]);
 
             if (rc == RETURN_OK && args[ARG_GROW]) {
                 STRPTR *gv = (STRPTR *)args[ARG_GROW];
