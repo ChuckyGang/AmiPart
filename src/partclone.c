@@ -34,6 +34,21 @@
 #define SFS_OC_ID        0x4F424A43UL   /* 'OBJC' object-container id          */
 #define SFS_OC_NAME_OFF  49    /* object[0].name in the root objectcontainer   */
 
+/* FFS_GrowPartition/SFS_GrowPartition report progress via FFS_ProgressFn
+ * (ud, msg); PartClone_PartToPart's caller supplies a MoveProgressFn
+ * (ud, done, total, msg). Adapt the latter to the former, holding done/total
+ * at the values of the copy step the grow is part of. */
+struct pc_ffs_progress_ctx {
+    MoveProgressFn fn;
+    void *ud;
+    ULONG done, total;
+};
+static void pc_ffs_progress(void *ud, const char *msg)
+{
+    struct pc_ffs_progress_ctx *ctx = (struct pc_ffs_progress_ctx *)ud;
+    if (ctx->fn) ctx->fn(ctx->ud, ctx->done, ctx->total, msg);
+}
+
 /* ------------------------------------------------------------------ */
 /* Big-endian header pack/unpack (fixed 512-byte block)               */
 /* ------------------------------------------------------------------ */
@@ -777,10 +792,13 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
         static char growbuf[256];
         growbuf[0] = '\0';
         PROG(src_count, src_count, GS(MSG_PC_UPDATING_SFS));
-        if (!FFS_GrowPartition(dbd, drdb, dst, dst->low_cyl, src_count / spb,
-                               growbuf, progress_fn, progress_ud)) {
-            strncpy(err_buf, growbuf, ebsz - 1); err_buf[ebsz - 1] = '\0';
-            goto out;   /* ok stays FALSE */
+        {
+            struct pc_ffs_progress_ctx pctx = { progress_fn, progress_ud, src_count, src_count };
+            if (!FFS_GrowPartition(dbd, drdb, dst, dst->low_cyl, src_count / spb,
+                                   growbuf, pc_ffs_progress, &pctx)) {
+                strncpy(err_buf, growbuf, ebsz - 1); err_buf[ebsz - 1] = '\0';
+                goto out;   /* ok stays FALSE */
+            }
         }
     } else if (SFS_IsSupportedType(src->dos_type)) {
         /* SFS root blocks store ABSOLUTE byte offsets - shift them from the
@@ -817,10 +835,11 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
                                                                 : 512) * spb_field) / 512;
                     ULONG new_total  = sfs_phys ? (dev_blocks / sfs_phys) : dev_blocks;
                     static char growbuf[256];
+                    struct pc_ffs_progress_ctx pctx = { progress_fn, progress_ud, src_count, src_count };
                     growbuf[0] = '\0';
                     if (!SFS_GrowPartition(dbd, drdb, dst, dst->low_cyl,
                                            new_total, growbuf,
-                                           progress_fn, progress_ud)) {
+                                           pc_ffs_progress, &pctx)) {
                         strncpy(err_buf, growbuf, ebsz - 1);
                         err_buf[ebsz - 1] = '\0';
                         goto out;   /* ok stays FALSE */
