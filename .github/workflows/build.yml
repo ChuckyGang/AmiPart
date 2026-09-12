@@ -210,3 +210,19 @@ jobs:
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
             "linux-out/amipart#amipart-linux-x86_64"
+
+      # Keep every build reachable: the rolling "proto" release above is
+      # replaced on each push, so a dated copy stays behind for users who
+      # need to go back to an earlier build (issue #12).
+      - name: Keep a dated copy of this build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="proto-${{ steps.date.outputs.DATE }}-${GITHUB_SHA::7}"
+          gh release create "$TAG" \
+            --title "AmiPart ${{ steps.date.outputs.DATE }} (${GITHUB_SHA::7})" \
+            --notes "Archived prototype build from commit \`${{ github.sha }}\`. The rolling \`proto\` release always has the newest build." \
+            --prerelease \
+            "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
+            "out/AmiPart.adf#AmiPart-autoboot.adf" \
+            "linux-out/amipart#amipart-linux-x86_64"
