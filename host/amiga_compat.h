@@ -7,14 +7,28 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 
 /* ---- base types ---- */
 typedef unsigned char  UBYTE;
 typedef signed   char  BYTE;
 typedef unsigned short UWORD;
 typedef signed   short WORD;
-typedef unsigned int   ULONG;   /* 32-bit on both m68k and host LP64 int */
+
+/* ULONG/LONG must be exactly 32 bits to match on-disk RDB/DosEnvec struct
+ * layouts and checksums. On an ILP32 host (32-bit Linux/ARM) 'long' already
+ * is 32-bit, so make ULONG/LONG literal aliases of it - every %lu/%lx in the
+ * shared Amiga source then matches with no casts needed. On an LP64 host
+ * (macOS, Linux x86_64/arm64) 'long' is 64-bit, so ULONG/LONG fall back to
+ * 'int' to stay 32-bit; callers cast to (unsigned long)/(long) at %lu/%lx
+ * call sites instead. */
+#if ULONG_MAX == 0xFFFFFFFFUL
+typedef unsigned long  ULONG;
+typedef signed   long  LONG;
+#else
+typedef unsigned int   ULONG;
 typedef signed   int   LONG;
+#endif
 typedef short          BOOL;
 typedef void          *APTR;
 typedef char          *STRPTR;

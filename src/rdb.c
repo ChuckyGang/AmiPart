@@ -836,7 +836,7 @@ void FormatDosType(ULONG dostype, char *buf)
     if (a >= 32 && b >= 32 && c >= 32)
         sprintf(buf, "%c%c%c\\%u", a, b, c, (unsigned)ver);
     else
-        sprintf(buf, "0x%08lX", dostype);
+        sprintf(buf, "0x%08lX", (unsigned long)dostype);
 }
 
 void FormatSize(UQUAD bytes, char *buf)
