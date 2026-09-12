@@ -3280,7 +3280,7 @@ LONG cli_run(void)
         !args[ARG_ZEROPART] && !args[ARG_ADDMBR] && !args[ARG_DELMBR] &&
         !args[ARG_SHRINKINFO] && !args[ARG_SHRINK] &&
         !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE] &&
-        !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS]) {
+        !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS] && !args[ARG_MOUNTLIST]) {
         FreeArgs(rdargs);
         return CLI_NO_ARGS;
     }
@@ -3322,7 +3322,7 @@ LONG cli_run(void)
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
          args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
-         args[ARG_COPYDISK] || args[ARG_BADBLOCKS])) {
+         args[ARG_COPYDISK] || args[ARG_BADBLOCKS] || args[ARG_MOUNTLIST])) {
 
         char  devname[64];
         ULONG unit;
