@@ -81,7 +81,6 @@ long strtol(const char *s, char **end, int base)
 /*           width, zero-pad, left-justify (-)                         */
 /* ------------------------------------------------------------------ */
 
-static void put_char(char **buf, char c) { **buf = c; (*buf)++; }
 
 static int fmt_ulong(char *tmp, unsigned long val, int base, int upper)
 {

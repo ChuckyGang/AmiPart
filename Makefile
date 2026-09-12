@@ -62,8 +62,8 @@ endif
 # --- Common flags ------------------------------------------------------------
 
 CCFLAGS = -g -MP -MMD -m68000 -O2 $(TC_CCFLAGS) \
-          -Wextra -Wno-unused-function -Wno-volatile-register-var \
-          -Wno-int-conversion -Wno-incompatible-pointer-types \
+          -Wall -Wextra -Wno-unused-function -Wno-volatile-register-var \
+          -Wno-pointer-sign -Wno-stringop-truncation \
           -DNO_INLINE_STDARG \
           -fomit-frame-pointer -fno-tree-loop-distribution \
           -fno-exceptions -ffunction-sections -fdata-sections \

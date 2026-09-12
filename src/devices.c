@@ -207,9 +207,14 @@ void Devices_Scan(struct DevNameList *nl)
         BPTR   startup;
 
         startup = dol->dol_misc.dol_handler.dol_Startup;
-        if (!startup) continue;
+        /* Small integers are NOT BPTRs: AUX:, SER:, PIPE: and friends put a
+           plain number here (HDToolBox uses the same < 1024 rule).  Treating
+           one as a pointer reads low memory - an Enforcer hit, or a crash on
+           MMU-protected setups (issue #12 shape). */
+        if ((ULONG)startup < 1024) continue;
         fssm = (struct FileSysStartupMsg *)BADDR(startup);
         if (!fssm) continue;
+        if ((ULONG)fssm->fssm_Device < 256) continue;   /* same rule for the name */
 
         bstr = (UBYTE *)BADDR(fssm->fssm_Device);
         len  = bstr[0];

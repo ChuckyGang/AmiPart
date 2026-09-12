@@ -4,4 +4,6 @@ test/*.hdf
 review.txt
 test/host/hostrdb
 host/amipart
-test/host/hostrdb
+# emulator droppings when the repo dir is mounted as a drive
+Disk.info
+Disk.info.uaem

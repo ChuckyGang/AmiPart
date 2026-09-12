@@ -23,6 +23,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "devices.h"
@@ -600,7 +601,7 @@ static void probe_win_open(struct ProbeWin *pw, const char *devname)
 {
     struct Screen *scr;
     struct Gadget *gctx = NULL;
-    UWORD fh, bor_l, bor_t, bor_r, bor_b, pad, lh, win_w, win_h, rows;
+    UWORD fh, bor_l, bor_t, bor_b, pad, lh, win_w, win_h, rows;
     UWORD btn_h, btn_w, btn_y;
 
     memset(pw, 0, sizeof(*pw));
@@ -615,7 +616,6 @@ static void probe_win_open(struct ProbeWin *pw, const char *devname)
     fh    = scr->Font->ta_YSize;
     bor_l = (UWORD)scr->WBorLeft;
     bor_t = (UWORD)scr->WBorTop + fh + 1;
-    bor_r = (UWORD)scr->WBorRight;
     bor_b = (UWORD)scr->WBorBottom;
     pad   = 4;
     lh    = fh + 2;

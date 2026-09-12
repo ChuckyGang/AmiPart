@@ -23,6 +23,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 #include <proto/graphics.h>
 
 #include "clib.h"
@@ -149,6 +150,7 @@ static void pcp_msg(struct Window *win, const char *title, const char *body)
 static WORD pcp_pick_partition(struct Window *parent, struct RDBInfo *drdb,
                                const char *devname)
 {
+    (void)parent;
     struct Screen *scr;
     APTR   vi = NULL;
     struct Gadget *glist = NULL, *gctx;
@@ -342,6 +344,12 @@ BOOL copy_partition_to_disk(struct Window *win, struct BlockDev *bd,
     memset(&drdb, 0, sizeof(drdb));
     if (!RDB_Read(dest, &drdb) || !drdb.valid) {
         pcp_msg(win, GS(MSG_PCP_TITLE), GS(MSG_PCP_DEST_NO_RDB));
+        BlockDev_Close(dest); return FALSE;
+    }
+    if (drdb.chain_truncated) {
+        /* the clone rewrites the destination table; with entries missing
+           from a damaged chain that would drop them for good */
+        pcp_msg(win, GS(MSG_PCP_TITLE), GS(MSG_PCP_DEST_TRUNC));
         BlockDev_Close(dest); return FALSE;
     }
 

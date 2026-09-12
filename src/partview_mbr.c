@@ -9,6 +9,7 @@
 #include <proto/exec.h>
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 #include <proto/graphics.h>
 
 #include "clib.h"
@@ -68,58 +69,14 @@ static WORD type_to_idx(UBYTE type)
 /* Overlap check                                                        */
 /* ------------------------------------------------------------------ */
 
-static BOOL cyls_overlap(ULONG a_lo, ULONG a_hi, ULONG b_lo, ULONG b_hi)
-{
-    return (BOOL)(a_lo <= b_hi && b_lo <= a_hi);
-}
-
-/* Returns error string, or NULL if the range is valid. */
+/* Returns error string, or NULL if the range is valid.  The rules live in
+   mbr.c (MBR_RangeConflicts) so CLI and script ADDMBR apply the same ones. */
 static const char *validate_mbr_range(ULONG lo, ULONG hi,
                                       const struct RDBInfo *rdb,
                                       const struct MBRInfo *mbr,
                                       UBYTE own_slot)
 {
-    UWORD i;
-
-    if (lo > hi)
-        return GS(MSG_MBR_OVERLAP);
-
-    /* Must not overlap the RDB reserved area (cyl 0 .. lo_cyl-1). */
-    if (rdb && rdb->valid && rdb->lo_cyl > 0) {
-        if (cyls_overlap(lo, hi, 0, rdb->lo_cyl - 1))
-            return GS(MSG_MBR_OVERLAP);
-    } else if (lo == 0) {
-        return GS(MSG_MBR_OVERLAP);
-    }
-
-    /* Must not overlap any RDB partition. */
-    if (rdb && rdb->valid) {
-        for (i = 0; i < rdb->num_parts; i++) {
-            if (cyls_overlap(lo, hi,
-                             rdb->parts[i].low_cyl,
-                             rdb->parts[i].high_cyl))
-                return GS(MSG_MBR_OVERLAP);
-        }
-    }
-
-    /* Must not overlap other MBR partitions. */
-    if (mbr && mbr->valid) {
-        ULONG heads   = (rdb && rdb->valid && rdb->heads   > 0) ? rdb->heads   : 1;
-        ULONG sectors = (rdb && rdb->valid && rdb->sectors > 0) ? rdb->sectors : 1;
-        for (i = 0; i < MBR_MAX_PARTS; i++) {
-            ULONG other_lo, other_hi;
-            if (i == (UWORD)own_slot) continue;
-            if (!mbr->parts[i].present) continue;
-            other_lo = MBR_LBAToCyl(mbr->parts[i].lba_start, heads, sectors);
-            other_hi = MBR_LBAToCyl(
-                mbr->parts[i].lba_start + mbr->parts[i].lba_size - 1,
-                heads, sectors);
-            if (cyls_overlap(lo, hi, other_lo, other_hi))
-                return GS(MSG_MBR_OVERLAP);
-        }
-    }
-
-    return NULL;
+    return MBR_RangeConflicts(lo, hi, rdb, mbr, own_slot) ? GS(MSG_MBR_OVERLAP) : NULL;
 }
 
 /* ------------------------------------------------------------------ */
@@ -374,6 +331,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                             struct MBRInfo *mbr, const struct RDBInfo *rdb,
                             UBYTE own_slot, struct MBRPart *result)
 {
+    (void)bd;
     struct Screen   *scr;
     APTR             vi;
     struct Gadget   *glist = NULL, *prev;
@@ -463,7 +421,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                 { WA_Title,     (ULONG)(is_add ? GS(MSG_MBR_DLG_ADD_TITLE)
                                                : GS(MSG_MBR_DLG_EDIT_TITLE)) },
                 { WA_PubScreen, (ULONG)scr },
-                { WA_Gadgets,   NULL },
+                { WA_Gadgets,   0 },
                 { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                                 IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_CLOSEGADGET |

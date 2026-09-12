@@ -23,6 +23,7 @@
 #include "devices.h"
 #include "diskselect.h"
 #include "imagecopy.h"
+#include "quickformat.h"
 #include "locale_support.h"
 #include "partview_internal.h"
 #include "progresswin.h"
@@ -164,10 +165,21 @@ void copy_whole_disk_to_disk(struct Window *win, struct BlockDev *bd,
 
     {
         static struct ProgressWin prog;
-        char  errbuf[80];
+        char  errbuf[160];
         char  done_msg[300];
         BOOL  ok;
 
+        { char mn[160];
+          if (MountedPartitionsOnDevice(dest, mn, sizeof(mn))) {
+              struct EasyStruct mes;
+              DP_SNPRINTF(done_msg, GS(MSG_DC_DEST_MOUNTED_FMT), mn);
+              mes.es_StructSize   = sizeof(mes);
+              mes.es_Flags        = 0;
+              mes.es_Title        = (UBYTE *)GS(MSG_DC_TITLE);
+              mes.es_TextFormat   = (UBYTE *)done_msg;
+              mes.es_GadgetFormat = (UBYTE *)GS(MSG_DC_MOUNTED_GADGETS);
+              if (EasyRequest(win, &mes, NULL) != 1) { BlockDev_Close(dest); return; }
+          } }
         snprintf(prog.title, sizeof(prog.title), GS(MSG_DC_PROGRESS_TITLE_FMT), dest_devname);
         ProgressWin_Open(&prog, prog.title);
 
@@ -176,7 +188,10 @@ void copy_whole_disk_to_disk(struct Window *win, struct BlockDev *bd,
                                   errbuf, sizeof(errbuf));
         ProgressWin_Close(&prog);
 
-        if (ok) {
+        if (ok && errbuf[0]) {   /* completed, but with zero-filled holes */
+            DP_SNPRINTF(done_msg, GS(MSG_DC_OK_WARN_FMT), errbuf);
+            show_ok(win, GS(MSG_DC_TITLE), done_msg);
+        } else if (ok) {
             show_ok(win, GS(MSG_DC_TITLE), GS(MSG_DC_OK));
         } else if (prog.cancelled) {
             show_ok(win, GS(MSG_DC_TITLE), GS(MSG_DC_CANCELLED));

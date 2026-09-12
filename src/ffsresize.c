@@ -206,12 +206,12 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG nlongs     = eff_bsz / 4;
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_FFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         goto done;
     }
     if (dev_bsz != 512) {
-        sprintf(err_buf, GS(MSG_FFS_ONLY_512_SECTORS),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ONLY_512_SECTORS),
                 (unsigned long)dev_bsz);
         goto done;
     }
@@ -223,7 +223,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
        may show "Not a DOS disk" until rewritten with a proper boot;
        data-only partitions are unaffected. */
     if (eff_bsz < 512 || eff_bsz > 16384 || (eff_bsz & (eff_bsz - 1)) != 0) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_FFS_UNSUPPORTED_BLOCKSIZE),
                 (unsigned long)eff_bsz, (unsigned long)spb);
         goto done;
@@ -257,13 +257,13 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG reserved = (pi->reserved_blks > 0) ? pi->reserved_blks : 2UL;
 
     if (old_blocks <= reserved) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_FFS_PART_TOO_SMALL),
                 (unsigned long)old_blocks, (unsigned long)reserved);
         goto done;
     }
     if (new_blocks <= reserved) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_FFS_NEWPART_TOO_SMALL),
                 (unsigned long)new_blocks, (unsigned long)reserved);
         goto done;
@@ -286,7 +286,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     bm_blknums = (ULONG *)AllocVec(max_bm_list * sizeof(ULONG),
                                     MEMF_PUBLIC | MEMF_CLEAR);
     if (!boot_buf || !root_buf || !bm_buf || !bm_blknums) {
-        sprintf(err_buf, GS(MSG_FFS_OUT_OF_MEMORY));
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_OUT_OF_MEMORY));
         goto done;
     }
 
@@ -308,12 +308,12 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     FFS_PROGRESS(GS(MSG_FFS_PROG_READING_BOOT));
 
     if (!read_fs_block(bd, part_abs, 0, spb, boot_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_BOOT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_BOOT),
                 (unsigned long)part_abs);
         goto done;
     }
     if ((boot_buf[BL_DOSTYPE] & 0xFFFFFF00UL) != 0x444F5300UL) {
-        sprintf(err_buf, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
                 (unsigned long)boot_buf[BL_DOSTYPE]);
         goto done;
     }
@@ -331,13 +331,13 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     FFS_PROGRESS(GS(MSG_FFS_PROG_READING_ROOT));
 
     if (!read_fs_block(bd, part_abs, root_blk, spb, root_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_ROOT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_ROOT),
                 (unsigned long)(part_abs + root_blk * spb),
                 (unsigned long)root_blk);
         goto done;
     }
     if (root_buf[RL_TYPE] != T_SHORT || root_buf[RL_SEC_TYPE(nlongs)] != ST_ROOT) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_FFS_ROOT_WRONG_TYPE),
                 (unsigned long)root_buf[RL_TYPE],
                 (unsigned long)root_buf[RL_SEC_TYPE(nlongs)],
@@ -354,13 +354,13 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG csum = ffs_checksum(root_buf, nlongs);
         root_buf[RL_CHKSUM] = save;
         if (csum != save) {
-            sprintf(err_buf, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
                     (unsigned long)save, (unsigned long)csum);
             goto done;
         }
     }
     if (root_buf[RL_BM_FLAG(nlongs)] != BM_VALID) {
-        sprintf(err_buf, GS(MSG_FFS_BITMAP_NOT_VALID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BITMAP_NOT_VALID),
                 (unsigned long)root_buf[RL_BM_FLAG(nlongs)]);
         goto done;
     }
@@ -389,7 +389,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG ext_blk = root_buf[RL_BM_EXT(nlongs)];
         while (ext_blk != 0 && ext_count < MAX_EXT_CHAIN) {
             if (!read_fs_block(bd, part_abs, ext_blk, spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_EXT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_EXT),
                         (unsigned long)(part_abs + ext_blk * spb));
                 goto done;
             }
@@ -407,7 +407,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     }
 
     if (bm_count < old_bm_need) {
-        sprintf(err_buf, GS(MSG_FFS_BITMAP_CHAIN_SHORT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BITMAP_CHAIN_SHORT),
                 (unsigned long)bm_count, (unsigned long)old_bm_need);
         goto done;
     }
@@ -436,7 +436,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         num_new_ext = (overflow + ext_slots - 1) / ext_slots;
         need_new_ext = TRUE;
         if (num_new_ext > MAX_EXT_CHAIN) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_FFS_TOO_MANY_EXT),
                     (unsigned long)num_new_ext, (unsigned)MAX_EXT_CHAIN);
             goto done;
@@ -447,7 +447,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         for (ULONG ei = 0; ei < num_new_ext; ei++) {
             new_ext_relblk[ei] = reserved + (new_bm_need - 1) * bpbm + 1 + ei;
             if (new_ext_relblk[ei] >= new_blocks) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_NO_ROOM_EXT),
                         (unsigned long)ei);
                 goto done;
@@ -471,7 +471,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
         if (old_blocks < free_end) {
             if (!read_fs_block(bd, part_abs, bm_blknums[bm_idx], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_LAST_BM),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_LAST_BM),
                         (unsigned long)bm_blknums[bm_idx]);
                 goto done;
             }
@@ -484,7 +484,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             bm_buf[0] = 0;
             bm_buf[0] = ffs_checksum(bm_buf, nlongs);
             if (!write_fs_block(bd, part_abs, bm_blknums[bm_idx], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_WRITE_UPDATED_BM_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_UPDATED_BM_FAIL),
                         (unsigned long)bm_blknums[bm_idx]);
                 goto done;
             }
@@ -541,7 +541,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         bm_buf[0] = ffs_checksum(bm_buf, nlongs);
 
         if (!write_fs_block(bd, part_abs, abs_blk, spb, bm_buf)) {
-            sprintf(err_buf, GS(MSG_FFS_WRITE_NEW_BM_FAIL),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_NEW_BM_FAIL),
                     (unsigned long)abs_blk,
                     (unsigned long)(part_abs + abs_blk * spb));
             goto done;
@@ -568,7 +568,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* Existing last ext block free slots */
         if (added < num_new_bm && ext_count > 0) {
             if (!read_fs_block(bd, part_abs, ext_relblk[ext_count - 1], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_REREAD_EXT_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_REREAD_EXT_FAIL),
                         (unsigned long)ext_relblk[ext_count - 1]);
                 goto done;
             }
@@ -581,7 +581,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             bm_buf[nlongs - 1] = need_new_ext ? new_ext_relblk[0] : 0;
             /* ext blocks have no checksum field */
             if (!write_fs_block(bd, part_abs, ext_relblk[ext_count - 1], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_WRITE_UPDATED_EXT_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_UPDATED_EXT_FAIL),
                         (unsigned long)ext_relblk[ext_count - 1]);
                 goto done;
             }
@@ -601,7 +601,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 bm_buf[nlongs - 1] = (ei + 1 < num_new_ext) ? new_ext_relblk[ei + 1] : 0;
                 /* ext blocks have no checksum field */
                 if (!write_fs_block(bd, part_abs, new_ext_relblk[ei], spb, bm_buf)) {
-                    sprintf(err_buf, GS(MSG_FFS_WRITE_NEW_EXT_FAIL),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_NEW_EXT_FAIL),
                             (unsigned long)new_ext_relblk[ei],
                             (unsigned long)(part_abs + new_ext_relblk[ei] * spb));
                     goto done;
@@ -644,7 +644,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
              off    = (block - reserved) % bpbm
            Using any other formula selects the WRONG bit. */
         if (new_root < reserved) {
-            sprintf(err_buf, GS(MSG_FFS_NEWROOT_LT_RESERVED),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_NEWROOT_LT_RESERVED),
                     (unsigned long)new_root, (unsigned long)reserved);
             goto done;
         }
@@ -654,7 +654,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                               ? (root_blk - reserved) / bpbm : 0;
 
             if (bm_idx_nr >= bm_count) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_NEWROOT_BM_OOR),
                         (unsigned long)bm_idx_nr, (unsigned long)bm_count);
                 goto done;
@@ -672,7 +672,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                The "is target free?" sanity check is only meaningful when we
                are relocating to a new position; skip it for in-place. */
             if (!read_fs_block(bd, part_abs, bm_blknums[bm_idx_nr], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_READ_BM_RELOC_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_READ_BM_RELOC_FAIL),
                         (unsigned long)bm_blknums[bm_idx_nr]);
                 goto done;
             }
@@ -690,7 +690,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                    over the root.  Same remedy as the shrink: pick a
                    slightly different size. */
                 if (new_root != root_blk && !BM_TESTFREE(bm_buf, off)) {
-                    sprintf(err_buf, GS(MSG_FFS_SHR_TARGET_USED_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TARGET_USED_FMT),
                             (unsigned long)new_root);
                     goto done;
                 }
@@ -705,7 +705,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             bm_buf[0] = 0;
             bm_buf[0] = ffs_checksum(bm_buf, nlongs);
             if (!write_fs_block(bd, part_abs, bm_blknums[bm_idx_nr], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_WRITE_BM_RELOC_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_BM_RELOC_FAIL),
                         (unsigned long)bm_blknums[bm_idx_nr]);
                 goto done;
             }
@@ -717,7 +717,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                        just skip freeing it (it stays "used" which is safe) */
                 } else {
                     if (!read_fs_block(bd, part_abs, bm_blknums[bm_idx_or], spb, bm_buf)) {
-                        sprintf(err_buf, GS(MSG_FFS_READ_BM_FREEROOT_FAIL),
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_READ_BM_FREEROOT_FAIL),
                                 (unsigned long)bm_blknums[bm_idx_or]);
                         goto done;
                     }
@@ -728,7 +728,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                     bm_buf[0] = 0;
                     bm_buf[0] = ffs_checksum(bm_buf, nlongs);
                     if (!write_fs_block(bd, part_abs, bm_blknums[bm_idx_or], spb, bm_buf)) {
-                        sprintf(err_buf, GS(MSG_FFS_WRITE_BM_FREEROOT_FAIL),
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_BM_FREEROOT_FAIL),
                                 (unsigned long)bm_blknums[bm_idx_or]);
                         goto done;
                     }
@@ -768,7 +768,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         root_buf[RL_CHKSUM]          = 0;
         root_buf[RL_CHKSUM]          = ffs_checksum(root_buf, nlongs);
         if (!write_fs_block(bd, part_abs, new_root, spb, root_buf)) {
-            sprintf(err_buf, GS(MSG_FFS_WRITE_ROOT_FAIL),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_ROOT_FAIL),
                     (unsigned long)new_root,
                     (unsigned long)(part_abs + new_root * spb));
             goto done;
@@ -783,7 +783,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         {
             ULONG save_cs = root_buf[RL_CHKSUM];
             if (!read_fs_block(bd, part_abs, new_root, spb, bm_buf)) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_WRITE_READBACK_FAIL),
                         (unsigned long)(part_abs + new_root * spb));
                 goto done;
@@ -791,7 +791,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             if (bm_buf[RL_TYPE]              != T_SHORT       ||
                 bm_buf[RL_SEC_TYPE(nlongs)]  != (ULONG)ST_ROOT ||
                 bm_buf[RL_CHKSUM]            != save_cs) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_WRITE_VERIFY_FAIL),
                         (unsigned long)(part_abs + new_root * spb),
                         inh_name);
@@ -838,7 +838,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 bm_buf[RL_CHKSUM]       = 0;
                 bm_buf[RL_CHKSUM]       = ffs_checksum(bm_buf, nlongs);
                 if (!write_fs_block(bd, part_abs, blkno, spb, bm_buf)) {
-                    sprintf(err_buf,
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                             GS(MSG_FFS_UPDATE_PARENT_FAIL),
                             (unsigned long)blkno,
                             (unsigned long)(part_abs + blkno * spb));
@@ -873,7 +873,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         boot_buf[1] = ~bbsum;
     }
     if (!write_fs_block(bd, part_abs, 0, spb, boot_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_UPDATE_BOOT_FAIL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_UPDATE_BOOT_FAIL),
                 (unsigned long)part_abs);
         goto done;
     }
@@ -913,7 +913,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             bm_buf[RL_CHKSUM]          = ffs_checksum(bm_buf, nlongs);
             if (!write_fs_block(bd, part_abs, root_blk, spb, bm_buf)) {
                 /* Non-fatal - log in err_buf temporarily but don't abort */
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_STAMP_OLDROOT_WARN),
                         (unsigned long)root_blk);
                 /* We still set ok=TRUE below - the new filesystem structure
@@ -934,7 +934,7 @@ done:
     if (ok && new_root != 0 && bm_buf) {
         if (!read_fs_block(bd, part_abs, new_root, spb, bm_buf)) {
             ok = FALSE;
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_FFS_ROOT_READBACK_PRE_FAIL),
                     (unsigned long)(part_abs + new_root * spb));
         } else {
@@ -947,7 +947,7 @@ done:
                 bm_buf[4]                    != 0        ||
                 bm_buf[RL_SEC_TYPE(nlongs)]  != (ULONG)ST_ROOT) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_CORRUPTED_PHASE9),
                         (unsigned long)(part_abs + new_root * spb),
                         (unsigned long)bm_buf[RL_TYPE],
@@ -956,7 +956,7 @@ done:
                         (unsigned long)bm_buf[RL_SEC_TYPE(nlongs)]);
             } else if (calc_cs != save_cs) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_CHECKSUM_PRE_WRONG),
                         (unsigned long)save_cs, (unsigned long)calc_cs,
                         (unsigned long)(part_abs + new_root * spb));
@@ -973,8 +973,10 @@ done:
        triggered by the restart.  FFS validator is asynchronous - it may
        not run until several scheduler ticks after Inhibit release.
        5 seconds is ample for any partition size on real or emulated hw. */
-    FFS_PROGRESS(GS(MSG_FFS_PROG_WAITING_RESUME));
-    Delay(250);
+    if (did_inhibit) {              /* nothing to wait for on an image / unmounted volume */
+        FFS_PROGRESS(GS(MSG_FFS_PROG_WAITING_RESUME));
+        Delay(250);
+    }
 
     /* ------------------------------------------------------------------ */
     /* Stage 2: verify root is still intact AFTER FFS has resumed         */
@@ -984,7 +986,7 @@ done:
     if (ok && new_root != 0 && bm_buf) {
         if (!read_fs_block(bd, part_abs, new_root, spb, bm_buf)) {
             ok = FALSE;
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_FFS_ROOT_READBACK_POST_FAIL),
                     (unsigned long)(part_abs + new_root * spb));
         } else {
@@ -997,7 +999,7 @@ done:
                 bm_buf[4]                    != 0        ||
                 bm_buf[RL_SEC_TYPE(nlongs)]  != (ULONG)ST_ROOT) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_CORRUPTED_POST),
                         (unsigned long)bm_buf[RL_TYPE],
                         (unsigned long)bm_buf[1],
@@ -1006,7 +1008,7 @@ done:
                         (unsigned long)(part_abs + new_root * spb));
             } else if (calc_cs != save_cs) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_ROOT_CHECKSUM_POST_CORRUPT),
                         (unsigned long)save_cs, (unsigned long)calc_cs,
                         (unsigned long)(part_abs + new_root * spb));
@@ -1023,7 +1025,7 @@ done:
     if (ok && nr_bm_blknum != 0 && bm_buf) {
         if (!read_fs_block(bd, part_abs, nr_bm_blknum, spb, bm_buf)) {
             ok = FALSE;
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_FFS_BM_UNREADABLE_POST),
                     (unsigned long)nr_bm_blknum,
                     (unsigned long)(part_abs + nr_bm_blknum * spb));
@@ -1034,14 +1036,14 @@ done:
             bm_buf[0] = save_cs;
             if (calc_cs != save_cs) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_BM_CHECKSUM_BAD_POST),
                         (unsigned long)nr_bm_blknum,
                         (unsigned long)save_cs, (unsigned long)calc_cs,
                         (unsigned long)new_root);
             } else if (BM_TESTFREE(bm_buf, nr_bm_off)) {
                 ok = FALSE;
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_BM_NEWROOT_FREE_POST),
                         (unsigned long)nr_bm_blknum,
                         (unsigned long)new_root,
@@ -1057,10 +1059,11 @@ done:
            Hash table is L[6..77] (72 entries) in the root block. */
         ULONG ht_entries = 0;
         if (root_buf) {
-            for (ULONG i = 0; i < 72; i++)
+            /* hash table = longs 6 .. (L-51): 72 entries at 512 bytes, 200 at 1024 */
+            for (ULONG i = 0; i < (spb * 512UL) / 4UL - 56UL; i++)
                 if (root_buf[6 + i]) ht_entries++;
         }
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_FFS_SUCCESS_DIAG),
                 (unsigned long)root_blk,
                 (unsigned long)new_root,
@@ -1140,16 +1143,16 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG nlongs  = eff_bsz / 4;
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_FFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
     if (dev_bsz != 512) {
-        sprintf(err_buf, GS(MSG_FFS_ONLY_512_SECTORS), (unsigned long)dev_bsz);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ONLY_512_SECTORS), (unsigned long)dev_bsz);
         return FALSE;
     }
     if (eff_bsz < 512 || eff_bsz > 16384 || (eff_bsz & (eff_bsz - 1)) != 0) {
-        sprintf(err_buf, GS(MSG_FFS_UNSUPPORTED_BLOCKSIZE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_UNSUPPORTED_BLOCKSIZE),
                 (unsigned long)eff_bsz, (unsigned long)spb);
         return FALSE;
     }
@@ -1160,7 +1163,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG reserved = (pi->reserved_blks > 0) ? pi->reserved_blks : 2UL;
 
     if (blocks <= reserved) {
-        sprintf(err_buf, GS(MSG_FFS_PART_TOO_SMALL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_PART_TOO_SMALL),
                 (unsigned long)blocks, (unsigned long)reserved);
         return FALSE;
     }
@@ -1178,7 +1181,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     meta     = (ULONG *)AllocVec((max_bm_list + MAX_EXT_CHAIN + 1) *
                                  sizeof(ULONG), MEMF_PUBLIC | MEMF_CLEAR);
     if (!boot_buf || !root_buf || !bm_buf || !bm_list || !meta) {
-        sprintf(err_buf, GS(MSG_FFS_OUT_OF_MEMORY));
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_OUT_OF_MEMORY));
         goto done;
     }
 
@@ -1187,11 +1190,11 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     /* Boot block -> root block number (same fallback rule as grow) */
     if (!read_fs_block(bd, part_abs, 0, spb, boot_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_BOOT), (unsigned long)part_abs);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_BOOT), (unsigned long)part_abs);
         goto done;
     }
     if ((boot_buf[BL_DOSTYPE] & 0xFFFFFF00UL) != 0x444F5300UL) {
-        sprintf(err_buf, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
                 (unsigned long)boot_buf[BL_DOSTYPE]);
         goto done;
     }
@@ -1200,14 +1203,14 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
         root_blk = blocks / 2;
 
     if (!read_fs_block(bd, part_abs, root_blk, spb, root_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_ROOT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_ROOT),
                 (unsigned long)(part_abs + root_blk * spb),
                 (unsigned long)root_blk);
         goto done;
     }
     if (root_buf[RL_TYPE] != T_SHORT ||
         root_buf[RL_SEC_TYPE(nlongs)] != ST_ROOT) {
-        sprintf(err_buf, GS(MSG_FFS_ROOT_WRONG_TYPE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_WRONG_TYPE),
                 (unsigned long)root_buf[RL_TYPE],
                 (unsigned long)root_buf[RL_SEC_TYPE(nlongs)],
                 (unsigned long)part_abs,
@@ -1223,7 +1226,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG csum = ffs_checksum(root_buf, nlongs);
         root_buf[RL_CHKSUM] = save;
         if (csum != save) {
-            sprintf(err_buf, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
                     (unsigned long)save, (unsigned long)csum);
             goto done;
         }
@@ -1231,7 +1234,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* The bitmap is the sole source of truth here - refuse when FFS says
        it is not valid, exactly like the grow path. */
     if (root_buf[RL_BM_FLAG(nlongs)] != BM_VALID) {
-        sprintf(err_buf, GS(MSG_FFS_BITMAP_NOT_VALID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BITMAP_NOT_VALID),
                 (unsigned long)root_buf[RL_BM_FLAG(nlongs)]);
         goto done;
     }
@@ -1249,7 +1252,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG chain = 0;
         while (ext_blk != 0 && chain < MAX_EXT_CHAIN) {
             if (!read_fs_block(bd, part_abs, ext_blk, spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_EXT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_EXT),
                         (unsigned long)(part_abs + ext_blk * spb));
                 goto done;
             }
@@ -1264,7 +1267,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
         }
     }
     if (bm_count < need_bm) {
-        sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bm_count);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bm_count);
         goto done;
     }
 
@@ -1275,12 +1278,12 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     BOOL  any_used = FALSE;
     for (ULONG bi = 0; bi < need_bm; bi++) {
         if (!read_fs_block(bd, part_abs, bm_list[bi], spb, bm_buf)) {
-            sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                     (unsigned long)bm_list[bi]);
             goto done;
         }
         if (ffs_checksum(bm_buf, nlongs) != 0) {
-            sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                     (unsigned long)bm_list[bi]);
             goto done;
         }
@@ -1322,7 +1325,7 @@ BOOL FFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
                 ULONG bi2 = (blk - reserved) / bpbm;
                 if (bi2 != cached_bi) {
                     if (!read_fs_block(bd, part_abs, bm_list[bi2], spb, bm_buf)) {
-                        sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                                 (unsigned long)bm_list[bi2]);
                         goto done;
                     }
@@ -1409,6 +1412,7 @@ static ULONG ffs_shr_find_free(struct BlockDev *bd, ULONG part_abs,
                                const ULONG *claimed, ULONG nclaimed,
                                ULONG skip1, ULONG skip2, ULONG *scr)
 {
+    (void)nlongs;
     ULONG cached = 0xFFFFFFFFUL;
     for (int pass = 0; pass < 2; pass++) {
         ULONG b   = (pass == 0) ? hint : (hint > reserved ? hint - 1 : reserved);
@@ -1461,16 +1465,16 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG nlongs  = eff_bsz / 4;
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_FFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
     if (dev_bsz != 512) {
-        sprintf(err_buf, GS(MSG_FFS_ONLY_512_SECTORS), (unsigned long)dev_bsz);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ONLY_512_SECTORS), (unsigned long)dev_bsz);
         return FALSE;
     }
     if (eff_bsz < 512 || eff_bsz > 16384 || (eff_bsz & (eff_bsz - 1)) != 0) {
-        sprintf(err_buf, GS(MSG_FFS_UNSUPPORTED_BLOCKSIZE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_UNSUPPORTED_BLOCKSIZE),
                 (unsigned long)eff_bsz, (unsigned long)spb);
         return FALSE;
     }
@@ -1482,12 +1486,12 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG reserved   = (pi->reserved_blks > 0) ? pi->reserved_blks : 2UL;
 
     if (new_blocks >= old_blocks) {
-        sprintf(err_buf, GS(MSG_FFS_PART_TOO_SMALL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_PART_TOO_SMALL),
                 (unsigned long)new_blocks, (unsigned long)old_blocks);
         return FALSE;
     }
     if (new_blocks <= reserved + 4) {
-        sprintf(err_buf, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
                 (unsigned long)new_blocks);
         return FALSE;
     }
@@ -1511,7 +1515,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                                    sizeof(ULONG), MEMF_PUBLIC | MEMF_CLEAR);
     if (!boot_buf || !root_buf || !bm_buf || !scr_buf ||
         !bm_blknums || !final_bm || !claimed || !meta) {
-        sprintf(err_buf, GS(MSG_FFS_OUT_OF_MEMORY));
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_OUT_OF_MEMORY));
         goto done;
     }
 
@@ -1522,11 +1526,11 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* ---- Phase 1/2: boot + root (old geometry), same rules as grow ---- */
     FFS_SPROG(GS(MSG_FFS_PROG_READING_BOOT));
     if (!read_fs_block(bd, part_abs, 0, spb, boot_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_BOOT), (unsigned long)part_abs);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_BOOT), (unsigned long)part_abs);
         goto done;
     }
     if ((boot_buf[BL_DOSTYPE] & 0xFFFFFF00UL) != 0x444F5300UL) {
-        sprintf(err_buf, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BOOT_DOSTYPE_MISMATCH),
                 (unsigned long)boot_buf[BL_DOSTYPE]);
         goto done;
     }
@@ -1536,14 +1540,14 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     FFS_SPROG(GS(MSG_FFS_PROG_READING_ROOT));
     if (!read_fs_block(bd, part_abs, root_blk, spb, root_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_ROOT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_ROOT),
                 (unsigned long)(part_abs + root_blk * spb),
                 (unsigned long)root_blk);
         goto done;
     }
     if (root_buf[RL_TYPE] != T_SHORT ||
         root_buf[RL_SEC_TYPE(nlongs)] != ST_ROOT) {
-        sprintf(err_buf, GS(MSG_FFS_ROOT_WRONG_TYPE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_WRONG_TYPE),
                 (unsigned long)root_buf[RL_TYPE],
                 (unsigned long)root_buf[RL_SEC_TYPE(nlongs)],
                 (unsigned long)part_abs,
@@ -1559,13 +1563,13 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG csum = ffs_checksum(root_buf, nlongs);
         root_buf[RL_CHKSUM] = save;
         if (csum != save) {
-            sprintf(err_buf, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_CHECKSUM_INVALID),
                     (unsigned long)save, (unsigned long)csum);
             goto done;
         }
     }
     if (root_buf[RL_BM_FLAG(nlongs)] != BM_VALID) {
-        sprintf(err_buf, GS(MSG_FFS_BITMAP_NOT_VALID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_BITMAP_NOT_VALID),
                 (unsigned long)root_buf[RL_BM_FLAG(nlongs)]);
         goto done;
     }
@@ -1583,7 +1587,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG ext_blk = root_buf[RL_BM_EXT(nlongs)];
         while (ext_blk != 0 && ext_count < MAX_EXT_CHAIN) {
             if (!read_fs_block(bd, part_abs, ext_blk, spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_CANNOT_READ_EXT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_CANNOT_READ_EXT),
                         (unsigned long)(part_abs + ext_blk * spb));
                 goto done;
             }
@@ -1599,7 +1603,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         }
     }
     if (bm_count < old_bm_need) {
-        sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bm_count);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bm_count);
         goto done;
     }
     ffs_sort_ulongs(meta, meta_n);
@@ -1610,12 +1614,12 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG first_idx = (new_blocks - reserved) / bpbm;
         for (ULONG bi = first_idx; bi < old_bm_need; bi++) {
             if (!read_fs_block(bd, part_abs, bm_blknums[bi], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                         (unsigned long)bm_blknums[bi]);
                 goto done;
             }
             if (ffs_checksum(bm_buf, nlongs) != 0) {
-                sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                         (unsigned long)bm_blknums[bi]);
                 goto done;
             }
@@ -1631,7 +1635,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                     if (blk < new_blocks) continue;
                     if (!(v & (1UL << k)) &&
                         !ffs_in_sorted(meta, meta_n, blk)) {
-                        sprintf(err_buf, GS(MSG_FFS_SHR_TAIL_USED_FMT),
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TAIL_USED_FMT),
                                 (unsigned long)blk);
                         goto done;
                     }
@@ -1657,7 +1661,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                                             claimed, nclaimed,
                                             new_root, root_blk, scr_buf);
                 if (p == 0) {
-                    sprintf(err_buf, GS(MSG_FFS_SHR_NO_FREE_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_NO_FREE_FMT),
                             (unsigned long)bm_blknums[k]);
                     goto done;
                 }
@@ -1677,7 +1681,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                                             claimed, nclaimed,
                                             new_root, root_blk, scr_buf);
                 if (p == 0) {
-                    sprintf(err_buf, GS(MSG_FFS_SHR_NO_FREE_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_NO_FREE_FMT),
                             (unsigned long)(e < ext_count ? ext_relblk[e] : 0));
                     goto done;
                 }
@@ -1693,12 +1697,12 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             ULONG idx = (new_root - reserved) / bpbm;
             if (idx >= old_bm_need ||
                 !read_fs_block(bd, part_abs, bm_blknums[idx], spb, scr_buf)) {
-                sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                         (unsigned long)(idx < old_bm_need ? bm_blknums[idx] : 0));
                 goto done;
             }
             if (!BM_TESTFREE(scr_buf, (new_root - reserved) % bpbm)) {
-                sprintf(err_buf, GS(MSG_FFS_SHR_TARGET_USED_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TARGET_USED_FMT),
                         (unsigned long)new_root);
                 goto done;
             }
@@ -1713,7 +1717,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         FFS_SPROG(GS(MSG_FFS_PROG_SHR_BITMAP));
         for (ULONG k = 0; k < new_bm_need; k++) {
             if (!read_fs_block(bd, part_abs, bm_blknums[k], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                         (unsigned long)bm_blknums[k]);
                 goto done;
             }
@@ -1731,7 +1735,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             bm_buf[0] = 0;
             bm_buf[0] = ffs_checksum(bm_buf, nlongs);
             if (!write_fs_block(bd, part_abs, final_bm[k], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_WRITE_NEW_BM_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_NEW_BM_FAIL),
                         (unsigned long)final_bm[k],
                         (unsigned long)(part_abs + final_bm[k] * spb));
                 goto done;
@@ -1747,7 +1751,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 bm_buf[s] = final_bm[src + s];
             bm_buf[nlongs - 1] = (e + 1 < new_num_ext) ? final_ext[e + 1] : 0;
             if (!write_fs_block(bd, part_abs, final_ext[e], spb, bm_buf)) {
-                sprintf(err_buf, GS(MSG_FFS_WRITE_NEW_EXT_FAIL),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_NEW_EXT_FAIL),
                         (unsigned long)final_ext[e],
                         (unsigned long)(part_abs + final_ext[e] * spb));
                 goto done;
@@ -1770,7 +1774,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     root_buf[RL_CHKSUM]          = 0;
     root_buf[RL_CHKSUM]          = ffs_checksum(root_buf, nlongs);
     if (!write_fs_block(bd, part_abs, new_root, spb, root_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_WRITE_ROOT_FAIL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_WRITE_ROOT_FAIL),
                 (unsigned long)new_root,
                 (unsigned long)(part_abs + new_root * spb));
         goto done;
@@ -1778,14 +1782,14 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     {
         ULONG save_cs = root_buf[RL_CHKSUM];
         if (!read_fs_block(bd, part_abs, new_root, spb, bm_buf)) {
-            sprintf(err_buf, GS(MSG_FFS_ROOT_WRITE_READBACK_FAIL),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_WRITE_READBACK_FAIL),
                     (unsigned long)(part_abs + new_root * spb));
             goto done;
         }
         if (bm_buf[RL_TYPE]             != T_SHORT        ||
             bm_buf[RL_SEC_TYPE(nlongs)] != (ULONG)ST_ROOT ||
             bm_buf[RL_CHKSUM]           != save_cs) {
-            sprintf(err_buf, GS(MSG_FFS_ROOT_WRITE_VERIFY_FAIL),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_ROOT_WRITE_VERIFY_FAIL),
                     (unsigned long)(part_abs + new_root * spb),
                     inh_name);
             goto done;
@@ -1812,7 +1816,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 bm_buf[RL_CHKSUM]  = 0;
                 bm_buf[RL_CHKSUM]  = ffs_checksum(bm_buf, nlongs);
                 if (!write_fs_block(bd, part_abs, blkno, spb, bm_buf)) {
-                    sprintf(err_buf, GS(MSG_FFS_UPDATE_PARENT_FAIL),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_UPDATE_PARENT_FAIL),
                             (unsigned long)blkno,
                             (unsigned long)(part_abs + blkno * spb));
                     goto done;
@@ -1836,7 +1840,7 @@ BOOL FFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         boot_buf[1] = ~bbsum;
     }
     if (!write_fs_block(bd, part_abs, 0, spb, boot_buf)) {
-        sprintf(err_buf, GS(MSG_FFS_UPDATE_BOOT_FAIL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_UPDATE_BOOT_FAIL),
                 (unsigned long)part_abs);
         goto done;
     }

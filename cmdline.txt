@@ -257,8 +257,11 @@ GROW <drive> <size[KMG]|END>
   one step, then ask Y/N before committing.  FORCE skips the question.
   <size> is the amount to ADD (e.g. 100M); if it exceeds the free space
   after the partition it is clamped to the maximum.  END (or MAX) uses all
-  the free space.  The RDB is written immediately; FFS remounts live, SFS/PFS
-  need a reboot.  See SCRIPT COMMANDS for the full description.
+  the free space.  The RDB is written immediately (CLI, script and GUI alike);
+  FFS remounts live, SFS/PFS need a reboot.  Should the RDB write fail after
+  the filesystem was already resized, the exact recovery is printed - do not
+  use the disk before following it.  See SCRIPT COMMANDS for the full
+  description.
 
   NOUNMOUNT grows the volume in place instead of unmounting it first.  Use
   this for the boot partition (or any volume with open files), which cannot
@@ -326,6 +329,56 @@ ZEROPART NAME=<drive>
   Examples:
     AmiPart DEV scsi.device:0 ZEROPART NAME=DH1
     AmiPart DEV scsi.device:0 ZEROPART NAME=DH1 FORCE
+
+DELPART NAME=<drive>
+  Remove the named partition from the RDB and write the table.  The data
+  blocks are not touched.  Asks Y/N first (FORCE skips it); the partition's
+  DOS device is unmounted afterwards when it is not in use.
+
+  Example:  AmiPart DEV scsi.device:0 DELPART NAME=DH2 FORCE
+
+PARTOUT=<drive> FILE=<path>
+  Dump one partition (with a self-describing header carrying its full
+  DosEnvec) to a file.  Read-only.  Unreadable blocks are written as zeros
+  and reported; the return code is then WARN (5).
+
+PARTIN=<path> NAME=<drive>
+  Restore a PARTOUT dump onto the named EXISTING partition, which must be at
+  least as large; the destination adopts the dump's geometry.  SFS absolute
+  offsets are fixed up.  DESTRUCTIVE: asks Y/N unless FORCE.
+
+  Example:  AmiPart DEV scsi.device:0 PARTOUT=DH1 FILE=ram:dh1.part
+            AmiPart DEV scsi.device:2 PARTIN=ram:dh1.part NAME=BK1 FORCE
+
+PARTCLONE=<src> TO=<dst> [TODEV=<device>:<unit>]
+  Copy partition <src> into the existing partition <dst> - same disk, or a
+  second disk via TODEV=.  Larger destinations grow the FFS/SFS copy to
+  fill; the filesystem driver is copied to the destination RDB when it is
+  missing there.  Writes the destination RDB itself.
+
+CHECK
+  RDB integrity check: block checksums, partition overlaps (in physical
+  sectors, so odd block sizes are caught too), FSHD/LSEG chains.  Returns
+  WARN when problems were found.
+
+VERIFY <file> / VERIFYEXT <file>
+  Compare the RDB on disk with a BACKUP / BACKUPEXT file.  Read-only.
+
+ADDMBR MBRTYPE=<t> STARTCYL=<cyl> ENDCYL=<cyl|+size> [ACTIVE]
+DELMBR NAME=<MBR1..MBR4>
+  Add or remove a PC partition on a combined MBR+RDB disk (INIT=NEWMBR
+  first).  Types: FAT32 FAT32LBA FAT16 LINUX LINUXSWAP.  Written at once.
+
+NOWARNING
+  Skip the "I have a backup" warning requester when the GUI is started
+  from the CLI (the WB icon takes a NOWARNING tooltype instead).
+
+DAMAGED RDB CHAINS
+  If the RDB's partition or filesystem chain is cut short by an unreadable
+  or corrupt block, every command prints a WARNING naming the block, and
+  any command that writes the RDB REFUSES - the entries behind the bad
+  block are not in memory and would be dropped.  Take a BACKUPEXT, repair
+  or restore, or add FORCE to write anyway.
 
 SCRIPT <file> [DRYRUN] [FORCE]
   Read and execute commands from a text file, one per line.
@@ -440,6 +493,15 @@ ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
                  omitted.  Must be a power of two from 512 up to 32768
                  (512, 1024, 2048, 4096, ...).  Most setups use 512;
                  only change it if your filesystem expects larger blocks.
+                 The RDB keeps the device sector size (DE_SIZEBLOCK) at
+                 512 and stores the multiple in DE_SECSPERBLK, exactly as
+                 the GUI does - writing a larger DE_SIZEBLOCK would make
+                 the handler address the partition in bigger units and
+                 physically overlap its neighbours.
+
+  New partitions get MaxTransfer 0x1FE00 and Mask 0x7FFFFFFE (the same
+  defaults as the GUI Add dialog; safe on IDE and SCSI).  Change them in
+  the GUI's Advanced dialog if a controller needs different values.
 
   VOLNAME=<label>  Quick-format the new partition after WRITE, with this
                  volume label.  The partition is temp-mounted and formatted
@@ -467,7 +529,7 @@ ADDFS TYPE=<dostype> [VERSION=<hex>] [FILE=<path>] [STACKSIZE=<n>]
 PARTCLONE <src> TO=<dst> [TODEV=<device>:<unit>]
   Clone the contents of partition <src> into the EXISTING partition
   <dst> - on the same disk, or on a second device given with TODEV=.
-  Script form of the CLI CLONE command: block copy plus destination
+  Script form of the CLI PARTCLONE command: block copy plus destination
   geometry adoption; on a cross-device clone the filesystem driver is
   copied to the destination RDB when it is missing there.  Writes the
   destination RDB itself - no separate WRITE needed.  Reboot before

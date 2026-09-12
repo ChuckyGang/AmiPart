@@ -17,6 +17,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "rdb.h"
@@ -69,19 +70,30 @@ void check_ffs_root(struct Window *win, struct BlockDev *bd,
         return;
     }
 
-    buf = (ULONG *)AllocVec(512, MEMF_PUBLIC | MEMF_CLEAR);
+    /* FFS block = 512 * DE_SECSPERBLK bytes; root = (reserved + highest key)/2
+       in FS blocks, highest key = num_blocks - 1.  n/2 (the old formula) is
+       off by one for odd counts and ignores 1024-byte volumes entirely. */
+    ULONG spb        = pi->sectors_per_block > 0 ? pi->sectors_per_block : 1;
+    ULONG bsz        = 512UL * spb;
+    ULONG L          = bsz / 4;                     /* longs per FS block */
+    ULONG part_abs   = pi->low_cyl * heads * sectors;
+    ULONG num_blocks = (pi->high_cyl - pi->low_cyl + 1) * heads * sectors / spb;
+    ULONG reserved   = pi->reserved_blks > 0 ? pi->reserved_blks : 2;
+    ULONG root       = (reserved + num_blocks - 1) / 2;
+    ULONG root_abs   = part_abs + root * spb;
+    BOOL  read_ok    = TRUE;
+
+    buf = (ULONG *)AllocVec(bsz, MEMF_PUBLIC | MEMF_CLEAR);
     if (!buf) {
         es.es_TextFormat = (UBYTE *)GS(MSG_MOVE_OUT_OF_MEM);
         EasyRequest(win, &es, NULL);
         return;
     }
 
-    ULONG part_abs   = pi->low_cyl * heads * sectors;
-    ULONG num_blocks = (pi->high_cyl - pi->low_cyl + 1) * heads * sectors;
-    ULONG root       = num_blocks / 2;
-    ULONG root_abs   = part_abs + root;
-
-    if (!BlockDev_ReadBlock(bd, root_abs, buf)) {
+    { ULONG s2;
+      for (s2 = 0; s2 < spb && read_ok; s2++)
+          read_ok = BlockDev_ReadBlock(bd, root_abs + s2, (UBYTE *)buf + s2 * 512); }
+    if (!read_ok) {
         DP_SNPRINTF(msg,
                 GS(MSG_MOVE_CHK_READ_FAIL_FMT),
                 pi->drive_name,
@@ -96,14 +108,14 @@ void check_ffs_root(struct Window *win, struct BlockDev *bd,
         return;
     }
 
-    /* Verify checksum: sum of all 128 longs must be 0 */
+    /* Verify checksum: sum of all L longs must be 0 */
     ULONG sum = 0;
-    for (ULONG i = 0; i < 128; i++) sum += buf[i];
+    for (ULONG i = 0; i < L; i++) sum += buf[i];
     BOOL cs_ok     = (sum == 0);
     BOOL type_ok   = (buf[0] == 2);          /* T_SHORT */
-    BOOL sec_ok    = (buf[127] == 1);        /* ST_ROOT */
+    BOOL sec_ok    = (buf[L - 1] == 1);      /* ST_ROOT */
     BOOL own_ok    = (buf[1] == root);
-    BOOL bm_valid  = (buf[78] == 0xFFFFFFFFUL);
+    BOOL bm_valid  = (buf[L - 50] == 0xFFFFFFFFUL);
     /* FFS does NOT validate own_key - confirmed: KS 3.1 accepts own_key=0 on
        live partitions. own_ok is informational only. */
     BOOL looks_ok  = type_ok && sec_ok && cs_ok && bm_valid;
@@ -135,12 +147,12 @@ void check_ffs_root(struct Window *win, struct BlockDev *bd,
             (unsigned long)disk_size, (unsigned long)num_blocks,
                 dsz_ok ? "" : GS(MSG_MOVE_CHK_MISMATCH),
             cs_ok ? GS(MSG_MOVE_CHK_YES) : GS(MSG_MOVE_CHK_NO),
-            (unsigned long)buf[78], bm_valid ? GS(MSG_MOVE_CHK_VALID)
+            (unsigned long)buf[L - 50], bm_valid ? GS(MSG_MOVE_CHK_VALID)
                                              : GS(MSG_MOVE_CHK_INVALID),
-            (unsigned long)buf[127], sec_ok ? GS(MSG_MOVE_CHK_OK)
+            (unsigned long)buf[L - 1], sec_ok ? GS(MSG_MOVE_CHK_OK)
                                             : GS(MSG_MOVE_CHK_WRONG_1),
-            (unsigned long)buf[79],
-            (unsigned long)buf[104],
+            (unsigned long)buf[L - 49],
+            (unsigned long)buf[L - 24],
             looks_ok ? GS(MSG_MOVE_CHK_ROOT_VALID)
                      : GS(MSG_MOVE_CHK_ROOT_INVALID));
 
@@ -326,7 +338,7 @@ BOOL offer_move_partition(struct Window *win,
     BOOL   backup_ok = FALSE;
     ULONG  new_lo    = 0;
     char   cyl_str[12];
-    char   err_buf[256];
+    char   err_buf[ENGINE_ERRBUF_SIZE];
 
     UWORD font_h, bor_l, bor_t, bor_b, inner_w, pad, row_h;
     UWORD win_w, win_h, warn_h, gad_x, gad_w;
@@ -786,7 +798,7 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
                           ULONG old_hi)
 {
     struct EasyStruct es;
-    char errbuf[256];  /* must hold FFS_GrowPartition diagnostic - keep in sync */
+    char errbuf[ENGINE_ERRBUF_SIZE];  /* must hold FFS_GrowPartition diagnostic - keep in sync */
     char umerr[80];    /* why unmount failed (in-use), for diagnostics          */
     char rmerr[80];    /* why remount failed, for diagnostics                   */
     BOOL can_remount;
@@ -805,7 +817,7 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_FFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, pi->drive_name) != 1) return GROW_NONE;
+    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) != 1) return GROW_NONE;
 
     {
         struct GrowProgUD prog_ud;
@@ -826,7 +838,7 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
            we can't unmount, so we refuse and leave everything untouched
            (growing under a live handler corrupts the volume). */
         grow_say(&prog_ud, GS(MSG_GROW_PROG_UNMOUNTING_FMT), pi->drive_name);
-        can_remount = UnmountDevice(pi->drive_name, umerr, sizeof(umerr));
+        can_remount = UnmountPartition(bd, pi->drive_name, NULL, NULL, umerr, sizeof(umerr));
         if (!can_remount) {
             /* The volume can't be unmounted (boot partition, or open files).
                Offer to grow it in place instead: the FFS grow still inhibits
@@ -876,6 +888,25 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
                                   : GS(MSG_MOVE_FFS_NOUNMOUNT_RDBFAIL_FMT),
                         pi->drive_name, errbuf);
             } else {
+            /* The root block has already moved to the new centre and the
+               children point at it, so the RDB must carry the new size
+               NOW (as the PFS/SFS/shrink paths do).  Leaving it to the
+               user's Write meant a Discard/power loss produced a volume
+               that mounts with the old geometry and lists as empty. */
+            BOOL wrote_rdb;
+            grow_say(&prog_ud, GS(MSG_GROW_PROG_WRITING_RDB), NULL);
+            wrote_rdb = RDB_Write(bd, (struct RDBInfo *)rdb);
+            if (!wrote_rdb) {
+                struct EasyStruct rf_es;
+                static char rf_msg[384];
+                DP_SNPRINTF(rf_msg, GS(MSG_MOVE_FFS_RDBFAIL_FMT), pi->drive_name);
+                rf_es.es_StructSize   = sizeof(rf_es);
+                rf_es.es_Flags        = 0;
+                rf_es.es_Title        = (UBYTE *)GS(MSG_MOVE_GROWN_TITLE);
+                rf_es.es_TextFormat   = (UBYTE *)rf_msg;
+                rf_es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                EasyRequest(win, &rf_es, NULL);
+            }
             grow_say(&prog_ud, GS(MSG_GROW_PROG_REMOUNTING_FMT), pi->drive_name);
             if (MountPartition(bd, pi, mnt, rmerr, sizeof(rmerr))) {
                 /* Grown and remounted with the new geometry - no reboot. */
@@ -937,7 +968,7 @@ int offer_pfs_grow(struct Window *win, struct BlockDev *bd,
                           ULONG old_hi)
 {
     struct EasyStruct es;
-    char errbuf[256];
+    char errbuf[ENGINE_ERRBUF_SIZE];
 
     /* PFS grow keeps its own Inhibit/RDB-write handling and still requires a
        reboot; the unmount/remount no-reboot path is FFS-only for now. */
@@ -951,7 +982,7 @@ int offer_pfs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_PFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, pi->drive_name) == 1) {
+    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) == 1) {
         struct GrowProgUD prog_ud;
         struct Window *prog_win =
             grow_open_progress(win, GS(MSG_MOVE_GROW_PFS_PROG_TITLE),
@@ -1009,7 +1040,7 @@ int offer_sfs_grow(struct Window *win, struct BlockDev *bd,
                            ULONG old_hi)
 {
     struct EasyStruct es;
-    char errbuf[256];
+    char errbuf[ENGINE_ERRBUF_SIZE];
 
     /* SFS grow auto-writes the RDB and leaves the volume inhibited; it still
        requires a reboot.  No-reboot remount is FFS-only for now. */
@@ -1023,7 +1054,7 @@ int offer_sfs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_SFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, pi->drive_name) == 1) {
+    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) == 1) {
         struct GrowProgUD prog_ud;
         /* Total: 14 SFS steps + RDB write + done. */
         struct Window *prog_win =
@@ -1101,7 +1132,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
 {
     struct EasyStruct es;
     struct ShrinkReport rep;
-    char  errbuf[256], umerr[80], rmerr[80], mnt[40];
+    char  errbuf[ENGINE_ERRBUF_SIZE], umerr[80], rmerr[80], mnt[40];
     char  sz1[20], sz2[20];
     static char body[320];
     int   fskind;                 /* 1=FFS 2=PFS 3=SFS */
@@ -1204,7 +1235,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
         /* Offline like the CLI: unmount for every filesystem; a busy
            volume gets the same shrink-in-place offer as the grow. */
         grow_say(&prog_ud, GS(MSG_GROW_PROG_UNMOUNTING_FMT), pi->drive_name);
-        can_remount = UnmountDevice(pi->drive_name, umerr, sizeof(umerr));
+        can_remount = UnmountPartition(bd, pi->drive_name, NULL, NULL, umerr, sizeof(umerr));
         if (!can_remount) {
             struct EasyStruct offer_es;
             static char offer_msg[256];

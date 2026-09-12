@@ -28,6 +28,8 @@ Usage examples:
 Raw devices (DEV=/dev/...):
   * The device node is opened with O_EXCL, so the kernel REFUSES the
     open while the disk (or any of its partitions) is mounted or held
+    (Linux only: on macOS O_EXCL does not block a mounted disk, so check
+    with diskutil before writing to a raw device there.)
     by another program - the same guard mkfs and wipefs rely on.
     Unmount first (e.g. udisksctl unmount / umount).
   * Regular files are rejected - use IMAGE=<file> for those.

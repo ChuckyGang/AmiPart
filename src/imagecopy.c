@@ -37,6 +37,7 @@ BOOL ImageCopy_DiskToFile(struct BlockDev *bd, const char *path,
                           ULONG count, ImageCopyCb cb, void *ud,
                           char *errbuf, ULONG ebsz)
 {
+    ULONG zeroed = 0;   /* unreadable source blocks written as zeros */
     BPTR   fh;
     UBYTE *buf;
     ULONG  total_blocks;
@@ -75,11 +76,17 @@ BOOL ImageCopy_DiskToFile(struct BlockDev *bd, const char *path,
         if (batch > IMG_BATCH_BLOCKS) batch = IMG_BATCH_BLOCKS;
 
         /* Per-block reads - zero unreadable blocks rather than abort,
-         * matching rdb_backup_extended() behaviour. */
-        for (i = 0; i < batch; i++) {
-            UBYTE *dst = buf + i * bd->block_size;
-            if (!BlockDev_ReadBlock(bd, block + i, dst))
-                memset(dst, 0, bd->block_size);
+         * matching rdb_backup_extended() behaviour - but COUNT them: the
+         * caller reports the holes instead of calling the image complete. */
+        if (!BlockDev_ReadBlocks(bd, block, batch, buf)) {
+            /* the batch failed: per block, so only the bad ones are zeroed */
+            for (i = 0; i < batch; i++) {
+                UBYTE *dst = buf + i * bd->block_size;
+                if (!BlockDev_ReadBlock(bd, block + i, dst)) {
+                    memset(dst, 0, bd->block_size);
+                    zeroed++;
+                }
+            }
         }
 
         if (Write(fh, buf, (LONG)(batch * bd->block_size)) !=
@@ -101,6 +108,8 @@ BOOL ImageCopy_DiskToFile(struct BlockDev *bd, const char *path,
 
     FreeVec(buf);
     Close(fh);
+    if (zeroed && errbuf && ebsz)   /* success with holes: warning for the caller */
+        snprintf(errbuf, ebsz, GS(MSG_IC_ZEROFILLED_FMT), (unsigned long)zeroed);
     return TRUE;
 }
 
@@ -176,6 +185,8 @@ BOOL ImageCopy_FileToDisk(struct BlockDev *bd, const char *path,
             return FALSE;
         }
         for (i = 0; i < got_blocks; i++) {
+            if (i == 0 && BlockDev_WriteBlocks(bd, block, got_blocks, buf))
+                break;                       /* whole batch in one transfer */
             if (!BlockDev_WriteBlock(bd, block + i,
                                      buf + i * bd->block_size)) {
                 FreeVec(buf); Close(fh);
@@ -207,6 +218,7 @@ BOOL ImageCopy_DiskToDisk(struct BlockDev *src, struct BlockDev *dst,
                           ImageCopyCb cb, void *ud,
                           char *errbuf, ULONG ebsz)
 {
+    ULONG zeroed = 0;   /* unreadable source blocks written as zeros */
     UBYTE *buf;
     ULONG  total_blocks;
     ULONG  dst_blocks;
@@ -246,14 +258,20 @@ BOOL ImageCopy_DiskToDisk(struct BlockDev *src, struct BlockDev *dst,
         if (batch > IMG_BATCH_BLOCKS) batch = IMG_BATCH_BLOCKS;
 
         /* Per-block reads - zero unreadable blocks rather than abort,
-         * matching ImageCopy_DiskToFile() behaviour. */
-        for (i = 0; i < batch; i++) {
-            UBYTE *p = buf + i * src->block_size;
-            if (!BlockDev_ReadBlock(src, block + i, p))
-                memset(p, 0, src->block_size);
+         * matching ImageCopy_DiskToFile() behaviour, and count them. */
+        if (!BlockDev_ReadBlocks(src, block, batch, buf)) {
+            for (i = 0; i < batch; i++) {
+                UBYTE *p = buf + i * src->block_size;
+                if (!BlockDev_ReadBlock(src, block + i, p)) {
+                    memset(p, 0, src->block_size);
+                    zeroed++;
+                }
+            }
         }
 
         for (i = 0; i < batch; i++) {
+            if (i == 0 && BlockDev_WriteBlocks(dst, block, batch, buf))
+                break;                       /* whole batch in one transfer */
             if (!BlockDev_WriteBlock(dst, block + i,
                                      buf + i * src->block_size)) {
                 FreeVec(buf);
@@ -271,5 +289,7 @@ BOOL ImageCopy_DiskToDisk(struct BlockDev *src, struct BlockDev *dst,
     }
 
     FreeVec(buf);
+    if (zeroed && errbuf && ebsz)   /* success with holes: warning for the caller */
+        snprintf(errbuf, ebsz, GS(MSG_IC_ZEROFILLED_FMT), (unsigned long)zeroed);
     return TRUE;
 }

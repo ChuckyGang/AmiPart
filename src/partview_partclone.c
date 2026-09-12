@@ -52,7 +52,7 @@ static BOOL pv_pc_pick_file(struct Window *win, const char *title,
     fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at);
     if (fr) {
         if (AslRequest(fr, NULL) && fr->fr_File && fr->fr_File[0]) {
-            strncpy(out, fr->fr_Drawer ? fr->fr_Drawer : "", osz - 1);
+            strncpy(out, fr->fr_Drawer ? (char *)fr->fr_Drawer : "", osz - 1);
             out[osz - 1] = '\0';
             AddPart((UBYTE *)out, (UBYTE *)fr->fr_File, osz);
             chosen = TRUE;
@@ -96,8 +96,9 @@ void pv_dump_partition(struct Window *win, struct BlockDev *bd,
         BOOL ok = PartClone_DumpToFile(bd, pi, path,
                                        pv_pc_progress, &prog, err, sizeof(err));
         ProgressWin_Close(&prog);
-        if (ok) DP_SNPRINTF(body, GS(MSG_PV_PC_DUMP_OK_FMT), pi->drive_name, path);
-        else    DP_SNPRINTF(body, GS(MSG_PV_PC_DUMP_FAIL_FMT), err);
+        if (ok && err[0]) DP_SNPRINTF(body, GS(MSG_PV_PC_DUMP_OK_WARN_FMT), pi->drive_name, path, err);
+        else if (ok)      DP_SNPRINTF(body, GS(MSG_PV_PC_DUMP_OK_FMT), pi->drive_name, path);
+        else              DP_SNPRINTF(body, GS(MSG_PV_PC_DUMP_FAIL_FMT), err);
         pv_pc_msg(win, GS(MSG_PV_PC_DUMP_REQ_TITLE), body);
     }
 }

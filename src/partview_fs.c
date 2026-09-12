@@ -20,6 +20,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "locale_support.h"
@@ -301,7 +302,6 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         UWORD file_w   = inner_w - lbl_w - browse_w - pad * 2;
         UWORD dt_str_w = 110;                          /* DosType input: "DOS\1" or "0x444F5301" */
         UWORD dt_hex_w = inner_w - lbl_w - dt_str_w - pad * 2; /* hex readout to the right */
-        UWORD gad_w    = inner_w - lbl_w - pad;
         UWORD win_h    = bor_t + pad + row_h + pad + row_h + pad + row_h + pad + row_h + pad + bor_b;
         struct NewGadget ng;
         struct Gadget *prev;
@@ -320,7 +320,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Flags=PLACETEXT_LEFT;
         { struct TagItem st[]={{GTST_String,(ULONG)dt_str},{GTST_MaxChars,18},{TAG_DONE,0}};
           dostype_gad=CreateGadgetA(STRING_KIND,gctx,&ng,st);
-          if (!dostype_gad) goto fs_add_cleanup; prev=dostype_gad; }
+          if (!dostype_gad) { goto fs_add_cleanup; } prev=dostype_gad; }
 
         /* Hex readout - read-only display to the right of DosType */
         ng.ng_LeftEdge=gad_x+dt_str_w+pad; ng.ng_TopEdge=(WORD)(bor_t+pad);
@@ -329,7 +329,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Flags=0;
         { struct TagItem tt[]={{GTTX_Text,(ULONG)hex_str},{GTTX_Border,TRUE},{TAG_DONE,0}};
           hex_gad=CreateGadgetA(TEXT_KIND,prev,&ng,tt);
-          if (!hex_gad) goto fs_add_cleanup; prev=hex_gad; }
+          if (!hex_gad) { goto fs_add_cleanup; } prev=hex_gad; }
 
         /* File string (narrower to leave room for Browse button) */
         ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=(WORD)(bor_t+pad+row_h+pad);
@@ -338,7 +338,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Flags=PLACETEXT_LEFT;
         { struct TagItem st[]={{GTST_String,(ULONG)file_str},{GTST_MaxChars,255},{TAG_DONE,0}};
           file_gad=CreateGadgetA(STRING_KIND,prev,&ng,st);
-          if (!file_gad) goto fs_add_cleanup; prev=file_gad; }
+          if (!file_gad) { goto fs_add_cleanup; } prev=file_gad; }
 
         /* Browse button - right of File string */
         ng.ng_LeftEdge=gad_x+(WORD)file_w+pad; ng.ng_TopEdge=(WORD)(bor_t+pad+row_h+pad);
@@ -347,7 +347,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Flags=PLACETEXT_IN;
         { struct TagItem bt[]={{TAG_DONE,0}};
           browse_gad=CreateGadgetA(BUTTON_KIND,prev,&ng,bt);
-          if (!browse_gad) goto fs_add_cleanup; prev=browse_gad; }
+          if (!browse_gad) { goto fs_add_cleanup; } prev=browse_gad; }
 
         /* NULL driver checkbox */
         ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=(WORD)(bor_t+pad+row_h+pad+row_h+pad);
@@ -356,7 +356,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Flags=PLACETEXT_RIGHT;
         { struct TagItem ct[]={{GTCB_Checked,(ULONG)is_null},{TAG_DONE,0}};
           null_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,ct);
-          if (!null_gad) goto fs_add_cleanup; prev=null_gad; }
+          if (!null_gad) { goto fs_add_cleanup; } prev=null_gad; }
 
         /* OK / Cancel */
         { UWORD btn_y = bor_t+pad+row_h+pad+row_h+pad+row_h+pad;
@@ -645,6 +645,8 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
     {
         BOOL running = TRUE;
         UWORD orig_num_fs = rdb->num_fs;   /* for Cancel rollback */
+        static struct FSInfo fs_snap[MAX_FILESYSTEMS];   /* entry state, so Cancel can tell edits/deletes from additions */
+        memcpy(fs_snap, rdb->filesystems, sizeof(struct FSInfo) * (orig_num_fs > MAX_FILESYSTEMS ? MAX_FILESYSTEMS : orig_num_fs));
         /* Drain any events queued at the FS Manager window while a
            sub-dialog was active.  Without this, clicks on the visible
            background window (e.g. "Done") fire immediately after the
@@ -677,9 +679,18 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                     case FSDLG_DONE: running = FALSE; break;
 
                     case FSDLG_CANCEL: {
-                        /* Discard entries added during this session.
-                           Edits and deletes cannot be undone here. */
+                        /* Discard entries added during this session.  Edits
+                           and deletes of EXISTING entries cannot be undone
+                           here - if any happened, Cancel must not pretend
+                           the table is unchanged (dirty stays TRUE so the
+                           caller shows the unsaved warning / writes them). */
                         UWORD ci;
+                        BOOL  hard_change = (rdb->num_fs < orig_num_fs);
+                        for (ci = 0; !hard_change && ci < orig_num_fs && ci < rdb->num_fs; ci++)
+                            if (memcmp(&rdb->filesystems[ci], &fs_snap[ci],
+                                       sizeof(struct FSInfo)) != 0)
+                                hard_change = TRUE;
+                        if (hard_change) { running = FALSE; break; }
                         for (ci = orig_num_fs; ci < rdb->num_fs; ci++)
                             if (rdb->filesystems[ci].code)
                                 FreeVec(rdb->filesystems[ci].code);
@@ -786,11 +797,9 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                             es.es_GadgetFormat = (UBYTE*)GS(MSG_YES_NO);
                             if (EasyRequest(win, &es, NULL) == 1) {
                                 UWORD j;
-                                /* Reset affected partitions to FFS */
-                                for (k = 0; k < rdb->num_parts; k++) {
-                                    if (rdb->parts[k].dos_type == del_dt)
-                                        rdb->parts[k].dos_type = 0x444F5301UL;
-                                }
+                                /* Partitions keep their DosType: relabelling a
+                                   PFS3/SFS partition as FFS in the table would
+                                   hand it to the wrong handler at boot. */
                                 /* Remove filesystem entry */
                                 if (rdb->filesystems[sel].code)
                                     FreeVec(rdb->filesystems[sel].code);

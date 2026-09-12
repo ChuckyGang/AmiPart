@@ -57,5 +57,5 @@ void pv_shrink_report(struct Window *win, struct BlockDev *bd,
        percentage), which would be eaten if passed as the format itself. */
     es.es_TextFormat   = (UBYTE *)"%s";
     es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
-    EasyRequest(win, &es, NULL, buf);
+    EasyRequest(win, &es, NULL, (ULONG)buf);
 }

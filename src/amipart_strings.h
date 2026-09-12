@@ -1343,8 +1343,42 @@
 #define MSG_CLI_BBSCAN_BAD_FMT       1337
 #define MSG_CLI_BBSCAN_DONE_FMT      1338
 #define MSG_CLI_BBSCAN_HEALTHY       1339
+#define MSG_MOVE_FFS_RDBFAIL_FMT     1340
+#define MSG_RDB_TRUNC_READ           1341
+#define MSG_RDB_TRUNC_ID             1342
+#define MSG_RDB_TRUNC_CHKSUM         1343
+#define MSG_RDB_TRUNC_LOOP           1344
+#define MSG_RDB_TRUNC_SANITY         1345
+#define MSG_CLI_TRUNC_WARN_FMT       1346
+#define MSG_CLI_TRUNC_REFUSED        1347
+#define MSG_PV_TRUNC_TITLE           1348
+#define MSG_PV_TRUNC_BODY_FMT        1349
+#define MSG_PV_TRUNC_GADGETS         1350
+#define MSG_CLI_RESIZE_RDBFAIL_FMT   1351
+#define MSG_CLI_RESTOREEXT_OTHER_DISK_FMT 1352
+#define MSG_CLI_ASK_RESTORE_ANYWAY   1353
+#define MSG_SCR_RESTOREEXT_OTHER_DISK 1354
+#define MSG_PV_TRUNC_REFUSED_BODY    1355
+#define MSG_PCP_DEST_TRUNC           1356
+#define MSG_RDB_EXT_RESTORE_OTHER_DISK_FMT 1357
+#define MSG_RDB_RESTORE_ANYWAY_CANCEL 1358
+#define MSG_SCR_PARTOUT_DRYRUN       1359
+#define MSG_SCR_PARTIN_DRYRUN        1360
+#define MSG_SCR_ZEROPART_DRYRUN_FMT  1361
+#define MSG_SCR_REBOOT_UNSAVED       1362
+#define MSG_IC_ZEROFILLED_FMT        1363
+#define MSG_PC_SFS_FIXUP_FAIL_FMT    1364
+#define MSG_CLI_DST_MOUNTED_FMT      1365
+#define MSG_CLI_DST_MOUNTED_REFUSED  1366
+#define MSG_IMG_DUMP_OK_WARN_FMT     1367
+#define MSG_IMG_DEST_MOUNTED_FMT     1368
+#define MSG_DC_MOUNTED_GADGETS       1369
+#define MSG_DC_DEST_MOUNTED_FMT      1370
+#define MSG_DC_OK_WARN_FMT           1371
+#define MSG_PV_PC_DUMP_OK_WARN_FMT   1372
+#define MSG_DLG_NAME_BAD_BODY        1373
 
-#define MSG_COUNT 1340
+#define MSG_COUNT 1374
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -1563,7 +1597,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 204 MSG_PV_REBOOTING */ "Rebooting the system...",
     /* 205 MSG_PV_MAP_NO_RDB */ "No RDB - use Init RDB to create partitions",
     /* 206 MSG_PV_CYL_FMT */ "Cyl %lu",
-    /* 207 MSG_PV_MAP_HINT */ "drag edges to resize  \302\267  drag body to move  \302\267  drag free area to add",
+    /* 207 MSG_PV_MAP_HINT */ "drag edges to resize  \267  drag body to move  \267  drag free area to add",
     /* 208 MSG_PV_DRAG_INFO_FMT */ "%s: Cyl %lu - %lu  (%s)",
     /* 209 MSG_PV_NEW_INFO_FMT */ "New: Cyl %lu - %lu  (%s)",
     /* 210 MSG_PV_UNKNOWN */ "unknown",
@@ -1706,7 +1740,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 347 MSG_FS_DONE */ "Done",
     /* 348 MSG_FS_MGR_TITLE */ "FileSystem Drivers",
     /* 349 MSG_FS_LIST_HEADER */ "DosType       Version   Code",
-    /* 350 MSG_FS_DELETE_INUSE_FMT */ "Filesystem %s is in use by:\n%s\n\nAffected partition(s) will be\nchanged to FFS. Delete anyway?",
+    /* 350 MSG_FS_DELETE_INUSE_FMT */ "Filesystem %s is in use by:\n%s\n\nThose partitions keep their DosType and\nwill need this driver in ROM or L: to mount.\nDelete anyway?",
     /* 351 MSG_FS_DELETE_CONFIRM_FMT */ "Delete filesystem driver %s?",
     /* 352 MSG_FS_DELETE_TITLE */ "Delete FS Driver",
     /* 353 MSG_IMG_PROGRESS_PCT_FMT */ "%lu / %lu blocks  (%lu%%)",
@@ -2696,5 +2730,39 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1337 MSG_CLI_BBSCAN_BAD_FMT */ "  BAD block %lu (0x%08lX)\n",
     /* 1338 MSG_CLI_BBSCAN_DONE_FMT */ "\nScanned %lu of %lu blocks: %lu bad block(s).\n",
     /* 1339 MSG_CLI_BBSCAN_HEALTHY */ "No read errors - disk surface looks healthy.\n",
+    /* 1340 MSG_MOVE_FFS_RDBFAIL_FMT */ "FFS filesystem on %s was grown, but writing the RDB FAILED.\nThe filesystem is now larger than the partition table says.\nClick Write to retry BEFORE rebooting - do not Discard.",
+    /* 1341 MSG_RDB_TRUNC_READ */ "block could not be read",
+    /* 1342 MSG_RDB_TRUNC_ID */ "block has the wrong ID",
+    /* 1343 MSG_RDB_TRUNC_CHKSUM */ "block checksum is wrong",
+    /* 1344 MSG_RDB_TRUNC_LOOP */ "chain loops back on itself",
+    /* 1345 MSG_RDB_TRUNC_SANITY */ "chain points at block 0 or the RDSK block",
+    /* 1346 MSG_CLI_TRUNC_WARN_FMT */ "WARNING: the RDB partition/filesystem chain is cut short at block %lu (%s).\nEntries behind that block are NOT listed, and writing the RDB would DROP them for good.\nBack up the RDB (BACKUPEXT) and check the disk first. FORCE writes anyway.\n",
+    /* 1347 MSG_CLI_TRUNC_REFUSED */ "ERROR: RDB write refused - the partition chain is truncated (see warning above). Add FORCE to write anyway.\n",
+    /* 1348 MSG_PV_TRUNC_TITLE */ "Damaged RDB chain",
+    /* 1349 MSG_PV_TRUNC_BODY_FMT */ "WARNING: the partition/filesystem chain on\n%s unit %lu is cut short at block %lu\n(%s).\n\nEntries behind that block are NOT shown, and\nwriting the RDB will DROP them for good.\n\nBack up the RDB first (Health menu). Continue?",
+    /* 1350 MSG_PV_TRUNC_GADGETS */ "Continue (writes allowed)|Cancel",
+    /* 1351 MSG_CLI_RESIZE_RDBFAIL_FMT */ "\nThe filesystem on %s was resized, but the partition table could not be written.\nOn disk the filesystem now spans cylinders %lu-%lu while the RDB still says %lu-%lu.\nDo NOT mount, write to or reboot with this disk until that is fixed:\n  open the disk in the GUI, Edit %s, set its end cylinder to %lu, and Write\n  (or restore an RDB backup made after this resize).\n",
+    /* 1352 MSG_CLI_RESTOREEXT_OTHER_DISK_FMT */ "WARNING: this backup describes a DIFFERENT disk:\n  backup: %lu cyl x %lu heads x %lu sectors, \"%s\"\n  target: %lu cyl x %lu heads x %lu sectors, \"%s\"\n",
+    /* 1353 MSG_CLI_ASK_RESTORE_ANYWAY */ "Restore it onto this disk anyway",
+    /* 1354 MSG_SCR_RESTOREEXT_OTHER_DISK */ "backup describes a different disk (geometry/product mismatch); add FORCE to restore anyway",
+    /* 1355 MSG_PV_TRUNC_REFUSED_BODY */ "Write refused: the partition/filesystem chain on this\ndisk is damaged and the missing entries would be dropped.\nReopen the disk and choose \"Continue (writes allowed)\"\nto override, after backing up the RDB.",
+    /* 1356 MSG_PCP_DEST_TRUNC */ "The destination disk's RDB chain is damaged\n(entries missing). Repair or back it up first.",
+    /* 1357 MSG_RDB_EXT_RESTORE_OTHER_DISK_FMT */ "This backup describes a DIFFERENT disk:\n\nBackup: %lu cyl x %lu heads x %lu sectors\n  \"%s\"\nTarget: %lu cyl x %lu heads x %lu sectors\n  \"%s\"\n\nRestoring it here will produce a wrong partition table.",
+    /* 1358 MSG_RDB_RESTORE_ANYWAY_CANCEL */ "Restore anyway|Cancel",
+    /* 1359 MSG_SCR_PARTOUT_DRYRUN */ "PARTOUT: dry run - no file written.\n",
+    /* 1360 MSG_SCR_PARTIN_DRYRUN */ "PARTIN: dry run - no changes made.\n",
+    /* 1361 MSG_SCR_ZEROPART_DRYRUN_FMT */ "ZEROPART: dry run - would zero %s (%lu blocks).\n",
+    /* 1362 MSG_SCR_REBOOT_UNSAVED */ "unsaved changes pending - WRITE first, or they are lost at reboot",
+    /* 1363 MSG_IC_ZEROFILLED_FMT */ "WARNING: %lu unreadable source block(s) were written as zeros - the copy has holes.\n",
+    /* 1364 MSG_PC_SFS_FIXUP_FAIL_FMT */ "The blocks were copied, but the SFS root blocks on %s could not be updated - SFS will not mount it.",
+    /* 1365 MSG_CLI_DST_MOUNTED_FMT */ "WARNING: %s unit %lu has MOUNTED partitions: %s\nTheir handlers still hold the old layout; overwriting underneath them corrupts or crashes.\n",
+    /* 1366 MSG_CLI_DST_MOUNTED_REFUSED */ "ERROR: refusing to overwrite a disk with mounted partitions. Reboot without them, or add FORCE.\n",
+    /* 1367 MSG_IMG_DUMP_OK_WARN_FMT */ "Image written to\n%s\n\n%s",
+    /* 1368 MSG_IMG_DEST_MOUNTED_FMT */ "The target disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; writing\nthe image underneath them will corrupt or crash.\nReboot without them first.",
+    /* 1369 MSG_DC_MOUNTED_GADGETS */ "Continue anyway|Cancel",
+    /* 1370 MSG_DC_DEST_MOUNTED_FMT */ "The destination disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; copying\nunderneath them will corrupt or crash.\nReboot without them first.",
+    /* 1371 MSG_DC_OK_WARN_FMT */ "Disk copied.\n\n%s",
+    /* 1372 MSG_PV_PC_DUMP_OK_WARN_FMT */ "Partition %s dumped to\n%s\n\n%s",
+    /* 1373 MSG_DLG_NAME_BAD_BODY */ "The partition needs a name that is not empty\nand not already used by another partition\non this disk (e.g. DH0, DH1, Work).",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

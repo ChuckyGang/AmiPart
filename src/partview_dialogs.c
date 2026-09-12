@@ -13,11 +13,13 @@
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <libraries/gadtools.h>
+#include <resources/filesysres.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "locale_support.h"
@@ -361,7 +363,7 @@ void partition_advanced_dialog(struct PartInfo *pi)
     { struct TagItem st_[]={{GTST_String,(ULONG)(initstr)}, \
                             {GTST_MaxChars,(maxch)},{TAG_DONE,0}}; \
       *(pgad)=CreateGadgetA(STRING_KIND,prev,&ng,st_); \
-      if (!*(pgad)) goto cleanup; prev=*(pgad); } row++;
+      if (!*(pgad)) { goto cleanup; } prev=*(pgad); } row++;
 
             STR_GAD(ADLG_RESERVED,    GS(MSG_DLG_RESERVED_BLKS), reserved_str,   6,  &reserved_gad)
             STR_GAD(ADLG_INTERLEAVE,  GS(MSG_DLG_INTERLEAVE),    interleave_str, 6,  &interleave_gad)
@@ -536,6 +538,34 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 dlg_num_fs++;
             }
         }
+        /* Filesystems resident in FileSystem.resource - ROM PFS3/SFS on
+           3.2+, or one registered by an earlier quick-format - so they can
+           be picked without first adding a driver to the RDB (issue #13).
+           FFS variants are already built in. */
+        {
+            struct FileSysResource *fsr =
+                (struct FileSysResource *)OpenResource((CONST_STRPTR)"FileSystem.resource");
+            if (fsr) {
+                struct FileSysEntry *fse;
+                Forbid();
+                for (fse = (struct FileSysEntry *)fsr->fsr_FileSysEntries.lh_Head;
+                     fse->fse_Node.ln_Succ;
+                     fse = (struct FileSysEntry *)fse->fse_Node.ln_Succ) {
+                    ULONG dt  = fse->fse_DosType;
+                    BOOL  dup = FALSE;
+                    if ((dt & 0xFFFFFF00UL) == 0x444F5300UL) continue;
+                    for (k = 0; k < dlg_num_fs; k++)
+                        if (dlg_fs_dostypes[k] == dt) { dup = TRUE; break; }
+                    if (!dup && dlg_num_fs < MAX_DLG_FS - 1) {
+                        FriendlyDosType(dt, dlg_fs_names[dlg_num_fs]);
+                        dlg_fs_labels[dlg_num_fs]   = dlg_fs_names[dlg_num_fs];
+                        dlg_fs_dostypes[dlg_num_fs] = dt;
+                        dlg_num_fs++;
+                    }
+                }
+                Permit();
+            }
+        }
         dlg_fs_labels[dlg_num_fs] = NULL;
         /* Find index matching current dos_type */
         for (k = 0; k < dlg_num_fs; k++)
@@ -622,7 +652,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
     { struct TagItem st_[]={ {GTST_String,(ULONG)(initstr)}, \
                              {GTST_MaxChars,(maxch)}, {TAG_DONE,0} }; \
       *(pgad)=CreateGadgetA(STRING_KIND, prev, &ng, st_); \
-      if (!*(pgad)) goto cleanup; prev=*(pgad); } row++;
+      if (!*(pgad)) { goto cleanup; } prev=*(pgad); } row++;
 
             /* Row 0: Name */
             ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=ROW_Y(row);
@@ -632,7 +662,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             { struct TagItem st[]={{GTST_String,(ULONG)pi->drive_name},
                                    {GTST_MaxChars,30},{TAG_DONE,0}};
               name_gad=CreateGadgetA(STRING_KIND,gctx,&ng,st);
-              if (!name_gad) goto cleanup; prev=name_gad; }
+              if (!name_gad) { goto cleanup; } prev=name_gad; }
             row++;
 
             /* Lo Cylinder - reference display only, not editable */
@@ -676,7 +706,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             { struct TagItem bpst[]={ {GTST_String,(ULONG)bootpri_str},
                                       {GTST_MaxChars,4}, {TAG_DONE,0} };
               bootpri_gad=CreateGadgetA(STRING_KIND,prev,&ng,bpst);
-              if (!bootpri_gad) goto cleanup; prev=bootpri_gad; }
+              if (!bootpri_gad) { goto cleanup; } prev=bootpri_gad; }
             row++;
 
             /* Row 5: Bootable [x]   Automount [x] */
@@ -692,7 +722,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 ng.ng_GadgetText=GS(MSG_DLG_BOOTABLE); ng.ng_GadgetID=PDLG_BOOTABLE;
                 ng.ng_Flags=PLACETEXT_RIGHT;
                 boot_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
-                if (!boot_gad) goto cleanup; prev=boot_gad;
+                if (!boot_gad) { goto cleanup; } prev=boot_gad;
 
                 cbt[0].ti_Data=(ULONG)is_automount;
                 ng.ng_LeftEdge=bor_l+pad+half+pad; ng.ng_TopEdge=ROW_Y(row);
@@ -700,7 +730,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 ng.ng_GadgetText=GS(MSG_DLG_AUTOMOUNT); ng.ng_GadgetID=PDLG_AUTOMOUNT;
                 ng.ng_Flags=PLACETEXT_RIGHT;
                 automount_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
-                if (!automount_gad) goto cleanup; prev=automount_gad;
+                if (!automount_gad) { goto cleanup; } prev=automount_gad;
             }
             row++;
 
@@ -717,7 +747,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 ng.ng_GadgetText=GS(MSG_DLG_DIRECT_SCSI); ng.ng_GadgetID=PDLG_DIRSCSI;
                 ng.ng_Flags=PLACETEXT_RIGHT;
                 dirscsi_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
-                if (!dirscsi_gad) goto cleanup; prev=dirscsi_gad;
+                if (!dirscsi_gad) { goto cleanup; } prev=dirscsi_gad;
 
                 cbt[0].ti_Data=(ULONG)is_syncscsi;
                 ng.ng_LeftEdge=bor_l+pad+half+pad; ng.ng_TopEdge=ROW_Y(row);
@@ -725,7 +755,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 ng.ng_GadgetText=GS(MSG_DLG_SYNC_SCSI); ng.ng_GadgetID=PDLG_SYNCSCSI;
                 ng.ng_Flags=PLACETEXT_RIGHT;
                 syncscsi_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
-                if (!syncscsi_gad) goto cleanup; prev=syncscsi_gad;
+                if (!syncscsi_gad) { goto cleanup; } prev=syncscsi_gad;
             }
             row++;
 
@@ -744,7 +774,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                     ng.ng_GadgetText=GS(MSG_DLG_DO_NOT_FORMAT); ng.ng_GadgetID=PDLG_NOFORMAT;
                     ng.ng_Flags=PLACETEXT_RIGHT;
                     noformat_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,cbt);
-                    if (!noformat_gad) goto cleanup; prev=noformat_gad;
+                    if (!noformat_gad) { goto cleanup; } prev=noformat_gad;
 
                     /* PFS3 only: keep a deleted-file history (deldir).  Greyed
                        out while a non-PFS filesystem is selected. */
@@ -754,7 +784,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                     ng.ng_GadgetText=GS(MSG_DLG_DELDIR); ng.ng_GadgetID=PDLG_DELDIR;
                     ng.ng_Flags=PLACETEXT_RIGHT;
                     deldir_gad=CreateGadgetA(CHECKBOX_KIND,prev,&ng,ddt);
-                    if (!deldir_gad) goto cleanup; prev=deldir_gad;
+                    if (!deldir_gad) { goto cleanup; } prev=deldir_gad;
                 }
                 row++;
             }
@@ -849,6 +879,42 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                         BOOL  destructive    = !is_new &&
                                                (new_dos_type != old_dos_type ||
                                                 new_fs_bsz   != old_fs_bsz);
+                        /* Name must be non-empty (after stripping a trailing
+                           ':') and unique on this disk - the ROM mounts by
+                           name, and two DH0s means one of them never appears. */
+                        {
+                            struct StringInfo *nsi = (struct StringInfo *)name_gad->SpecialInfo;
+                            char *nb = (char *)nsi->Buffer;
+                            UWORD nl = (UWORD)strlen(nb), q;
+                            BOOL  bad;
+                            while (nl > 0 && nb[nl - 1] == ':') nb[--nl] = '\0';
+                            bad = (nl == 0);
+                            for (q = 0; q < rdb->num_parts && !bad; q++) {
+                                const char *o = rdb->parts[q].drive_name;
+                                UWORD m2 = 0;
+                                if (&rdb->parts[q] == pi) continue;
+                                while (o[m2] && nb[m2]) {
+                                    char a = o[m2], b = nb[m2];
+                                    if (a >= 'a' && a <= 'z') a = (char)(a - 32);
+                                    if (b >= 'a' && b <= 'z') b = (char)(b - 32);
+                                    if (a != b) break;
+                                    m2++;
+                                }
+                                if (!o[m2] && !nb[m2]) bad = TRUE;
+                            }
+                            if (bad) {
+                                struct EasyStruct nes;
+                                nes.es_StructSize   = sizeof(nes);
+                                nes.es_Flags        = 0;
+                                nes.es_Title        = (UBYTE *)AMIPART_VERTITLE;
+                                nes.es_TextFormat   = (UBYTE *)GS(MSG_DLG_NAME_BAD_BODY);
+                                nes.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                                EasyRequest(win, &nes, NULL);
+                                { struct TagItem nt[] = {{GTST_String, (ULONG)nb}, {TAG_DONE, 0}};
+                                  GT_SetGadgetAttrsA(name_gad, win, NULL, nt); }
+                                break;   /* stay in the dialog */
+                            }
+                        }
                         if (destructive) {
                             static char warn_title[80]; /* Intuition keeps ptr */
                             struct EasyStruct es;
@@ -1078,7 +1144,7 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
     { struct TagItem _gs[]={{GTST_String,(ULONG)(istr)}, \
                             {GTST_MaxChars,10},{TAG_DONE,0}}; \
       *(pgad)=CreateGadgetA(STRING_KIND,prev,&ng,_gs); \
-      if (!*(pgad)) goto geom_cleanup; prev=*(pgad); } row++;
+      if (!*(pgad)) { goto geom_cleanup; } prev=*(pgad); } row++;
 
             GSTR_GAD(GDLG_CYLS,  GS(MSG_DLG_CYLINDERS),   cyls_str,  &cyls_gad)
             GSTR_GAD(GDLG_HEADS, GS(MSG_DLG_HEADS),       heads_str, &heads_gad)

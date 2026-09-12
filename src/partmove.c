@@ -45,70 +45,21 @@
 /* Number of 512-byte sectors per read/write chunk.  64 KB per chunk. */
 #define MOVE_CHUNK 128
 
-/* Read 'count' consecutive physical sectors starting at 'start' into buf.
-   Uses TD_READ64 (64-bit byte offset).  buf must hold count * 512 bytes.
-   Falls back to CMD_READ on drivers that lack TD_READ64 (IOERR_NOCMD) -
-   the old gayle scsi.device on A600/A1200, same as BlockDev_ReadBlock. */
+/* Read/write 'count' consecutive 512-byte sectors starting at 'start'.
+   Thin wrappers over rdb.c's multi-block API, which handles TD64 (high
+   offset word in io_Actual), the CMD_READ/CMD_WRITE fallback for pre-TD64
+   drivers, per-block retry, AND image files - the old private copies here
+   issued DoIO() directly and so could not work on an IMAGE= target. */
 static BOOL move_read_blocks(struct BlockDev *bd,
                               ULONG start, ULONG count, UBYTE *buf)
 {
-    UQUAD byte_off = (UQUAD)start * bd->block_size;
-    ULONG length   = (ULONG)((UQUAD)count * bd->block_size);
-    BYTE  err;
-    bd->iotd.iotd_Req.io_Command = TD_READ64;
-    bd->iotd.iotd_Req.io_Length  = length;
-    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-    bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-    bd->iotd.iotd_Count          = (ULONG)(byte_off >> 32);
-    bd->iotd.iotd_Req.io_Actual  = 0;
-    bd->iotd.iotd_Req.io_Flags   = 0;
-    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-    if (err == 0) return TRUE;
-
-    if (err == IOERR_NOCMD && (ULONG)(byte_off >> 32) == 0) {
-        bd->iotd.iotd_Req.io_Command = CMD_READ;
-        bd->iotd.iotd_Req.io_Length  = length;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-        bd->iotd.iotd_Count          = 0;
-        bd->iotd.iotd_Req.io_Actual  = 0;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        return DoIO((struct IORequest *)&bd->iotd) == 0 ? TRUE : FALSE;
-    }
-    return FALSE;
+    return BlockDev_ReadBlocks(bd, start, count, buf);
 }
 
-/* Write 'count' consecutive physical sectors starting at 'start' from buf.
-   Uses TD_WRITE64, falling back to CMD_WRITE on drivers that reject it with
-   IOERR_NOCMD (old A600/A1200 gayle scsi.device) - mirrors the fallback in
-   BlockDev_WriteBlock.  See that function for the gating rationale. */
 static BOOL move_write_blocks(struct BlockDev *bd,
                                ULONG start, ULONG count, const UBYTE *buf)
 {
-    UQUAD byte_off = (UQUAD)start * bd->block_size;
-    ULONG length   = (ULONG)((UQUAD)count * bd->block_size);
-    BYTE  err;
-    bd->iotd.iotd_Req.io_Command = TD_WRITE64;
-    bd->iotd.iotd_Req.io_Length  = length;
-    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-    bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-    bd->iotd.iotd_Count          = (ULONG)(byte_off >> 32);
-    bd->iotd.iotd_Req.io_Actual  = 0;
-    bd->iotd.iotd_Req.io_Flags   = 0;
-    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-    if (err == 0) return TRUE;
-
-    if (err == IOERR_NOCMD && (ULONG)(byte_off >> 32) == 0) {
-        bd->iotd.iotd_Req.io_Command = CMD_WRITE;
-        bd->iotd.iotd_Req.io_Length  = length;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-        bd->iotd.iotd_Count          = 0;
-        bd->iotd.iotd_Req.io_Actual  = 0;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        return DoIO((struct IORequest *)&bd->iotd) == 0 ? TRUE : FALSE;
-    }
-    return FALSE;
+    return BlockDev_WriteBlocks(bd, start, count, buf);
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,7 +114,7 @@ BOOL PART_CanMove(const struct RDBInfo *rdb, const struct PartInfo *pi,
     UWORD i;
 
     if (pi->high_cyl < pi->low_cyl) {
-        sprintf(err_buf, GS(MSG_PM_INVALID_CYL_RANGE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_INVALID_CYL_RANGE),
                 (unsigned long)pi->low_cyl, (unsigned long)pi->high_cyl);
         return FALSE;
     }
@@ -174,20 +125,20 @@ BOOL PART_CanMove(const struct RDBInfo *rdb, const struct PartInfo *pi,
     if (new_high_cyl_out) *new_high_cyl_out = new_high_cyl;
 
     if (new_low_cyl == pi->low_cyl) {
-        sprintf(err_buf, GS(MSG_PM_ALREADY_AT_CYL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_ALREADY_AT_CYL),
                 (unsigned long)new_low_cyl);
         return FALSE;
     }
 
     if (new_low_cyl < rdb->lo_cyl) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_PM_START_BELOW_LOWEST),
                 (unsigned long)new_low_cyl, (unsigned long)rdb->lo_cyl);
         return FALSE;
     }
 
     if (new_high_cyl > rdb->hi_cyl) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_PM_END_EXCEEDS_DISK),
                 (unsigned long)new_high_cyl, (unsigned long)rdb->hi_cyl);
         return FALSE;
@@ -198,7 +149,7 @@ BOOL PART_CanMove(const struct RDBInfo *rdb, const struct PartInfo *pi,
         const struct PartInfo *other = &rdb->parts[i];
         if (other == pi) continue;
         if (new_low_cyl <= other->high_cyl && new_high_cyl >= other->low_cyl) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PM_POSITION_OVERLAPS),
                     (unsigned long)new_low_cyl, (unsigned long)new_high_cyl,
                     other->drive_name,
@@ -244,7 +195,7 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
     phys_per_lb = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_PM_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -257,7 +208,7 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
     {
         char vbuf[128];
         if (!PART_CanMove(rdb, pi, new_low_cyl, NULL, vbuf)) {
-            sprintf(err_buf, "%.127s", vbuf);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, "%.127s", vbuf);
             return FALSE;
         }
     }
@@ -265,9 +216,31 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* Allocate copy buffer: MOVE_CHUNK sectors */
     buf = (UBYTE *)AllocVec((ULONG)MOVE_CHUNK * 512, MEMF_PUBLIC);
     if (!buf) {
-        sprintf(err_buf, GS(MSG_PM_OUT_OF_MEMORY_BYTES),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_OUT_OF_MEMORY_BYTES),
                 (unsigned long)MOVE_CHUNK * 512);
         return FALSE;
+    }
+
+    /* SFS: the root blocks have to be patched AFTER the copy.  Make sure they
+       are readable and sane BEFORE anything moves - a metadata problem found
+       after an overlapping copy would leave the source half destroyed with
+       the table still pointing at it. */
+    if (SFS_IsSupportedType(pi->dos_type)) {
+        UBYTE pre[512];
+        ULONG bs;
+        if (!BlockDev_ReadBlock(bd, phys_base_old, pre)) {
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_CANT_READ_ROOT0));
+            goto done_label;
+        }
+        if (sfs_getl(pre, SFS_RB_ID) != SFS_ROOT_ID) {
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_ROOT_ID_MISMATCH), pi->drive_name);
+            goto done_label;
+        }
+        bs = sfs_getl(pre, SFS_RB_BLOCKSIZE);
+        if (bs < 512 || (bs & (bs - 1)) || (bs % 512) != 0) {
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_INVALID_BLOCKSIZE), (unsigned long)bs);
+            goto done_label;
+        }
     }
 
     /* ---------------------------------------------------------------- */
@@ -283,14 +256,14 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
             if (chunk > MOVE_CHUNK) chunk = MOVE_CHUNK;
 
             if (!move_read_blocks(bd, phys_base_old + i, chunk, buf)) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_PM_READ_ERROR_AT_BLOCK),
                         (unsigned long)(phys_base_old + i),
                         (unsigned long)done);
                 goto done_label;
             }
             if (!move_write_blocks(bd, phys_base_new + i, chunk, buf)) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_PM_WRITE_ERROR_AT_BLOCK),
                         (unsigned long)(phys_base_new + i),
                         (unsigned long)done);
@@ -307,14 +280,14 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
             i -= chunk;
 
             if (!move_read_blocks(bd, phys_base_old + i, chunk, buf)) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_PM_READ_ERROR_AT_BLOCK),
                         (unsigned long)(phys_base_old + i),
                         (unsigned long)done);
                 goto done_label;
             }
             if (!move_write_blocks(bd, phys_base_new + i, chunk, buf)) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_PM_WRITE_ERROR_AT_BLOCK),
                         (unsigned long)(phys_base_new + i),
                         (unsigned long)done);
@@ -333,7 +306,11 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* root blocks still carry the old absolute firstbyte/lastbyte.      */
     /* Compute delta and patch both root copies.                         */
     /* ---------------------------------------------------------------- */
-    if (SFS_IsSupportedType(pi->dos_type)) {
+    /* The data is at its new place from here on.  Whatever happens to the
+       SFS metadata below, the table MUST follow the data: failures set a
+       warning in err_buf (shown in the success summary) and fall through to
+       the PartInfo update instead of aborting. */
+    if (SFS_IsSupportedType(pi->dos_type)) do {
         UBYTE  scratch[512];
         ULONG  sfs_blocksize, sfs_phys;
         ULONG  totalblocks;
@@ -345,36 +322,36 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
 
         /* Read first physical sector of new location to get SFS blocksize */
         if (!BlockDev_ReadBlock(bd, phys_base_new, scratch)) {
-            sprintf(err_buf, GS(MSG_PM_SFS_CANT_READ_ROOT0));
-            goto done_label;
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_CANT_READ_ROOT0));
+            break;
         }
         if (sfs_getl(scratch, SFS_RB_ID) != SFS_ROOT_ID) {
             /* Not SFS - copy succeeded but metadata update skipped.
                This shouldn't happen; warn but don't fail the move. */
-            sprintf(err_buf, GS(MSG_PM_SFS_ROOT_ID_MISMATCH),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_ROOT_ID_MISMATCH),
                     pi->drive_name);
-            goto done_label;
+            break;
         }
 
         sfs_blocksize = sfs_getl(scratch, SFS_RB_BLOCKSIZE);
         if (sfs_blocksize < 512 || (sfs_blocksize & (sfs_blocksize - 1)) ||
             (sfs_blocksize % 512) != 0) {
-            sprintf(err_buf, GS(MSG_PM_SFS_INVALID_BLOCKSIZE), (unsigned long)sfs_blocksize);
-            goto done_label;
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_INVALID_BLOCKSIZE), (unsigned long)sfs_blocksize);
+            break;
         }
         sfs_phys = sfs_blocksize / 512;
 
         sfs_root_buf = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
         if (!sfs_root_buf) {
-            sprintf(err_buf, GS(MSG_PM_OUT_OF_MEMORY_SFS));
-            goto done_label;
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_OUT_OF_MEMORY_SFS));
+            break;
         }
 
         /* Read full root block 0 */
         if (!sfs_read_root(bd, phys_base_new, 0, sfs_phys, sfs_root_buf) ||
             !sfs_verify_checksum(sfs_root_buf, sfs_blocksize)) {
-            sprintf(err_buf, GS(MSG_PM_SFS_ROOT0_CHECKSUM));
-            goto done_label;
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_SFS_ROOT0_CHECKSUM));
+            break;
         }
         totalblocks = sfs_getl(sfs_root_buf, SFS_RB_TOTALBLOCKS);
 
@@ -405,16 +382,18 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
             sfs_setl(sfs_root_buf, SFS_RB_LASTBYTE,   (ULONG)(new_lb & 0xFFFFFFFFUL));
             sfs_set_checksum(sfs_root_buf, sfs_blocksize);
             if (!sfs_write_root(bd, phys_base_new, root_blks[r],
-                                sfs_phys, sfs_root_buf)) {
+                                sfs_phys, sfs_root_buf) &&
+                !sfs_write_root(bd, phys_base_new, root_blks[r],
+                                sfs_phys, sfs_root_buf)) {      /* one retry */
                 if (r == 0) {
                     /* Primary root write failed - volume will be unmountable. */
-                    sprintf(err_buf,
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                             GS(MSG_PM_SFS_PRIMARY_WRITE_FAIL),
                             pi->drive_name);
-                    goto done_label;
+                    break;
                 } else {
                     /* Backup root write failed - primary is correct, warn only. */
-                    sprintf(err_buf,
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                             GS(MSG_PM_SFS_BACKUP_WRITE_FAIL),
                             (unsigned long)root_blks[1],
                             pi->drive_name);
@@ -422,7 +401,7 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
                 }
             }
         }
-    }
+    } while (0);
 
     /* ---------------------------------------------------------------- */
     /* Update PartInfo - caller must then call RDB_Write                 */
@@ -431,7 +410,7 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
     pi->high_cyl = new_high_cyl;
 
     if (err_buf[0] == '\0')
-    sprintf(err_buf,
+    snprintf(err_buf, ENGINE_ERRBUF_SIZE,
             GS(MSG_PM_MOVED_SUMMARY),
             (unsigned long)cyl_count,
             (unsigned long)old_low,  (unsigned long)old_high,
@@ -465,7 +444,7 @@ BOOL PART_Zero(struct BlockDev *bd, const struct RDBInfo *rdb,
     err_buf[0] = '\0';
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_PM_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -476,7 +455,7 @@ BOOL PART_Zero(struct BlockDev *bd, const struct RDBInfo *rdb,
     zbuf = (UBYTE *)AllocVec((ULONG)MOVE_CHUNK * bd->block_size,
                               MEMF_PUBLIC | MEMF_CLEAR);
     if (!zbuf) {
-        sprintf(err_buf, GS(MSG_PM_OUT_OF_MEMORY_BYTES),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_OUT_OF_MEMORY_BYTES),
                 (unsigned long)((ULONG)MOVE_CHUNK * bd->block_size));
         return FALSE;
     }
@@ -489,7 +468,7 @@ BOOL PART_Zero(struct BlockDev *bd, const struct RDBInfo *rdb,
         if (chunk > MOVE_CHUNK) chunk = MOVE_CHUNK;
 
         if (!move_write_blocks(bd, phys_base + written, chunk, zbuf)) {
-            sprintf(err_buf, GS(MSG_PM_WRITE_ERROR_AT_BLOCK),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PM_WRITE_ERROR_AT_BLOCK),
                     (unsigned long)(phys_base + written),
                     (unsigned long)written);
             FreeVec(zbuf);

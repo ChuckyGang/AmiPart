@@ -100,6 +100,14 @@ def parse_cd(path, want_text=True):
     with open(path, "r", encoding="latin-1") as fh:
         raw_lines = fh.read().split("\n")
 
+    # The .cd is ISO-8859-1 (what the Amiga renders).  An editor that saved
+    # it as UTF-8 turns every non-ASCII character into a 2-byte sequence that
+    # shows up on the Amiga as "·", "é" ... - catch that here.
+    for n, l in enumerate(raw_lines, 1):
+        if "\u00c2" in l or "\u00c3" in l:
+            print(f"{path}:{n}: WARNING: looks like UTF-8 encoded text "
+                  f"(save the file as ISO-8859-1): {l.strip()[:60]}", file=sys.stderr)
+
     i = 0
     while i < len(raw_lines):
         line = raw_lines[i]

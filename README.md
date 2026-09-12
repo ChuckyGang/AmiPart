@@ -78,7 +78,7 @@ Supports two m68k toolchains, auto-detected by `make`:
 - **Bartman/Abyss** (`m68k-amiga-elf-gcc`)
 
 ```sh
-make                       # auto-detect (prefers Bebbo if /opt/amiga exists)
+make                       # auto-detect (prefers Bartman when its VS Code extension is installed, else Bebbo)
 make TOOLCHAIN=bebbo       # force Bebbo
 make TOOLCHAIN=bartman     # force Bartman
 ```

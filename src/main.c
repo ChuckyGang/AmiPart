@@ -27,6 +27,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 #include <proto/asl.h>
 #include <proto/icon.h>
 
@@ -39,7 +40,10 @@
 #include "rdb.h"
 #include "version.h"
 
-static const char amipart_ver[] = "$VER: AmiPart 0.1 (2026)";
+/* "Version AmiPart" string.  Referenced through a volatile pointer in main()
+   so neither the compiler nor --gc-sections drops it (the old copy was an
+   unused static and never made it into the binary). */
+const char amipart_ver[] = AMIPART_VERSTRING;
 
 /* ------------------------------------------------------------------ */
 /* Library bases - SysBase set by main() before any LP call            */
@@ -77,7 +81,7 @@ static struct DevNameList dev_names;
 static struct UnitList    unit_list;
 static char               manual_devname[64];
 /* Holds "FILE:<path>" form for an image-file backend chosen via "Use Image". */
-static char               image_devname[256];
+static char               image_devname[264];
 /* Plain path (without "FILE:" prefix), used for existence checks and creation. */
 static char               image_path[256];
 
@@ -135,7 +139,7 @@ static BOOL pick_image_path(char *out, ULONG outsz)
     if (!fr) return FALSE;
 
     if (AslRequest(fr, NULL) && fr->fr_File && fr->fr_File[0]) {
-        strncpy(out, fr->fr_Drawer ? fr->fr_Drawer : "", outsz - 1);
+        strncpy(out, fr->fr_Drawer ? (char *)fr->fr_Drawer : "", outsz - 1);
         out[outsz - 1] = '\0';
         AddPart((UBYTE *)out, (UBYTE *)fr->fr_File, outsz);
         chosen = TRUE;
@@ -403,6 +407,7 @@ static BOOL prepare_image(const char *path)
 
 int main(void)
 {
+    { const char *volatile keep_ver = amipart_ver; (void)*keep_ver; }
     int result = 0;
 
     /* Must be first: SysBase lives at AbsExecBase (address 4) */

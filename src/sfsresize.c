@@ -52,11 +52,8 @@
 #endif
 #include <dos/dos.h>
 #include <proto/dos.h>
-#include <intuition/intuition.h>
-#include <proto/intuition.h>
 
 extern struct DosLibrary    *DOSBase;
-extern struct IntuitionBase *IntuitionBase;
 
 #include "clib.h"
 #include "rdb.h"
@@ -150,23 +147,23 @@ static BOOL sfs_write_block(struct BlockDev *bd, ULONG phys_base,
 /* MSB of each ULONG = first block (big-endian bit order).             */
 /* bit 1=free, bit 0=in-use.                                           */
 /* ------------------------------------------------------------------ */
+/* Byte-addressed on purpose: the block is big-endian on disk, and a native
+   ULONG load would put the bits in the wrong place on a little-endian host
+   (the Linux build).  Bit 7 of byte 0 = first block of the coverage. */
 static void sfs_bm_set_free(UBYTE *bmb, ULONG base, ULONG B)
 {
     ULONG bit_off = B - base;
-    ULONG *bm = (ULONG *)(bmb + SFS_BM_HEADER_SIZE);
-    bm[bit_off/32] |= 1UL << (31 - (bit_off%32));
+    bmb[SFS_BM_HEADER_SIZE + bit_off/8] |= (UBYTE)(0x80u >> (bit_off%8));
 }
 static void sfs_bm_set_used(UBYTE *bmb, ULONG base, ULONG B)
 {
     ULONG bit_off = B - base;
-    ULONG *bm = (ULONG *)(bmb + SFS_BM_HEADER_SIZE);
-    bm[bit_off/32] &= ~(1UL << (31 - (bit_off%32)));
+    bmb[SFS_BM_HEADER_SIZE + bit_off/8] &= (UBYTE)~(0x80u >> (bit_off%8));
 }
 static int sfs_bm_is_free(const UBYTE *bmb, ULONG base, ULONG B)
 {
     ULONG bit_off = B - base;
-    const ULONG *bm = (const ULONG *)(bmb + SFS_BM_HEADER_SIZE);
-    return (bm[bit_off/32] & (1UL << (31 - (bit_off%32)))) ? 1 : 0;
+    return (bmb[SFS_BM_HEADER_SIZE + bit_off/8] & (0x80u >> (bit_off%8))) ? 1 : 0;
 }
 
 /* Mark a range of blocks [lo..hi] intersected with coverage [base..base+bpbm-1]. */
@@ -223,7 +220,6 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     BOOL   ok             = FALSE;
     BOOL   did_inhibit    = FALSE;
     int    root0_written  = 0;
-    int    rootend_written = 0;
     int    old_end_inv    = 0;  /* 1 = old end root successfully invalidated */
     ULONG  ri_free_counted = 0; /* free block count from bitmap (for OBJC update) */
     int    objc_updated   = 0; /* 1 = fsRootInfo.freeblocks updated in OBJC block */
@@ -237,9 +233,9 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG  heads, sectors;
 
     /* Root block fields */
-    ULONG  totalblocks, firstbyteh, firstbyte;
+    ULONG  totalblocks;
     ULONG  lastbyteh, lastbyte_lo;
-    ULONG  bitmapbase, adminspace, rootobj, extbnode, objnode;
+    ULONG  bitmapbase = 0, rootobj;
     UWORD  seq_start, seq_end, new_seqnum;
     BOOL   end_root_valid;
 
@@ -256,7 +252,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     /* Loop vars */
     UBYTE  scratch[512];
-    ULONG  i, k;
+    ULONG  k;
     int    mi;
 
     for (mi = 0; mi < MAX_MOD_BMB; mi++) {
@@ -268,7 +264,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
     sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_SFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -281,11 +277,11 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* ---------------------------------------------------------------- */
     SFS_PROGRESS(GS(MSG_SFS_READING_ROOT));
     if (!BlockDev_ReadBlock(bd, phys_base, scratch)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BLOCK0), (unsigned long)phys_base);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BLOCK0), (unsigned long)phys_base);
         return FALSE;
     }
     if (sfs_getl(scratch, SFS_RB_ID) != SFS_ROOT_ID) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_SFS_BLOCK0_BAD_ID),
                 (unsigned long)sfs_getl(scratch, SFS_RB_ID),
                 (unsigned long)SFS_ROOT_ID,
@@ -298,7 +294,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     sfs_blocksize = sfs_getl(scratch, SFS_RB_BLOCKSIZE);
     if (sfs_blocksize < 512 || (sfs_blocksize & (sfs_blocksize - 1)) ||
         (sfs_blocksize % 512) != 0) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCKSIZE_INVALID), (unsigned long)sfs_blocksize);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCKSIZE_INVALID), (unsigned long)sfs_blocksize);
         return FALSE;
     }
     sfs_phys = sfs_blocksize / 512;
@@ -314,7 +310,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     buf_bmb_read = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
     if (!buf_root0 || !buf_orig0 || !buf_rootend || !buf_newend ||
         !buf_bmb_work || !buf_bmb_read) {
-        sprintf(err_buf, GS(MSG_SFS_OOM_BUFFERS), (unsigned long)sfs_blocksize);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BUFFERS), (unsigned long)sfs_blocksize);
         goto done;
     }
 
@@ -334,34 +330,29 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* Phase 4: read + validate start root block                         */
     /* ---------------------------------------------------------------- */
     if (!sfs_read_block(bd, phys_base, 0, sfs_phys, buf_root0)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_ROOT0)); goto done;
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_ROOT0)); goto done;
     }
     if (!sfs_verify_checksum(buf_root0, sfs_blocksize)) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT0_BAD_CHECKSUM)); goto done;
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT0_BAD_CHECKSUM)); goto done;
     }
     if (sfs_getw(buf_root0, SFS_RB_VERSION) != 3) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT_BAD_VERSION),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT_BAD_VERSION),
                 (unsigned)sfs_getw(buf_root0, SFS_RB_VERSION)); goto done;
     }
     if (sfs_getl(buf_root0, SFS_RB_OWNBLOCK) != 0) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT0_BAD_OWNBLOCK),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT0_BAD_OWNBLOCK),
                 (unsigned long)sfs_getl(buf_root0, SFS_RB_OWNBLOCK)); goto done;
     }
 
     totalblocks = sfs_getl(buf_root0, SFS_RB_TOTALBLOCKS);
-    firstbyteh  = sfs_getl(buf_root0, SFS_RB_FIRSTBYTEH);
-    firstbyte   = sfs_getl(buf_root0, SFS_RB_FIRSTBYTE);
     lastbyteh   = sfs_getl(buf_root0, SFS_RB_LASTBYTEH);
     lastbyte_lo = sfs_getl(buf_root0, SFS_RB_LASTBYTE);
     bitmapbase  = sfs_getl(buf_root0, SFS_RB_BITMAPBASE);
-    adminspace  = sfs_getl(buf_root0, SFS_RB_ADMINSPACE);
     rootobj     = sfs_getl(buf_root0, SFS_RB_ROOTOBJ);
-    extbnode    = sfs_getl(buf_root0, SFS_RB_EXTBNODE);
-    objnode     = sfs_getl(buf_root0, SFS_RB_OBJNODE);
     seq_start   = sfs_getw(buf_root0, SFS_RB_SEQNUM);
 
     if (totalblocks < 2) {
-        sprintf(err_buf, GS(MSG_SFS_TOTALBLOCKS_SMALL), (unsigned long)totalblocks);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_TOTALBLOCKS_SMALL), (unsigned long)totalblocks);
         goto done;
     }
     for (k = 0; k < sfs_blocksize; k++) buf_orig0[k] = buf_root0[k];
@@ -412,7 +403,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* ---------------------------------------------------------------- */
     blocks_inbitmap = (sfs_blocksize - (ULONG)SFS_BM_HEADER_SIZE) * 8;
     if (blocks_inbitmap == 0) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCKSIZE_SMALL_BITMAP)); goto done;
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCKSIZE_SMALL_BITMAP)); goto done;
     }
     old_bmb_count = (totalblocks     + blocks_inbitmap - 1) / blocks_inbitmap;
     new_bmb_count = (new_totalblocks + blocks_inbitmap - 1) / blocks_inbitmap;
@@ -456,15 +447,15 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                     mod_buf[mi]  = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
                     mod_orig[mi] = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
                     if (!mod_buf[mi] || !mod_orig[mi]) {
-                        sprintf(err_buf, GS(MSG_SFS_OOM_BMB_CACHE)); goto done;
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BMB_CACHE)); goto done;
                     }
                     if (!sfs_read_block(bd, phys_base, blk, sfs_phys, mod_buf[mi])) {
-                        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BMB), (unsigned long)blk);
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BMB), (unsigned long)blk);
                         goto done;
                     }
                     if (!sfs_verify_checksum(mod_buf[mi], sfs_blocksize) ||
                         sfs_getl(mod_buf[mi], SFS_RB_ID) != SFS_BITMAP_ID) {
-                        sprintf(err_buf, GS(MSG_SFS_BAD_BMB), (unsigned long)blk);
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BAD_BMB), (unsigned long)blk);
                         goto done;
                     }
                     for (j = 0; (ULONG)j < sfs_blocksize; j++)
@@ -538,7 +529,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 ULONG blk = bitmapbase + mod_idx[mi];
                 sfs_set_checksum(mod_buf[mi], sfs_blocksize);
                 if (!sfs_write_block(bd, phys_base, blk, sfs_phys, mod_buf[mi])) {
-                    sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_BMB), (unsigned long)blk);
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_BMB), (unsigned long)blk);
                     goto done;
                 }
                 mod_written[mi] = 1;
@@ -571,7 +562,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
                 sfs_set_checksum(buf_bmb_work, sfs_blocksize);
                 if (!sfs_write_block(bd, phys_base, blk, sfs_phys, buf_bmb_work)) {
-                    sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_NEW_BMB), (unsigned long)blk);
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_NEW_BMB), (unsigned long)blk);
                     goto done;
                 }
             }
@@ -592,7 +583,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                new end root can share the last block (new_totalblocks-1) which
                is always beyond new_bitmapbase+new_bmb_count if delta_sfs > new_bmb_count. */
             if (delta_sfs <= new_bmb_count) {
-                sprintf(err_buf,
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_SFS_EXT_AREA_TOO_SMALL),
                         (unsigned long)delta_sfs,
                         (unsigned long)new_bmb_count,
@@ -622,7 +613,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                     /* Copy old bitmap data for this index */
                     if (!sfs_read_block(bd, phys_base, bitmapbase+k, sfs_phys,
                                          buf_bmb_read)) {
-                        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_OLD_BMB),
+                        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_OLD_BMB),
                                 (unsigned long)(bitmapbase+k));
                         goto done;
                     }
@@ -670,7 +661,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
                 sfs_set_checksum(buf_bmb_work, sfs_blocksize);
                 if (!sfs_write_block(bd, phys_base, new_blk, sfs_phys, buf_bmb_work)) {
-                    sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_RELOC_BMB),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_RELOC_BMB),
                             (unsigned long)new_blk);
                     goto done;
                 }
@@ -699,16 +690,16 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             mod_buf[mi]  = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
             mod_orig[mi] = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
             if (!mod_buf[mi] || !mod_orig[mi]) {
-                sprintf(err_buf, GS(MSG_SFS_OOM_BMB_CACHE)); goto done;
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BMB_CACHE)); goto done;
             }
             SFS_PROGRESS(GS(MSG_SFS_READING_BMB));
             if (!sfs_read_block(bd, phys_base, blk, sfs_phys, mod_buf[mi])) {
-                sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BMB), (unsigned long)blk);
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BMB), (unsigned long)blk);
                 goto done;
             }
             if (!sfs_verify_checksum(mod_buf[mi], sfs_blocksize) ||
                 sfs_getl(mod_buf[mi], SFS_RB_ID) != SFS_BITMAP_ID) {
-                sprintf(err_buf, GS(MSG_SFS_BAD_BMB), (unsigned long)blk); goto done;
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BAD_BMB), (unsigned long)blk); goto done;
             }
             for (j = 0; (ULONG)j < sfs_blocksize; j++)
                 mod_orig[mi][j] = mod_buf[mi][j];
@@ -738,7 +729,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             ULONG blk = bitmapbase + mod_idx[mi];
             sfs_set_checksum(mod_buf[mi], sfs_blocksize);
             if (!sfs_write_block(bd, phys_base, blk, sfs_phys, mod_buf[mi])) {
-                sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_BMB), (unsigned long)blk);
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_BMB), (unsigned long)blk);
                 goto done;
             }
             mod_written[mi] = 1;
@@ -760,11 +751,10 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         sfs_setw(buf_newend, SFS_RB_SEQNUM, (UWORD)(new_seqnum + 1));
         sfs_set_checksum(buf_newend, sfs_blocksize);
         if (!sfs_write_block(bd, phys_base, new_totalblocks-1, sfs_phys, buf_newend)) {
-            sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_END_ROOT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_END_ROOT),
                     (unsigned long)(new_totalblocks-1));
             goto done;
         }
-        rootend_written = 1;
     }
 
     /* ---------------------------------------------------------------- */
@@ -778,7 +768,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     sfs_setw(buf_root0, SFS_RB_SEQNUM, (UWORD)(new_seqnum + 2));
     sfs_set_checksum(buf_root0, sfs_blocksize);
     if (!sfs_write_block(bd, phys_base, 0, sfs_phys, buf_root0)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
         goto done;
     }
     root0_written = 1;
@@ -842,7 +832,9 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 w = w - ((w >> 1) & 0x55555555UL);
                 w = (w & 0x33333333UL) + ((w >> 2) & 0x33333333UL);
                 w = (w + (w >> 4)) & 0x0F0F0F0FUL;
-                ri_free_counted += (w * 0x01010101UL) >> 24;
+                /* SWAR popcount; the (ULONG) cast keeps the multiply at 32 bits
+                   on LP64 hosts where 0x01010101UL is a 64-bit constant */
+                ri_free_counted += ((ULONG)(w * 0x01010101UL)) >> 24;
             }
         }
 
@@ -887,7 +879,7 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 w = w - ((w >> 1) & 0x55555555UL);
                 w = (w & 0x33333333UL) + ((w >> 2) & 0x33333333UL);
                 w = (w + (w >> 4)) & 0x0F0F0F0FUL;
-                vrf_free += (w * 0x01010101UL) >> 24;
+                vrf_free += ((ULONG)(w * 0x01010101UL)) >> 24;
             }
         }
 
@@ -907,12 +899,12 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                         w = w - ((w >> 1) & 0x55555555UL);
                         w = (w & 0x33333333UL) + ((w >> 2) & 0x33333333UL);
                         w = (w + (w >> 4)) & 0x0F0F0F0FUL;
-                        vrf2_free += (w * 0x01010101UL) >> 24;
+                        vrf2_free += ((ULONG)(w * 0x01010101UL)) >> 24;
                     }
                 }
             }
 
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_SFS_DIAG_SUMMARY),
                     use_relocation ? GS(MSG_SFS_DIAG_RELOCATED)
                                    : GS(MSG_SFS_DIAG_EXTENDED),
@@ -1002,7 +994,7 @@ BOOL SFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
     ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_SFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -1010,12 +1002,12 @@ BOOL SFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG phys_base   = pi->low_cyl * heads * sectors * phys_per_lb;
 
     if (!BlockDev_ReadBlock(bd, phys_base, scratch)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BLOCK0),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BLOCK0),
                 (unsigned long)phys_base);
         return FALSE;
     }
     if (sfs_getl(scratch, SFS_RB_ID) != SFS_ROOT_ID) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCK0_BAD_ID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCK0_BAD_ID),
                 (unsigned long)sfs_getl(scratch, SFS_RB_ID),
                 (unsigned long)SFS_ROOT_ID,
                 (unsigned long)phys_base,
@@ -1027,7 +1019,7 @@ BOOL SFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG sfs_blocksize = sfs_getl(scratch, SFS_RB_BLOCKSIZE);
     if (sfs_blocksize < 512 || (sfs_blocksize & (sfs_blocksize - 1)) ||
         (sfs_blocksize % 512) != 0) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCKSIZE_INVALID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCKSIZE_INVALID),
                 (unsigned long)sfs_blocksize);
         return FALSE;
     }
@@ -1036,25 +1028,25 @@ BOOL SFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     blk_buf = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC | MEMF_CLEAR);
     bm_buf  = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC | MEMF_CLEAR);
     if (!blk_buf || !bm_buf) {
-        sprintf(err_buf, GS(MSG_SFS_OOM_BUFFERS),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BUFFERS),
                 (unsigned long)sfs_blocksize);
         goto done;
     }
 
     if (!sfs_read_block(bd, phys_base, 0, sfs_phys, blk_buf)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BLOCK0),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BLOCK0),
                 (unsigned long)phys_base);
         goto done;
     }
     if (!sfs_verify_checksum(blk_buf, sfs_blocksize)) {
-        sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)0);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)0);
         goto done;
     }
     ULONG totalblocks = sfs_getl(blk_buf, SFS_RB_TOTALBLOCKS);
     ULONG bitmapbase  = sfs_getl(blk_buf, SFS_RB_BITMAPBASE);
     ULONG rootobj     = sfs_getl(blk_buf, SFS_RB_ROOTOBJ);
     if (totalblocks < 4 || bitmapbase == 0 || bitmapbase >= totalblocks) {
-        sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bitmapbase);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bitmapbase);
         goto done;
     }
 
@@ -1073,20 +1065,20 @@ BOOL SFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     for (ULONG k = 0; k < num_bmb; k++) {
         ULONG bmb_nr = bitmapbase + k;
         if (!sfs_read_block(bd, phys_base, bmb_nr, sfs_phys, bm_buf)) {
-            sprintf(err_buf, GS(MSG_SI_BM_READ_FMT), (unsigned long)bmb_nr);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT), (unsigned long)bmb_nr);
             goto done;
         }
         if (sfs_getl(bm_buf, 0) != SFS_BITMAP_ID ||
             !sfs_verify_checksum(bm_buf, sfs_blocksize)) {
-            sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bmb_nr);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bmb_nr);
             goto done;
         }
         ULONG base = k * bib;
-        const ULONG *bm = (const ULONG *)(bm_buf + SFS_BM_HEADER_SIZE);
         for (ULONG m = 0; m < nlongs; m++) {
             ULONG b0 = base + m * 32;
             if (b0 >= totalblocks) break;
-            ULONG v = bm[m];
+            /* big-endian load: MSB = first block of this 32-block group */
+            ULONG v = sfs_getl(bm_buf, SFS_BM_HEADER_SIZE + m * 4);
             ULONG in_range = totalblocks - b0;
             if (in_range > 32) in_range = 32;
             if (v == 0xFFFFFFFFUL) continue;               /* all free */
@@ -1207,7 +1199,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
     ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_SFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -1215,12 +1207,12 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG phys_base   = pi->low_cyl * heads * sectors * phys_per_lb;
 
     if (!BlockDev_ReadBlock(bd, phys_base, scratch)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_BLOCK0),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_BLOCK0),
                 (unsigned long)phys_base);
         return FALSE;
     }
     if (sfs_getl(scratch, SFS_RB_ID) != SFS_ROOT_ID) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCK0_BAD_ID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCK0_BAD_ID),
                 (unsigned long)sfs_getl(scratch, SFS_RB_ID),
                 (unsigned long)SFS_ROOT_ID,
                 (unsigned long)phys_base,
@@ -1232,7 +1224,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG sfs_blocksize = sfs_getl(scratch, SFS_RB_BLOCKSIZE);
     if (sfs_blocksize < 512 || (sfs_blocksize & (sfs_blocksize - 1)) ||
         (sfs_blocksize % 512) != 0) {
-        sprintf(err_buf, GS(MSG_SFS_BLOCKSIZE_INVALID),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_BLOCKSIZE_INVALID),
                 (unsigned long)sfs_blocksize);
         return FALSE;
     }
@@ -1244,7 +1236,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     buf_work   = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
     buf_read   = (UBYTE *)AllocVec(sfs_blocksize, MEMF_PUBLIC);
     if (!buf_root0 || !buf_orig0 || !buf_newend || !buf_work || !buf_read) {
-        sprintf(err_buf, GS(MSG_SFS_OOM_BUFFERS), (unsigned long)sfs_blocksize);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BUFFERS), (unsigned long)sfs_blocksize);
         goto done;
     }
 
@@ -1258,17 +1250,17 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     /* ---- start root ---- */
     if (!sfs_read_block(bd, phys_base, 0, sfs_phys, buf_root0)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_READ_ROOT0)); goto done;
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_READ_ROOT0)); goto done;
     }
     if (!sfs_verify_checksum(buf_root0, sfs_blocksize)) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT0_BAD_CHECKSUM)); goto done;
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT0_BAD_CHECKSUM)); goto done;
     }
     if (sfs_getw(buf_root0, SFS_RB_VERSION) != 3) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT_BAD_VERSION),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT_BAD_VERSION),
                 (unsigned)sfs_getw(buf_root0, SFS_RB_VERSION)); goto done;
     }
     if (sfs_getl(buf_root0, SFS_RB_OWNBLOCK) != 0) {
-        sprintf(err_buf, GS(MSG_SFS_ROOT0_BAD_OWNBLOCK),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_ROOT0_BAD_OWNBLOCK),
                 (unsigned long)sfs_getl(buf_root0, SFS_RB_OWNBLOCK)); goto done;
     }
     ULONG totalblocks = sfs_getl(buf_root0, SFS_RB_TOTALBLOCKS);
@@ -1299,7 +1291,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG bpc      = (old_ncyl > 0 && totalblocks > 0)
                      ? (totalblocks / old_ncyl) : 0;
     if (bpc == 0 || cyl_diff == 0) {
-        sprintf(err_buf, GS(MSG_SFS_TOTALBLOCKS_SMALL),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_TOTALBLOCKS_SMALL),
                 (unsigned long)totalblocks);
         goto done;
     }
@@ -1334,13 +1326,13 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG new_bmb = (new_totalblocks + bib - 1) / bib;
 
     if (new_totalblocks < 8 || new_totalblocks <= bitmapbase + new_bmb) {
-        sprintf(err_buf, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
                 (unsigned long)new_totalblocks);
         goto done;
     }
     /* v1: the whole (new) bitmap must sit below the new end root. */
     if (bitmapbase + new_bmb > new_totalblocks - 1) {
-        sprintf(err_buf, GS(MSG_SFS_SHR_BITMAP_HIGH));
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_SHR_BITMAP_HIGH));
         goto done;
     }
 
@@ -1351,13 +1343,13 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         for (k = k_lo; k < old_bmb; k++) {
             if (!sfs_read_block(bd, phys_base, bitmapbase + k, sfs_phys,
                                 buf_read)) {
-                sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                         (unsigned long)(bitmapbase + k));
                 goto done;
             }
             if (sfs_getl(buf_read, 0) != SFS_BITMAP_ID ||
                 !sfs_verify_checksum(buf_read, sfs_blocksize)) {
-                sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                         (unsigned long)(bitmapbase + k));
                 goto done;
             }
@@ -1366,7 +1358,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             if (new_totalblocks - 1 >= base &&
                 new_totalblocks - 1 < base + bib &&
                 !sfs_bm_is_free(buf_read, base, new_totalblocks - 1)) {
-                sprintf(err_buf, GS(MSG_FFS_SHR_TARGET_USED_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TARGET_USED_FMT),
                         (unsigned long)(new_totalblocks - 1));
                 goto done;
             }
@@ -1374,7 +1366,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 if (b < new_totalblocks) continue;
                 if (b == totalblocks - 1) continue;      /* old end root */
                 if (!sfs_bm_is_free(buf_read, base, b)) {
-                    sprintf(err_buf, GS(MSG_FFS_SHR_TAIL_USED_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TAIL_USED_FMT),
                             (unsigned long)b);
                     goto done;
                 }
@@ -1413,7 +1405,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* slack tail of the last kept bitmap block */
         ULONG lastk = new_bmb - 1;
         SFS_SHR_GETMOD(lastk, mb);
-        if (!mb) { sprintf(err_buf, GS(MSG_SFS_OOM_BMB_CACHE)); goto done; }
+        if (!mb) { snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BMB_CACHE)); goto done; }
         {
             ULONG base = lastk * bib;
             for (ULONG b = new_totalblocks; b < base + bib; b++)
@@ -1423,7 +1415,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         {
             ULONG kidx = (new_totalblocks - 1) / bib;
             SFS_SHR_GETMOD(kidx, mb);
-            if (!mb) { sprintf(err_buf, GS(MSG_SFS_OOM_BMB_CACHE)); goto done; }
+            if (!mb) { snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_OOM_BMB_CACHE)); goto done; }
             sfs_bm_set_used(mb, kidx * bib, new_totalblocks - 1);
         }
         /* write all modified blocks */
@@ -1431,7 +1423,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             sfs_set_checksum(mod_buf[i], sfs_blocksize);
             if (!sfs_write_block(bd, phys_base, bitmapbase + mod_idx[i],
                                  sfs_phys, mod_buf[i])) {
-                sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                         (unsigned long)(bitmapbase + mod_idx[i]));
                 goto done;
             }
@@ -1450,7 +1442,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     sfs_set_checksum(buf_newend, sfs_blocksize);
     if (!sfs_write_block(bd, phys_base, new_totalblocks - 1, sfs_phys,
                          buf_newend)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_END_ROOT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_END_ROOT),
                 (unsigned long)(new_totalblocks - 1));
         goto done;
     }
@@ -1463,7 +1455,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     sfs_setw(buf_root0, SFS_RB_SEQNUM, (UWORD)(new_seqnum + 2));
     sfs_set_checksum(buf_root0, sfs_blocksize);
     if (!sfs_write_block(bd, phys_base, 0, sfs_phys, buf_root0)) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
         goto done;
     }
     root0_written = 1;
@@ -1517,7 +1509,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 w = w - ((w >> 1) & 0x55555555UL);
                 w = (w & 0x33333333UL) + ((w >> 2) & 0x33333333UL);
                 w = (w + (w >> 4)) & 0x0F0F0F0FUL;
-                counted += (w * 0x01010101UL) >> 24;
+                counted += ((ULONG)(w * 0x01010101UL)) >> 24;
             }
         }
         if (k2 == new_bmb && rootobj != 0 && rootobj < new_totalblocks) {
@@ -1536,7 +1528,7 @@ BOOL SFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     SFS_SPROG(GS(MSG_SFS_VERIFYING_WRITES));
     if (!sfs_read_block(bd, phys_base, 0, sfs_phys, buf_read) ||
         sfs_getl(buf_read, SFS_RB_TOTALBLOCKS) != new_totalblocks) {
-        sprintf(err_buf, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_CANNOT_WRITE_START_ROOT), pi->drive_name);
         goto done;
     }
 

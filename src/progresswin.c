@@ -15,6 +15,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "locale_support.h"
@@ -25,7 +26,7 @@
 void ProgressWin_Open(struct ProgressWin *p, const char *title)
 {
     struct Screen *scr;
-    UWORD fh, bor_l, bor_t, bor_r, bor_b, pad, btn_h, btn_w;
+    UWORD fh, bor_l, bor_t, bor_b, pad, btn_h, btn_w;
     UWORD win_w, win_h, status_y, btn_y;
 
     memset(p, 0, sizeof(*p));
@@ -41,7 +42,6 @@ void ProgressWin_Open(struct ProgressWin *p, const char *title)
     fh    = scr->Font->ta_YSize;
     bor_l = (UWORD)scr->WBorLeft;
     bor_t = (UWORD)scr->WBorTop + fh + 1;
-    bor_r = (UWORD)scr->WBorRight;
     bor_b = (UWORD)scr->WBorBottom;
     pad   = 8;
     btn_h = fh + 6;

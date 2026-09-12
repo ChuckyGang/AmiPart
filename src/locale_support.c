@@ -54,7 +54,7 @@ void LocaleClose(void)
 CONST_STRPTR GetDPString(LONG id)
 {
     CONST_STRPTR def = (id >= 0 && id < MSG_COUNT)
-                       ? DPStringDefaults[id]
+                       ? (CONST_STRPTR)DPStringDefaults[id]
                        : (CONST_STRPTR)"";
     /* GetCatalogStr safely returns `def` for a NULL catalog or missing id. */
     if (LocaleBase)

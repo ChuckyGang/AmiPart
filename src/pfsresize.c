@@ -38,9 +38,10 @@
  *   sectors of the partition, usually 2 sectors = 1024 bytes).
  *
  * REVERSIBILITY:
- *   The original rootblock cluster is saved to a heap buffer before any
- *   write.  On any failure the saved original is written back sector by
- *   sector, restoring the disk to its pre-grow state.
+ *   The rootblock cluster is written exactly once, after the RDB-side
+ *   checks pass; there is no rollback (the write is single-cluster and is
+ *   read back for verification).  The SHRINK path below does keep a saved
+ *   copy and restores it on failure.
  *
  * BITMAP BLOCKS:
  *   PFS3 creates new bitmap blocks in the reserved area automatically when
@@ -63,11 +64,8 @@
 #endif
 #include <dos/dos.h>
 #include <proto/dos.h>
-#include <intuition/intuition.h>
-#include <proto/intuition.h>
 
 extern struct DosLibrary    *DOSBase;
-extern struct IntuitionBase *IntuitionBase;
 
 #include "clib.h"
 
@@ -182,10 +180,8 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     UBYTE  first_sector[512];  /* scratch for initial read before alloc */
     UBYTE *cluster_buf  = NULL;
-    UBYTE *original_buf = NULL;
     BOOL   ok            = FALSE;
     BOOL   did_inhibit   = FALSE;
-    BOOL   write_ok      = FALSE;  /* TRUE only when all writes succeeded */
     char   inh_name[44];           /* "drivename:" */
     UWORD  cluster_phys  = 0;      /* physical 512-byte sector count for rootblock cluster */
 
@@ -193,7 +189,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
 
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_PFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -230,7 +226,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* ---------------------------------------------------------------- */
     PFS_PROGRESS(GS(MSG_PFS_READING_ROOTBLOCK));
     if (!BlockDev_ReadBlock(bd, part_abs, first_sector)) {
-        sprintf(err_buf, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
                 (unsigned long)part_abs);
         goto done;
     }
@@ -241,7 +237,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     {
         ULONG disktype = pfs_getl(first_sector, PFS_RB_DISKTYPE);
         if (disktype != PFS_ID_PFS1 && disktype != PFS_ID_PFS2) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_NOT_ROOTBLOCK),
                     (unsigned long)disktype,
                     (unsigned long)PFS_ID_PFS1,
@@ -254,7 +250,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     UWORD reserved_blksize = pfs_getw(first_sector, PFS_RB_RESERVED_BLKSIZE);
 
     if (rblkcluster == 0) {
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_PFS_RBLKCLUSTER_ZERO),
                 (unsigned long)part_abs,
                 (unsigned long)(pi->block_size),
@@ -271,7 +267,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         goto done;
     }
     if (reserved_blksize < 512 || (reserved_blksize & 3)) {
-        sprintf(err_buf, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
                 (unsigned)reserved_blksize);
         goto done;
     }
@@ -285,22 +281,15 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         cluster_phys = (UWORD)((ULONG)rblkcluster * phys_per_lblock);
         ULONG cluster_bytes = (ULONG)cluster_phys * 512;
         cluster_buf  = (UBYTE *)AllocVec(cluster_bytes, MEMF_PUBLIC);
-        original_buf = (UBYTE *)AllocVec(cluster_bytes, MEMF_PUBLIC);
-        if (!cluster_buf || !original_buf) {
-            sprintf(err_buf, GS(MSG_PFS_OUT_OF_MEMORY),
+        if (!cluster_buf) {
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_OUT_OF_MEMORY),
                     (unsigned long)cluster_bytes);
             goto done;
         }
         if (!pfs_read_cluster(bd, part_abs, cluster_buf, cluster_phys)) {
-            sprintf(err_buf, GS(MSG_PFS_CANNOT_READ_CLUSTER),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_READ_CLUSTER),
                     (unsigned)cluster_phys, (unsigned long)part_abs);
             goto done;
-        }
-        /* save original for rollback */
-        {
-            ULONG i;
-            for (i = 0; i < cluster_bytes; i++)
-                original_buf[i] = cluster_buf[i];
         }
     }
 
@@ -378,7 +367,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
            new_num_idxb > PFS_MAX_BITMAPINDEX check below additionally
            refuses a grow that would cross that boundary. */
         if (old_num_idxb > PFS_MAX_BITMAPINDEX) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_SUPERINDEX),
                     (unsigned long)options);
             goto done;
@@ -396,7 +385,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                                   ? (pi->low_cyl + safe_cyls - 1)
                                   : old_high_cyl;
             if (safe_high > pi->high_cyl) safe_high = pi->high_cyl;
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_RESERVED_TOO_SMALL),
                     (unsigned long)reserved_needed,
                     (unsigned long)reserved_free,
@@ -415,7 +404,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                                * bm_coverage;
             /* max_blocks in logical blocks -> MB: divide by blocks-per-MB */
             ULONG max_mb     = max_blocks / (1048576UL / blksz);
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_TOO_LARGE),
                     (unsigned long)max_mb);
             goto done;
@@ -427,7 +416,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
            attempt that computed an oversized delta.  The user must run
            PFSDoctor to rebuild blocksfree before growing again. */
         if (cur_disksize > 0 && blocksfree > cur_disksize) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_METADATA_CORRUPT),
                     (unsigned long)blocksfree,
                     (unsigned long)cur_disksize,
@@ -437,7 +426,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
 
         /* Overflow check: blocksfree + delta must not wrap a ULONG */
         if (delta_blocks > 0xFFFFFFFFUL - blocksfree) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_OVERFLOW),
                     (unsigned long)blocksfree, (unsigned long)delta_blocks,
                     (unsigned long)heads, (unsigned long)sectors,
@@ -531,12 +520,11 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* ---------------------------------------------------------------- */
         PFS_PROGRESS(GS(MSG_PFS_WRITING_CLUSTER));
         if (!pfs_write_cluster(bd, part_abs, cluster_buf, cluster_phys)) {
-            sprintf(err_buf,
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_CANNOT_WRITE),
                     pi->drive_name);
             goto done;
         }
-        write_ok = TRUE;
 
         /* ---------------------------------------------------------------- */
         /* Phase 7 - clear MODE_SIZEFIELD (second write, still pre-Inhibit) */
@@ -579,7 +567,7 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         /* ---------------------------------------------------------------- */
         /* cyl_diff × bpc = delta_blocks; bpc derived from PFS3 disksize,
            not DosEnvec geometry, so it matches PFS3's native block units */
-        sprintf(err_buf,
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                 GS(MSG_PFS_SUCCESS),
                 (unsigned long)cyl_diff,
                 (unsigned long)bpc,
@@ -599,7 +587,6 @@ done:
     if (did_inhibit)
         Inhibit((STRPTR)inh_name, DOSFALSE);
     if (cluster_buf)  FreeVec(cluster_buf);
-    if (original_buf) FreeVec(original_buf);
     return ok;
 
 #undef PFS_PROGRESS
@@ -637,7 +624,7 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
     ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_PFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -648,14 +635,14 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG rb_abs          = (part_lbase + rb_lblock) * phys_per_lblock;
 
     if (!BlockDev_ReadBlock(bd, rb_abs, first_sector)) {
-        sprintf(err_buf, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
                 (unsigned long)rb_abs);
         return FALSE;
     }
     {
         ULONG disktype = pfs_getl(first_sector, PFS_RB_DISKTYPE);
         if (disktype != PFS_ID_PFS1 && disktype != PFS_ID_PFS2) {
-            sprintf(err_buf, GS(MSG_PFS_NOT_ROOTBLOCK),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_NOT_ROOTBLOCK),
                     (unsigned long)disktype,
                     (unsigned long)PFS_ID_PFS1,
                     (unsigned long)PFS_ID_PFS2);
@@ -669,12 +656,12 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG disksize         = pfs_getl(first_sector, PFS_RB_DISKSIZE);
 
     if (reserved_blksize < 512 || (reserved_blksize % 512) != 0) {
-        sprintf(err_buf, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
                 (unsigned)reserved_blksize);
         return FALSE;
     }
     if (disksize == 0) {
-        sprintf(err_buf, GS(MSG_PFS_METADATA_CORRUPT),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_METADATA_CORRUPT),
                 (unsigned long)0, (unsigned long)0, pi->drive_name);
         return FALSE;
     }
@@ -700,7 +687,7 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG max_idx = (options & PFS_MODE_SUPERINDEX)
                         ? (ULONG)PFS_MAX_BITMAPINDEX : 5UL;
         if (num_idxb > max_idx) {
-            sprintf(err_buf, GS(MSG_PFS_SUPERINDEX), (unsigned long)options);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_SUPERINDEX), (unsigned long)options);
             return FALSE;
         }
     }
@@ -709,7 +696,7 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
     idx_buf = (UBYTE *)AllocVec(reserved_blksize, MEMF_PUBLIC | MEMF_CLEAR);
     bm_buf  = (UBYTE *)AllocVec(reserved_blksize, MEMF_PUBLIC | MEMF_CLEAR);
     if (!idx_buf || !bm_buf) {
-        sprintf(err_buf, GS(MSG_PFS_OUT_OF_MEMORY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_OUT_OF_MEMORY),
                 (unsigned long)reserved_blksize);
         goto done;
     }
@@ -729,12 +716,12 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
             if (!idx_absent) {
                 if (!pfs_read_cluster(bd, (part_lbase + inr) * phys_per_lblock,
                                       idx_buf, n_phys)) {
-                    sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                             (unsigned long)inr);
                     goto done;
                 }
                 if (pfs_getw(idx_buf, 0) != PFS_BMIBLKID) {
-                    sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                             (unsigned long)inr);
                     goto done;
                 }
@@ -747,12 +734,12 @@ BOOL PFS_ShrinkInfo(struct BlockDev *bd, const struct RDBInfo *rdb,
 
         if (!pfs_read_cluster(bd, (part_lbase + bmnr) * phys_per_lblock,
                               bm_buf, n_phys)) {
-            sprintf(err_buf, GS(MSG_SI_BM_READ_FMT), (unsigned long)bmnr);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT), (unsigned long)bmnr);
             goto done;
         }
         if (pfs_getw(bm_buf, 0) != PFS_BMBLKID ||
             pfs_getl(bm_buf, 8) != seq) {
-            sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bmnr);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT), (unsigned long)bmnr);
             goto done;
         }
 
@@ -857,7 +844,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     ULONG heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
     ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
     if (heads == 0 || sectors == 0) {
-        sprintf(err_buf, GS(MSG_PFS_INVALID_GEOMETRY),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_INVALID_GEOMETRY),
                 (unsigned long)heads, (unsigned long)sectors);
         return FALSE;
     }
@@ -870,14 +857,14 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     /* ---- Phase 1/2: read + validate the rootblock first sector ---- */
     PFS_SPROG(GS(MSG_PFS_READING_ROOTBLOCK));
     if (!BlockDev_ReadBlock(bd, part_abs, first_sector)) {
-        sprintf(err_buf, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_READ_ROOTBLOCK),
                 (unsigned long)part_abs);
         return FALSE;
     }
     {
         ULONG disktype = pfs_getl(first_sector, PFS_RB_DISKTYPE);
         if (disktype != PFS_ID_PFS1 && disktype != PFS_ID_PFS2) {
-            sprintf(err_buf, GS(MSG_PFS_NOT_ROOTBLOCK),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_NOT_ROOTBLOCK),
                     (unsigned long)disktype,
                     (unsigned long)PFS_ID_PFS1,
                     (unsigned long)PFS_ID_PFS2);
@@ -888,7 +875,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     UWORD reserved_blksize = pfs_getw(first_sector, PFS_RB_RESERVED_BLKSIZE);
     if (rblkcluster == 0 || reserved_blksize < 512 ||
         (reserved_blksize % 512) != 0) {
-        sprintf(err_buf, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_UNEXPECTED_BLKSIZE),
                 (unsigned)reserved_blksize);
         return FALSE;
     }
@@ -903,12 +890,12 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         idx_buf      = (UBYTE *)AllocVec(reserved_blksize, MEMF_PUBLIC | MEMF_CLEAR);
         bm_buf       = (UBYTE *)AllocVec(reserved_blksize, MEMF_PUBLIC | MEMF_CLEAR);
         if (!cluster_buf || !original_buf || !idx_buf || !bm_buf) {
-            sprintf(err_buf, GS(MSG_PFS_OUT_OF_MEMORY),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_OUT_OF_MEMORY),
                     (unsigned long)cluster_bytes);
             goto done;
         }
         if (!pfs_read_cluster(bd, part_abs, cluster_buf, cluster_phys)) {
-            sprintf(err_buf, GS(MSG_PFS_CANNOT_READ_CLUSTER),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_READ_CLUSTER),
                     (unsigned)cluster_phys, (unsigned long)part_abs);
             goto done;
         }
@@ -931,7 +918,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                          ? (old_high_cyl - pi->low_cyl + 1) : 1;
         ULONG cyl_diff = old_high_cyl - pi->high_cyl;
         if (cur_disksize == 0 || old_ncyl == 0 || cyl_diff == 0) {
-            sprintf(err_buf, GS(MSG_PFS_METADATA_CORRUPT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_METADATA_CORRUPT),
                     (unsigned long)blocksfree, (unsigned long)cur_disksize,
                     pi->drive_name);
             goto done;
@@ -954,18 +941,18 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG bitmapstart  = lastreserved + 1;
 
         if (bpc == 0 || new_disksize <= bitmapstart + 1) {
-            sprintf(err_buf, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TOO_SMALL_FMT),
                     (unsigned long)new_disksize);
             goto done;
         }
         if (blocksfree > cur_disksize) {
-            sprintf(err_buf, GS(MSG_PFS_METADATA_CORRUPT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_METADATA_CORRUPT),
                     (unsigned long)blocksfree, (unsigned long)cur_disksize,
                     pi->drive_name);
             goto done;
         }
         if (blocksfree < delta_blocks) {
-            sprintf(err_buf, GS(MSG_PFS_SHR_FREECOUNT_FMT),
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_SHR_FREECOUNT_FMT),
                     (unsigned long)blocksfree, (unsigned long)delta_blocks);
             goto done;
         }
@@ -981,7 +968,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG max_idx     = (options & PFS_MODE_SUPERINDEX)
                             ? (ULONG)PFS_MAX_BITMAPINDEX : 5UL;
         if (old_num_idxb > max_idx) {
-            sprintf(err_buf, GS(MSG_PFS_SUPERINDEX), (unsigned long)options);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_SUPERINDEX), (unsigned long)options);
             goto done;
         }
 
@@ -1002,12 +989,12 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                         if (!pfs_read_cluster(bd,
                                 (part_lbase + inr) * phys_per_lblock,
                                 idx_buf, n_phys)) {
-                            sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                                     (unsigned long)inr);
                             goto done;
                         }
                         if (pfs_getw(idx_buf, 0) != PFS_BMIBLKID) {
-                            sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+                            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                                     (unsigned long)inr);
                             goto done;
                         }
@@ -1018,13 +1005,13 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 if (bmnr == 0) continue;           /* untouched = free */
                 if (!pfs_read_cluster(bd, (part_lbase + bmnr) * phys_per_lblock,
                                       bm_buf, n_phys)) {
-                    sprintf(err_buf, GS(MSG_SI_BM_READ_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_READ_FMT),
                             (unsigned long)bmnr);
                     goto done;
                 }
                 if (pfs_getw(bm_buf, 0) != PFS_BMBLKID ||
                     pfs_getl(bm_buf, 8) != seq) {
-                    sprintf(err_buf, GS(MSG_SI_BM_BAD_FMT),
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SI_BM_BAD_FMT),
                             (unsigned long)bmnr);
                     goto done;
                 }
@@ -1038,7 +1025,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                         if (blk >= cur_disksize) break;
                         if (blk < new_disksize) continue;
                         if (!(v & (1UL << (31u - k)))) {
-                            sprintf(err_buf, GS(MSG_FFS_SHR_TAIL_USED_FMT),
+                            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TAIL_USED_FMT),
                                     (unsigned long)blk);
                             goto done;
                         }
@@ -1067,7 +1054,7 @@ BOOL PFS_ShrinkPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             pfs_setl(cluster_buf, PFS_RB_ROVING, 0);
 
         if (!pfs_write_cluster(bd, part_abs, cluster_buf, cluster_phys)) {
-            sprintf(err_buf, GS(MSG_PFS_CANNOT_WRITE), pi->drive_name);
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_PFS_CANNOT_WRITE), pi->drive_name);
             goto done;
         }
         cluster_written = TRUE;

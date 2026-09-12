@@ -68,6 +68,14 @@ void MBR_TypeName  (UBYTE type, char *buf);
    FAT16, LINUX, LINUXSWAP).  Returns MBRT_EMPTY (0x00) if not recognised. */
 UBYTE MBR_ParseType(const char *name);
 
+/* TRUE if cylinders lo..hi for an MBR partition would collide with the RDB
+ * reserved area (cyl 0 .. lo_cyl-1), any RDB partition, or another MBR slot
+ * (own_slot is skipped; pass 0xFF when adding).  The single rule set behind
+ * the GUI dialog, CLI ADDMBR and script ADDMBR. */
+struct RDBInfo;
+BOOL  MBR_RangeConflicts(ULONG lo, ULONG hi, const struct RDBInfo *rdb,
+                         const struct MBRInfo *mbr, UBYTE own_slot);
+
 /* Number of present (non-empty) entries in the MBR. */
 UBYTE MBR_Count    (const struct MBRInfo *mbr);
 

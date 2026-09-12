@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include "amiga_compat.h"
 #include "rdb.h"
 #include "quickformat.h"
@@ -32,33 +34,6 @@ BPTR Open(CONST_STRPTR name, LONG mode) {
 }
 void Close(BPTR fh) { if (fh) fclose((FILE *)(size_t)fh); }
 
-/* Demonstration endianness layer: an RDB metadata block is a sequence of
- * big-endian longwords. On a little-endian host, DiskPart's struct-overlay
- * reads (and its whole-block longword checksum) only work if those longs
- * are byte-swapped to native order. We do that here for recognised RDB
- * block signatures so the UNMODIFIED rdb.c parses correctly.
- *
- * CAVEAT (the crux finding): the checksum needs ALL longs in true-BE-native
- * form, but embedded byte-string fields (pb_DriveName BSTR, rdb_DiskVendor,
- * fhb_FileSysName) need RAW bytes -- and for PART the name sits INSIDE the
- * checksummed region, so no block-level transform satisfies both at once.
- * Here we swap every long (checksum + all NUMERIC fields correct); the
- * name fields consequently read 4-char-swapped. A real port makes field
- * access endian-explicit (be32 for numbers, raw bytes for strings) instead. */
-static void swab_rdb_block(UBYTE *b) {
-    static const char sigs[4][4] = {{'R','D','S','K'},{'P','A','R','T'},{'F','S','H','D'},{'L','S','E','G'}};
-    int s, match = -1, i;
-    for (s = 0; s < 4; s++)
-        if (b[0]==sigs[s][0]&&b[1]==sigs[s][1]&&b[2]==sigs[s][2]&&b[3]==sigs[s][3]) { match = s; break; }
-    if (match < 0) return;
-    /* LSEG carries raw FS code after its 5-long header: swap header only. */
-    int nlongs = (match == 3) ? 5 : 128;
-    for (i = 0; i < nlongs; i++) {
-        UBYTE t;
-        t=b[i*4+0]; b[i*4+0]=b[i*4+3]; b[i*4+3]=t;
-        t=b[i*4+1]; b[i*4+1]=b[i*4+2]; b[i*4+2]=t;
-    }
-}
 LONG Read(BPTR fh, void *buf, LONG len) {
     LONG n;
     if (!fh) return -1;
@@ -80,7 +55,57 @@ LONG Seek(BPTR fh, LONG pos, LONG mode) {
     if (fseek(f, pos, whence) != 0) return -1;
     return (LONG)old;
 }
-LONG SetFileSize(BPTR fh, LONG pos, LONG mode) { (void)fh;(void)pos;(void)mode; return 0; }
+/* 64-bit positioned file I/O for rdb.c's image backend (AMIPART_HOST):
+   dos.library's LONG Seek() caps images at 2 GB on the Amiga, but 4 GB+
+   HDFs are everyday objects on the host. */
+LONG HostFilePRead(BPTR fh, void *buf, ULONG len, UQUAD off)
+{
+    FILE *f = (FILE *)(size_t)fh;
+    if (!f) return -1;
+    fflush(f);
+    return (LONG)pread(fileno(f), buf, (size_t)len, (off_t)off);
+}
+LONG HostFilePWrite(BPTR fh, const void *buf, ULONG len, UQUAD off)
+{
+    FILE *f = (FILE *)(size_t)fh;
+    if (!f) return -1;
+    fflush(f);
+    return (LONG)pwrite(fileno(f), buf, (size_t)len, (off_t)off);
+}
+UQUAD HostFileSize(BPTR fh)
+{
+    FILE *f = (FILE *)(size_t)fh;
+    struct stat st;
+    if (!f || fstat(fileno(f), &st) != 0) return 0;
+    return (UQUAD)st.st_size;
+}
+BOOL HostFileTruncate(BPTR fh, UQUAD size)
+{
+    FILE *f = (FILE *)(size_t)fh;
+    if (!f) return FALSE;
+    fflush(f);
+    return ftruncate(fileno(f), (off_t)size) == 0;
+}
+
+/* dos.library semantics: returns the new file size, -1 on failure. */
+LONG SetFileSize(BPTR fh, LONG pos, LONG mode) {
+    FILE *f = (FILE *)(size_t)fh;
+    long cur, newsize;
+    if (!f) return -1;
+    fflush(f);
+    cur = ftell(f);
+    if (mode == OFFSET_END) {
+        if (fseek(f, 0, SEEK_END) != 0) return -1;
+        newsize = ftell(f) + pos;
+        fseek(f, cur, SEEK_SET);
+    } else if (mode == OFFSET_CURRENT) {
+        newsize = cur + pos;
+    } else {
+        newsize = pos;
+    }
+    if (newsize < 0 || ftruncate(fileno(f), (off_t)newsize) != 0) return -1;
+    return (LONG)newsize;
+}
 LONG IoErr(void) { return g_ioerr; }
 
 /* ------------------------------------------------------------------ */
@@ -309,13 +334,30 @@ BOOL ExamineFH(BPTR fh, struct FileInfoBlock *fib)
     return TRUE;
 }
 void  Delay(LONG ticks)       { usleep((useconds_t)ticks * 20000); }
-ULONG SetSignal(ULONG new_sig, ULONG mask) { (void)new_sig; (void)mask; return 0; }
+/* Ctrl-C: the copy loops poll SetSignal(0, SIGBREAKF_CTRL_C) to cancel
+   cleanly between blocks; a raw SIGINT would kill us mid-write instead. */
+#include <signal.h>
+static volatile sig_atomic_t g_ctrlc = 0;
+static void on_sigint(int s) { (void)s; g_ctrlc = 1; }
+ULONG SetSignal(ULONG new_sig, ULONG mask)
+{
+    static int installed = 0;
+    ULONG old;
+    if (!installed) { signal(SIGINT, on_sigint); installed = 1; }
+    old = g_ctrlc ? SIGBREAKF_CTRL_C : 0;
+    if (mask & SIGBREAKF_CTRL_C) g_ctrlc = (new_sig & SIGBREAKF_CTRL_C) ? 1 : 0;
+    return old;
+}
 LONG  Inhibit(CONST_STRPTR name, LONG onoff) { (void)name; (void)onoff; return DOSTRUE; }
 
 /* ---- mount layer: image files are never mounted on the host ---- */
 static void host_note(char *errbuf, ULONG errlen, const char *msg)
 {
     if (errbuf && errlen) { strncpy(errbuf, msg, errlen - 1); errbuf[errlen - 1] = 0; }
+}
+UWORD MountedPartitionsOnDevice(struct BlockDev *bd, char *names, ULONG nsz)
+{   /* the kernel refuses O_EXCL on a mounted disk, so nothing we open is */
+    (void)bd; if (names && nsz) names[0] = 0; return 0;
 }
 BOOL UnmountDevice(const char *name, char *errbuf, ULONG errlen)
 {   /* nothing is ever mounted on the host - "already offline" = success */

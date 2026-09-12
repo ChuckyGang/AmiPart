@@ -4,6 +4,6 @@ CORE = cli script mountlist imagecopy partclone shrinkinfo ffsresize \
 SRCS = $(addprefix ../src/,$(addsuffix .c,$(CORE))) \
        amiga_shim.c host_rdargs.c host_locale.c host_devices.c host_main.c
 amipart: $(SRCS) amiga_compat.h
-	gcc -O2 -Wall -I . -I inc -I ../src -o amipart $(SRCS)
+	gcc -O2 -Wall -Wno-pointer-sign -Wno-format-security -Wno-stringop-truncation -DAMIPART_HOST=1 -I . -I inc -I ../src -o amipart $(SRCS)
 clean:
 	rm -f amipart

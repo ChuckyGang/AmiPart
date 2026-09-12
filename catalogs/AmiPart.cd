@@ -653,7 +653,7 @@ MSG_PV_CYL_FMT
 Cyl %lu
 ;
 MSG_PV_MAP_HINT
-drag edges to resize  Â·  drag body to move  Â·  drag free area to add
+drag edges to resize  ·  drag body to move  ·  drag free area to add
 ;
 MSG_PV_DRAG_INFO_FMT
 %s: Cyl %lu - %lu  (%s)
@@ -1089,7 +1089,7 @@ MSG_FS_LIST_HEADER
 DosType       Version   Code
 ;
 MSG_FS_DELETE_INUSE_FMT
-Filesystem %s is in use by:\n%s\n\nAffected partition(s) will be\nchanged to FFS. Delete anyway?
+Filesystem %s is in use by:\n%s\n\nThose partitions keep their DosType and\nwill need this driver in ROM or L: to mount.\nDelete anyway?
 ;
 MSG_FS_DELETE_CONFIRM_FMT
 Delete filesystem driver %s?
@@ -4133,4 +4133,106 @@ MSG_CLI_BBSCAN_DONE_FMT
 ;
 MSG_CLI_BBSCAN_HEALTHY
 No read errors - disk surface looks healthy.\n
+;
+MSG_MOVE_FFS_RDBFAIL_FMT
+FFS filesystem on %s was grown, but writing the RDB FAILED.\nThe filesystem is now larger than the partition table says.\nClick Write to retry BEFORE rebooting - do not Discard.
+;
+MSG_RDB_TRUNC_READ
+block could not be read
+;
+MSG_RDB_TRUNC_ID
+block has the wrong ID
+;
+MSG_RDB_TRUNC_CHKSUM
+block checksum is wrong
+;
+MSG_RDB_TRUNC_LOOP
+chain loops back on itself
+;
+MSG_RDB_TRUNC_SANITY
+chain points at block 0 or the RDSK block
+;
+MSG_CLI_TRUNC_WARN_FMT
+WARNING: the RDB partition/filesystem chain is cut short at block %lu (%s).\nEntries behind that block are NOT listed, and writing the RDB would DROP them for good.\nBack up the RDB (BACKUPEXT) and check the disk first. FORCE writes anyway.\n
+;
+MSG_CLI_TRUNC_REFUSED
+ERROR: RDB write refused - the partition chain is truncated (see warning above). Add FORCE to write anyway.\n
+;
+MSG_PV_TRUNC_TITLE
+Damaged RDB chain
+;
+MSG_PV_TRUNC_BODY_FMT
+WARNING: the partition/filesystem chain on\n%s unit %lu is cut short at block %lu\n(%s).\n\nEntries behind that block are NOT shown, and\nwriting the RDB will DROP them for good.\n\nBack up the RDB first (Health menu). Continue?
+;
+MSG_PV_TRUNC_GADGETS
+Continue (writes allowed)|Cancel
+;
+MSG_CLI_RESIZE_RDBFAIL_FMT
+\nThe filesystem on %s was resized, but the partition table could not be written.\nOn disk the filesystem now spans cylinders %lu-%lu while the RDB still says %lu-%lu.\nDo NOT mount, write to or reboot with this disk until that is fixed:\n  open the disk in the GUI, Edit %s, set its end cylinder to %lu, and Write\n  (or restore an RDB backup made after this resize).\n
+;
+MSG_CLI_RESTOREEXT_OTHER_DISK_FMT
+WARNING: this backup describes a DIFFERENT disk:\n  backup: %lu cyl x %lu heads x %lu sectors, "%s"\n  target: %lu cyl x %lu heads x %lu sectors, "%s"\n
+;
+MSG_CLI_ASK_RESTORE_ANYWAY
+Restore it onto this disk anyway
+;
+MSG_SCR_RESTOREEXT_OTHER_DISK
+backup describes a different disk (geometry/product mismatch); add FORCE to restore anyway
+;
+MSG_PV_TRUNC_REFUSED_BODY
+Write refused: the partition/filesystem chain on this\ndisk is damaged and the missing entries would be dropped.\nReopen the disk and choose "Continue (writes allowed)"\nto override, after backing up the RDB.
+;
+MSG_PCP_DEST_TRUNC
+The destination disk's RDB chain is damaged\n(entries missing). Repair or back it up first.
+;
+MSG_RDB_EXT_RESTORE_OTHER_DISK_FMT
+This backup describes a DIFFERENT disk:\n\nBackup: %lu cyl x %lu heads x %lu sectors\n  "%s"\nTarget: %lu cyl x %lu heads x %lu sectors\n  "%s"\n\nRestoring it here will produce a wrong partition table.
+;
+MSG_RDB_RESTORE_ANYWAY_CANCEL
+Restore anyway|Cancel
+;
+MSG_SCR_PARTOUT_DRYRUN
+PARTOUT: dry run - no file written.\n
+;
+MSG_SCR_PARTIN_DRYRUN
+PARTIN: dry run - no changes made.\n
+;
+MSG_SCR_ZEROPART_DRYRUN_FMT
+ZEROPART: dry run - would zero %s (%lu blocks).\n
+;
+MSG_SCR_REBOOT_UNSAVED
+unsaved changes pending - WRITE first, or they are lost at reboot
+;
+MSG_IC_ZEROFILLED_FMT
+WARNING: %lu unreadable source block(s) were written as zeros - the copy has holes.\n
+;
+MSG_PC_SFS_FIXUP_FAIL_FMT
+The blocks were copied, but the SFS root blocks on %s could not be updated - SFS will not mount it.
+;
+MSG_CLI_DST_MOUNTED_FMT
+WARNING: %s unit %lu has MOUNTED partitions: %s\nTheir handlers still hold the old layout; overwriting underneath them corrupts or crashes.\n
+;
+MSG_CLI_DST_MOUNTED_REFUSED
+ERROR: refusing to overwrite a disk with mounted partitions. Reboot without them, or add FORCE.\n
+;
+MSG_IMG_DUMP_OK_WARN_FMT
+Image written to\n%s\n\n%s
+;
+MSG_IMG_DEST_MOUNTED_FMT
+The target disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; writing\nthe image underneath them will corrupt or crash.\nReboot without them first.
+;
+MSG_DC_MOUNTED_GADGETS
+Continue anyway|Cancel
+;
+MSG_DC_DEST_MOUNTED_FMT
+The destination disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; copying\nunderneath them will corrupt or crash.\nReboot without them first.
+;
+MSG_DC_OK_WARN_FMT
+Disk copied.\n\n%s
+;
+MSG_PV_PC_DUMP_OK_WARN_FMT
+Partition %s dumped to\n%s\n\n%s
+;
+MSG_DLG_NAME_BAD_BODY
+The partition needs a name that is not empty\nand not already used by another partition\non this disk (e.g. DH0, DH1, Work).
 ;

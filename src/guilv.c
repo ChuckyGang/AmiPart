@@ -8,6 +8,7 @@
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "guilv.h"
 

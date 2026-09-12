@@ -198,8 +198,15 @@ scripting interface.
  * Full command-line operation in addition to the GUI.
  * Script files with comments (# or ;) and blank lines.
  * Script commands: OPEN / CREATE / CLOSE, INIT NEW [MBR] / NEWGEO, ADDPART,
-   DELPART, ADDMBR, DELMBR, ADDFS, GROW, SHRINKINFO, ZEROPART, WRITE, INFO, CHECKRDB,
-   VERIFYRDB / VERIFYEXT, IMAGEOUT / IMAGEIN, MOUNTLIST, REBOOT.
+   DELPART, ADDMBR, DELMBR, ADDFS, GROW, SHRINK, SHRINKINFO, ZEROPART,
+   PARTOUT / PARTIN, PARTCLONE, BACKUP / RESTORE, BACKUPEXT / RESTOREEXT,
+   WRITE, INFO, CHECKRDB, VERIFYRDB / VERIFYEXT, IMAGEOUT / IMAGEIN,
+   MOUNTLIST, REBOOT.
+ * Safety nets shared by GUI, CLI and scripts: a damaged (truncated) RDB
+   chain is reported and writes are refused until acknowledged; RESTOREEXT
+   checks that the backup belongs to the disk (geometry + product string);
+   whole-disk overwrites (COPYDISK, IMAGEIN) refuse a target with mounted
+   partitions unless forced; copies report zero-filled unreadable blocks.
    - INIT NEW MBR: writes empty MBR at block 0, places RDB at block 1.
    - ADDMBR TYPE=<t> START=<cyl> END=<cyl|+size> [ACTIVE]: adds an MBR
      partition (types: FAT32 FAT32LBA FAT16 LINUX LINUXSWAP).  Writes

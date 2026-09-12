@@ -290,6 +290,7 @@ BOOL PartClone_DumpToFile(struct BlockDev *bd, const struct PartInfo *pi,
                           MoveProgressFn progress_fn, void *progress_ud,
                           char *err_buf, ULONG ebsz)
 {
+    ULONG zeroed = 0;   /* unreadable source blocks written as zeros */
 #define PROG(d,t,ph) do { if (progress_fn) progress_fn(progress_ud,(d),(t),(ph)); } while(0)
     BPTR   fh;
     UBYTE *hdr = NULL, *buf = NULL;
@@ -317,10 +318,14 @@ BOOL PartClone_DumpToFile(struct BlockDev *bd, const struct PartInfo *pi,
         ULONG batch = count - done;
         ULONG i;
         if (batch > PC_CHUNK_BLOCKS) batch = PC_CHUNK_BLOCKS;
-        for (i = 0; i < batch; i++) {
-            if (!BlockDev_ReadBlock(bd, base + done + i, buf + i * 512)) {
-                /* zero-fill unreadable blocks, like the image copiers */
-                memset(buf + i * 512, 0, 512);
+        if (!BlockDev_ReadBlocks(bd, base + done, batch, buf)) {
+            for (i = 0; i < batch; i++) {
+                if (!BlockDev_ReadBlock(bd, base + done + i, buf + i * 512)) {
+                    /* zero-fill unreadable blocks, like the image copiers - and
+                       count them so the caller can report the holes */
+                    memset(buf + i * 512, 0, 512);
+                    zeroed++;
+                }
             }
         }
         if (Write(fh, buf, (LONG)(batch * 512)) != (LONG)(batch * 512)) {
@@ -330,6 +335,8 @@ BOOL PartClone_DumpToFile(struct BlockDev *bd, const struct PartInfo *pi,
         PROG(done, count, GS(MSG_PC_COPYING));
     }
     Close(fh);
+    if (zeroed && err_buf && ebsz)   /* success with holes: warning for the caller */
+        snprintf(err_buf, ebsz, GS(MSG_IC_ZEROFILLED_FMT), (unsigned long)zeroed);
     ok = TRUE;
 out:
     if (hdr) FreeVec(hdr);
@@ -402,6 +409,7 @@ BOOL PartClone_RestoreToPart(struct BlockDev *bd, struct RDBInfo *rdb,
     BPTR   fh = 0;
     UBYTE *buf = NULL;
     ULONG  dst_blocks, dst_base, done = 0;
+    ULONG  adopt_hh = 0, adopt_ss = 0, adopt_high = 0;
     BOOL   ok = FALSE;
 
     if (!PartClone_ReadHeader(path, &h, err_buf, ebsz)) return FALSE;
@@ -422,9 +430,9 @@ BOOL PartClone_RestoreToPart(struct BlockDev *bd, struct RDBInfo *rdb,
         if (!PartClone_ValidateFootprint(rdb, dst->low_cyl, new_high,
                                          hh, ss, didx, err_buf, ebsz))
             return FALSE;
-        dst->heads    = hh;
-        dst->sectors  = ss;
-        dst->high_cyl = new_high;
+        adopt_hh   = hh;            /* applied to dst only once the copy succeeded */
+        adopt_ss   = ss;
+        adopt_high = new_high;
         dst_blocks = span * hh * ss * spb;
         dst_base   = dst->low_cyl * hh * ss * spb;
     }
@@ -463,10 +471,16 @@ BOOL PartClone_RestoreToPart(struct BlockDev *bd, struct RDBInfo *rdb,
     Close(fh); fh = 0;
 
     /* Adopt the dumped geometry, then fix SFS absolute offsets. */
+    dst->heads    = adopt_hh;       /* footprint validated above; commit only now */
+    dst->sectors  = adopt_ss;
+    dst->high_cyl = adopt_high;
     pc_adopt_header(dst, &h);
     if (SFS_IsSupportedType(h.dos_type)) {
         PROG(h.block_count, h.block_count, GS(MSG_PC_UPDATING_SFS));
-        pc_sfs_fixup(bd, dst_base);
+        if (!pc_sfs_fixup(bd, dst_base)) {
+            snprintf(err_buf, ebsz, GS(MSG_PC_SFS_FIXUP_FAIL_FMT), dst->drive_name);
+            goto out;
+        }
     }
     ok = TRUE;
 out:
@@ -691,6 +705,7 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
                           MoveProgressFn progress_fn, void *progress_ud,
                           char *err_buf, ULONG ebsz)
 {
+    ULONG zeroed = 0;   /* unreadable source blocks written as zeros */
 #define PROG(d,t,ph) do { if (progress_fn) progress_fn(progress_ud,(d),(t),(ph)); } while(0)
     UBYTE *buf = NULL;
     ULONG  src_base, src_count, dst_base, dst_blocks, done = 0;
@@ -759,11 +774,17 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
         ULONG batch = src_count - done;
         ULONG i;
         if (batch > PC_CHUNK_BLOCKS) batch = PC_CHUNK_BLOCKS;
-        for (i = 0; i < batch; i++) {
-            if (!BlockDev_ReadBlock(sbd, src_base + done + i, buf + i * 512))
-                memset(buf + i * 512, 0, 512);
+        if (!BlockDev_ReadBlocks(sbd, src_base + done, batch, buf)) {
+            for (i = 0; i < batch; i++) {
+                if (!BlockDev_ReadBlock(sbd, src_base + done + i, buf + i * 512)) {
+                    memset(buf + i * 512, 0, 512);   /* counted, reported on success */
+                    zeroed++;
+                }
+            }
         }
         for (i = 0; i < batch; i++) {
+            if (i == 0 && BlockDev_WriteBlocks(dbd, dst_base + done, batch, buf))
+                break;                       /* whole batch in one transfer */
             if (!BlockDev_WriteBlock(dbd, dst_base + done + i, buf + i * 512)) {
                 snprintf(err_buf, ebsz, GS(MSG_PC_READ_ERR_FMT),
                          (unsigned long)(dst_base + done + i)); goto out;
@@ -789,12 +810,17 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
         /* FFS_GrowPartition writes a ~210-char diagnostic into its err_buf on
            BOTH success and failure, so give it its own 256-byte buffer - a
            smaller one overflows and smashes the stack. */
-        static char growbuf[256];
+        static char growbuf[ENGINE_ERRBUF_SIZE];
         growbuf[0] = '\0';
         PROG(src_count, src_count, GS(MSG_PC_UPDATING_SFS));
         {
             struct pc_ffs_progress_ctx pctx = { progress_fn, progress_ud, src_count, src_count };
-            if (!FFS_GrowPartition(dbd, drdb, dst, dst->low_cyl, src_count / spb,
+            /* old_blocks_ovr is in FILESYSTEM blocks: device sectors / (physical
+               scale * DE_SECSPERBLK), not just / spb - a 1024-byte FFS would
+               otherwise report twice its real block count to the grow. */
+            if (!FFS_GrowPartition(dbd, drdb, dst, dst->low_cyl,
+                                   src_count / (spb * (dst->sectors_per_block > 0
+                                                       ? dst->sectors_per_block : 1)),
                                    growbuf, pc_ffs_progress, &pctx)) {
                 strncpy(err_buf, growbuf, ebsz - 1); err_buf[ebsz - 1] = '\0';
                 goto out;   /* ok stays FALSE */
@@ -804,7 +830,10 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
         /* SFS root blocks store ABSOLUTE byte offsets - shift them from the
            source's physical position to the destination's. */
         PROG(src_count, src_count, GS(MSG_PC_UPDATING_SFS));
-        pc_sfs_fixup(dbd, dst_base);
+        if (!pc_sfs_fixup(dbd, dst_base)) {
+            snprintf(err_buf, ebsz, GS(MSG_PC_SFS_FIXUP_FAIL_FMT), dst->drive_name);
+            goto out;   /* the copy is there but SFS would not mount it */
+        }
         /* SmartFilesystem mounts a partition ONLY when the root's stored
            total EXACTLY equals its DosEnvec-derived block count
            (Surfaces*BlocksPerTrack*ncyl / SectorPerBlock; verified against the
@@ -834,7 +863,7 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
                     ULONG sfs_phys   = ((dst->block_size >= 512 ? dst->block_size
                                                                 : 512) * spb_field) / 512;
                     ULONG new_total  = sfs_phys ? (dev_blocks / sfs_phys) : dev_blocks;
-                    static char growbuf[256];
+                    static char growbuf[ENGINE_ERRBUF_SIZE];
                     struct pc_ffs_progress_ctx pctx = { progress_fn, progress_ud, src_count, src_count };
                     growbuf[0] = '\0';
                     if (!SFS_GrowPartition(dbd, drdb, dst, dst->low_cyl,
@@ -871,6 +900,8 @@ BOOL PartClone_PartToPart(struct BlockDev *sbd, const struct PartInfo *src,
         else if (SFS_IsSupportedType(dst->dos_type))
             pc_relabel_sfs(dbd, dst_base);
     }
+    if (zeroed && err_buf && ebsz)   /* success with holes: warning for the caller */
+        snprintf(err_buf, ebsz, GS(MSG_IC_ZEROFILLED_FMT), (unsigned long)zeroed);
     ok = TRUE;
 out:
     if (buf) FreeVec(buf);

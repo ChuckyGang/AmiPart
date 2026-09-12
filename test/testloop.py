@@ -431,6 +431,35 @@ def verify_sfs(img, st, exp_nblk_dev):
     h = hashlib.md5()
     for b in sorted(st["data"]): h.update(img.rd(b * spb, bsz))
     if h.hexdigest() != st["hash"]: errs.append("data content changed")
+
+    # Bitmap CONTENT (this is what caught the little-endian host bug that the
+    # root/data checks above sailed past): every data block and both roots
+    # must be USED, the slack past totalblocks must be USED (SFS rule), the
+    # bitmap blocks themselves must be USED, and the free-bit total must match
+    # the cached freeblocks in the root object.
+    bmbase, rootobj = g(r0, 96), g(r0, 104)
+    bib  = (bsz - 12) * 8
+    nbmb = (tb + bib - 1) // bib
+    bms  = [img.rd((bmbase + k) * spb, bsz) for k in range(nbmb)]
+    for k, bm in enumerate(bms):
+        if g(bm, 0) != 0x42544D50 or g(bm, 8) != bmbase + k:
+            errs.append(f"bitmap block {bmbase + k} bad header"); return errs
+    def is_free(blk):
+        k, off = divmod(blk, bib)
+        return (bms[k][12 + off // 8] >> (7 - off % 8)) & 1
+    for b in sorted(st["data"]):
+        if b < tb and is_free(b):
+            errs.append(f"data block {b} marked FREE in bitmap"); break
+    for b in (0, tb - 1, rootobj, *range(bmbase, bmbase + nbmb)):
+        if b < tb and is_free(b):
+            errs.append(f"metadata block {b} marked FREE in bitmap"); break
+    for blk in range(tb, nbmb * bib):
+        if is_free(blk):
+            errs.append(f"slack block {blk} (past totalblocks) marked FREE"); break
+    free_bits = sum(bin(byte).count("1") for bm in bms for byte in bm[12:])
+    ob = img.rd(rootobj * spb, bsz)
+    if g(ob, 0) == 0x4F424A43 and g(ob, bsz - 36 + 8) != free_bits:
+        errs.append(f"root object freeblocks {g(ob, bsz - 36 + 8)} != bitmap free bits {free_bits}")
     return errs
 
 # --------------------------------------------------------------- iteration

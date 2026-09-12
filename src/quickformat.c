@@ -95,7 +95,7 @@ static void find_filesys(ULONG dostype, struct FsPatch *fp)
             if (match) {
                 fp->patch_flags = fse->fse_PatchFlags;
                 fp->type        = fse->fse_Type;
-                fp->task        = fse->fse_Task;
+                fp->task        = (APTR)fse->fse_Task;
                 fp->lock        = fse->fse_Lock;
                 fp->handler     = fse->fse_Handler;
                 fp->stack_size  = fse->fse_StackSize;
@@ -427,11 +427,13 @@ static struct DosList *match_partition(struct DosList *head,
         const UBYTE *devb;
         const UBYTE *nm;
 
-        if (dl->dol_misc.dol_handler.dol_Startup == 0) continue;
+        /* dol_Startup < 1024 is a plain integer (AUX:/SER:/PIPE:), not a BPTR */
+        if ((ULONG)dl->dol_misc.dol_handler.dol_Startup < 1024) continue;
         fssm = (struct FileSysStartupMsg *)
                BADDR(dl->dol_misc.dol_handler.dol_Startup);
         if (!fssm) continue;
         if (fssm->fssm_Unit != unit) continue;
+        if ((ULONG)fssm->fssm_Device < 256) continue;
 
         devb = (const UBYTE *)BADDR(fssm->fssm_Device);
         if (!ci_dev_eq(devb, devname)) continue;
@@ -626,7 +628,9 @@ BOOL QuickFormat_EnsureHandler(const struct RDBInfo *rdb, ULONG dostype,
         if (fse)  FreeMem(fse, sizeof(*fse));
         if (name) FreeMem(name, 16);
         UnLoadSeg(seg);
-        set_err(errbuf, errlen, GS(MSG_QF_ENS_LOAD_FAIL_FMT));
+        { char m[128];
+          snprintf(m, sizeof(m), GS(MSG_QF_ENS_LOAD_FAIL_FMT), (unsigned long)dostype);
+          set_err(errbuf, errlen, m); }
         return FALSE;
     }
     memcpy(name, "AmiPart", sizeof("AmiPart"));
@@ -647,4 +651,41 @@ BOOL QuickFormat_EnsureHandler(const struct RDBInfo *rdb, ULONG dostype,
     AddHead(&fsr->fsr_FileSysEntries, &fse->fse_Node);
     Permit();
     return TRUE;
+}
+
+UWORD MountedPartitionsOnDevice(struct BlockDev *bd, char *names, ULONG nsz)
+{
+    struct DosList *dl;
+    UWORD n = 0;
+    ULONG used = 0;
+
+    if (names && nsz) names[0] = '\0';
+    if (!bd || bd->backend != BD_DEVICE) return 0;
+
+    dl = LockDosList(LDF_DEVICES | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_DEVICES)) != NULL) {
+        struct FileSysStartupMsg *fssm;
+        const UBYTE *devb, *nm;
+
+        if (!dl->dol_Task) continue;                    /* no handler = not live */
+        if ((ULONG)dl->dol_misc.dol_handler.dol_Startup < 1024) continue;
+        fssm = (struct FileSysStartupMsg *)
+               BADDR(dl->dol_misc.dol_handler.dol_Startup);
+        if (!fssm) continue;
+        if (fssm->fssm_Unit != bd->unit) continue;
+        if ((ULONG)fssm->fssm_Device < 256) continue;
+        devb = (const UBYTE *)BADDR(fssm->fssm_Device);
+        if (!ci_dev_eq(devb, bd->devname)) continue;
+
+        n++;
+        nm = (const UBYTE *)BADDR(dl->dol_Name);
+        if (names && nm && used + (ULONG)nm[0] + 2 < nsz) {
+            if (used) names[used++] = ' ';
+            memcpy(names + used, nm + 1, nm[0]);
+            used += nm[0];
+            names[used] = '\0';
+        }
+    }
+    UnLockDosList(LDF_DEVICES | LDF_READ);
+    return n;
 }

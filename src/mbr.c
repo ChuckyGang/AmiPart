@@ -273,3 +273,50 @@ BOOL MBR_WriteEmpty(struct BlockDev *bd)
     FreeVec(buf);
     return ok;
 }
+
+static BOOL mbr_cyls_overlap(ULONG a_lo, ULONG a_hi, ULONG b_lo, ULONG b_hi)
+{
+    return (BOOL)(a_lo <= b_hi && b_lo <= a_hi);
+}
+
+BOOL MBR_RangeConflicts(ULONG lo, ULONG hi, const struct RDBInfo *rdb,
+                        const struct MBRInfo *mbr, UBYTE own_slot)
+{
+    UWORD i;
+
+    if (lo > hi) return TRUE;
+
+    /* RDB reserved area (cyl 0 .. lo_cyl-1) - or at least block 0's cylinder */
+    if (rdb && rdb->valid && rdb->lo_cyl > 0) {
+        if (mbr_cyls_overlap(lo, hi, 0, rdb->lo_cyl - 1)) return TRUE;
+    } else if (lo == 0) {
+        return TRUE;
+    }
+
+    /* RDB partitions (in physical units, see part_phys_span in rdb.c) */
+    if (rdb && rdb->valid) {
+        for (i = 0; i < rdb->num_parts; i++) {
+            const struct PartInfo *pi = &rdb->parts[i];
+            ULONG scale = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
+            if (mbr_cyls_overlap(lo, hi, pi->low_cyl * scale,
+                                 (pi->high_cyl + 1) * scale - 1))
+                return TRUE;
+        }
+    }
+
+    /* other MBR slots */
+    if (mbr && mbr->valid) {
+        ULONG heads   = (rdb && rdb->valid && rdb->heads   > 0) ? rdb->heads   : 1;
+        ULONG sectors = (rdb && rdb->valid && rdb->sectors > 0) ? rdb->sectors : 1;
+        for (i = 0; i < MBR_MAX_PARTS; i++) {
+            ULONG olo, ohi;
+            if (i == (UWORD)own_slot) continue;
+            if (!mbr->parts[i].present) continue;
+            olo = MBR_LBAToCyl(mbr->parts[i].lba_start, heads, sectors);
+            ohi = MBR_LBAToCyl(mbr->parts[i].lba_start + mbr->parts[i].lba_size - 1,
+                               heads, sectors);
+            if (mbr_cyls_overlap(lo, hi, olo, ohi)) return TRUE;
+        }
+    }
+    return FALSE;
+}

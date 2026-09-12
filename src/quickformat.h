@@ -62,6 +62,13 @@ BOOL MountPartition(struct BlockDev *bd, const struct PartInfo *pi,
  * expansion.library needed, so it works in CLI/script mode too. */
 BOOL UnmountDevice(const char *name, char *errbuf, ULONG errlen);
 
+/* Count the DOS devices currently mounted from bd's exec device + unit (a
+ * live handler process behind each).  names (optional, nsz bytes) receives
+ * their names separated by spaces.  Used before whole-disk overwrites
+ * (COPYDISK, IMAGEIN): writing underneath live handlers corrupts or crashes.
+ * Image files and NULL return 0. */
+UWORD MountedPartitionsOnDevice(struct BlockDev *bd, char *names, ULONG nsz);
+
 /* Progress callback for UnmountPartition (same shape as the grow callbacks). */
 typedef void (*UnmountProgressFn)(void *ud, const char *msg);
 

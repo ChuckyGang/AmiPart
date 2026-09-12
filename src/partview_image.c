@@ -23,10 +23,12 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 
 #include "clib.h"
 #include "rdb.h"
 #include "imagecopy.h"
+#include "quickformat.h"
 #include "locale_support.h"
 #include "partview_internal.h"
 #include "progresswin.h"
@@ -91,7 +93,7 @@ void image_dump_disk(struct Window *win, struct BlockDev *bd)
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at);
         if (fr) {
             if (AslRequest(fr, NULL) && fr->fr_File && fr->fr_File[0]) {
-                strncpy(save_path, fr->fr_Drawer ? fr->fr_Drawer : "",
+                strncpy(save_path, fr->fr_Drawer ? (char *)fr->fr_Drawer : "",
                         sizeof(save_path) - 1);
                 save_path[sizeof(save_path) - 1] = '\0';
                 AddPart((UBYTE *)save_path, (UBYTE *)fr->fr_File,
@@ -105,7 +107,7 @@ void image_dump_disk(struct Window *win, struct BlockDev *bd)
 
     {
         static struct ProgressWin prog;
-        char  errbuf[80];
+        char  errbuf[160];
         BOOL  ok;
         char  done_msg[300];
 
@@ -119,7 +121,9 @@ void image_dump_disk(struct Window *win, struct BlockDev *bd)
 
         es.es_StructSize=sizeof(es); es.es_Flags=0;
         es.es_Title=(UBYTE*)GS(MSG_IMG_DUMP_TITLE);
-        if (ok) {
+        if (ok && errbuf[0]) {   /* completed, but with zero-filled holes */
+            snprintf(done_msg, sizeof(done_msg), GS(MSG_IMG_DUMP_OK_WARN_FMT), save_path, errbuf);
+        } else if (ok) {
             snprintf(done_msg, sizeof(done_msg), GS(MSG_IMG_DUMP_OK_FMT), save_path);
         } else if (prog.cancelled) {
             snprintf(done_msg, sizeof(done_msg), GS(MSG_IMG_DUMP_CANCELLED_FMT), save_path);
@@ -176,7 +180,7 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at);
         if (fr) {
             if (AslRequest(fr, NULL) && fr->fr_File && fr->fr_File[0]) {
-                strncpy(load_path, fr->fr_Drawer ? fr->fr_Drawer : "",
+                strncpy(load_path, fr->fr_Drawer ? (char *)fr->fr_Drawer : "",
                         sizeof(load_path) - 1);
                 load_path[sizeof(load_path) - 1] = '\0';
                 AddPart((UBYTE *)load_path, (UBYTE *)fr->fr_File,
@@ -190,10 +194,19 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
 
     {
         static struct ProgressWin prog;
-        char  errbuf[80];
+        char  errbuf[160];
         BOOL  ok;
         char  done_msg[300];
 
+        { char mn[160];
+          if (MountedPartitionsOnDevice(bd, mn, sizeof(mn))) {
+              snprintf(done_msg, sizeof(done_msg), GS(MSG_IMG_DEST_MOUNTED_FMT), mn);
+              es.es_StructSize=sizeof(es); es.es_Flags=0;
+              es.es_Title=(UBYTE*)GS(MSG_IMG_RESTORE_TITLE);
+              es.es_TextFormat=(UBYTE*)done_msg;
+              es.es_GadgetFormat=(UBYTE*)GS(MSG_DC_MOUNTED_GADGETS);
+              if (EasyRequest(win, &es, NULL) != 1) return;
+          } }
         snprintf(prog.title, sizeof(prog.title), GS(MSG_IMG_RESTORE_PROGRESS_TITLE_FMT), load_path);
         ProgressWin_Open(&prog, prog.title);
 

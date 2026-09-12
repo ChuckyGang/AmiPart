@@ -121,7 +121,7 @@ void offer_zero_partition(struct Window *win, struct BlockDev *bd,
 {
     struct EasyStruct es;
     static char confirm_body[256];
-    char err_buf[256];
+    char err_buf[ENGINE_ERRBUF_SIZE];
     LONG r;
 
     es.es_StructSize   = sizeof(es);

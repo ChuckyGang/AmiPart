@@ -73,6 +73,7 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    needs: build            # the differential test below needs the m68k binary
 
     steps:
       - name: Checkout
@@ -80,6 +81,12 @@ jobs:
 
       - name: Build native Linux CLI
         run: make linux
+
+      - name: Download m68k binary (for the differential test)
+        uses: actions/download-artifact@v4
+        with:
+          name: AmiPart
+          path: out
 
       - name: Smoke test (image round-trip)
         run: |
@@ -111,6 +118,15 @@ jobs:
         run: |
           pip install amitools -q
           cd test && AMIPART_HOST=1 python3 testloop.py 6 20260828
+
+      # Same GROW/SHRINK on the same images with the m68k binary (vamos) and
+      # the native binary: the results must be byte-identical.  Catches any
+      # native-endian access to on-disk structures that the per-filesystem
+      # checks cannot see (this is how the SFS bitmap and free-count bugs
+      # were found).
+      - name: Differential test m68k vs native
+        run: |
+          cd test && python3 difftest.py 20260912
 
       - name: Raw device backend test (loop device)
         run: |

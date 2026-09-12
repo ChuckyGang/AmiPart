@@ -91,7 +91,7 @@ static void local_delete_port(struct MsgPort *port)
 /* ------------------------------------------------------------------ */
 /* try_read_capacity                                                   */
 /* Issue SCSI READ CAPACITY(10) directly to the drive via HD_SCSICMD. */
-/* Returns TRUE and fills *out_total/*out_blksz on success.           */
+/* Returns TRUE and fills out_total and out_blksz on success.          */
 /* ------------------------------------------------------------------ */
 
 static BOOL try_read_capacity(struct BlockDev *bd,
@@ -137,7 +137,9 @@ static BOOL try_read_capacity(struct BlockDev *bd,
                          ((ULONG)buf[2]<<8) |(ULONG)buf[3];
         ULONG blksz    = ((ULONG)buf[4]<<24)|((ULONG)buf[5]<<16)|
                          ((ULONG)buf[6]<<8) |(ULONG)buf[7];
-        if (last_lba != 0) {
+        if (last_lba != 0 && last_lba != 0xFFFFFFFFUL) {
+            /* 0xFFFFFFFF = drive too big for READ CAPACITY(10); total would
+               wrap to 0, so report "unknown" and let the fallbacks run. */
             *out_total = last_lba + 1;
             *out_blksz = (blksz >= 512) ? blksz : 512;
             ok = TRUE;
@@ -264,6 +266,14 @@ static BOOL device_is_modern(struct BlockDev *bd)
     return FALSE;
 }
 
+#ifdef AMIPART_HOST
+/* 64-bit positioned file I/O, provided by host/amiga_shim.c */
+LONG  HostFilePRead(BPTR fh, void *buf, ULONG len, UQUAD off);
+LONG  HostFilePWrite(BPTR fh, const void *buf, ULONG len, UQUAD off);
+UQUAD HostFileSize(BPTR fh);
+BOOL  HostFileTruncate(BPTR fh, UQUAD size);
+#endif
+
 /* ------------------------------------------------------------------ */
 /* BlockDev_OpenFile / BlockDev_CreateFile                             */
 /*                                                                     */
@@ -276,7 +286,11 @@ struct BlockDev *BlockDev_OpenFile(const char *path)
 {
     struct BlockDev *bd;
     BPTR             fh;
+#ifdef AMIPART_HOST
+    UQUAD            host_size;
+#else
     LONG             size;
+#endif
 
     if (!path || !*path) return NULL;
 
@@ -284,10 +298,16 @@ struct BlockDev *BlockDev_OpenFile(const char *path)
     if (!fh) return NULL;
 
     /* Determine size via Seek(end)/Seek(start). Seek returns the previous
-     * position, so the second Seek's return value equals the file size. */
+     * position, so the second Seek's return value equals the file size.
+     * (host: fstat, so images beyond the 2 GB LONG range open too) */
+#ifdef AMIPART_HOST
+    host_size = HostFileSize(fh);
+    if (host_size < 512) { Close(fh); return NULL; }
+#else
     if (Seek(fh, 0, OFFSET_END) < 0) { Close(fh); return NULL; }
     size = Seek(fh, 0, OFFSET_BEGINNING);
     if (size < 0) { Close(fh); return NULL; }
+#endif
 
     bd = (struct BlockDev *)AllocVec(sizeof(*bd), MEMF_PUBLIC | MEMF_CLEAR);
     if (!bd) { Close(fh); return NULL; }
@@ -296,7 +316,11 @@ struct BlockDev *BlockDev_OpenFile(const char *path)
     bd->fh          = fh;
     bd->open        = TRUE;
     bd->block_size  = 512;
+#ifdef AMIPART_HOST
+    bd->total_bytes = host_size;
+#else
     bd->total_bytes = (UQUAD)(ULONG)size;
+#endif
     bd->td_total_bytes  = bd->total_bytes;
     bd->rc_total_blocks = (ULONG)(bd->total_bytes / 512);
     bd->rc_block_size   = 512;
@@ -314,11 +338,23 @@ struct BlockDev *BlockDev_OpenFile(const char *path)
 struct BlockDev *BlockDev_CreateFile(const char *path, UQUAD size_bytes)
 {
     BPTR  fh;
+#ifndef AMIPART_HOST
     ULONG sz;
     LONG  res;
+#endif
 
     if (!path || !*path || size_bytes < 512) return NULL;
 
+#ifdef AMIPART_HOST
+    /* host: any size, sparse via ftruncate */
+    fh = Open((CONST_STRPTR)path, MODE_NEWFILE);
+    if (!fh) return NULL;
+    if (!HostFileTruncate(fh, (size_bytes + 511) & ~(UQUAD)511)) {
+        Close(fh); DeleteFile((CONST_STRPTR)path); return NULL;
+    }
+    Close(fh);
+    return BlockDev_OpenFile(path);
+#else
     /* dos.library Seek/SetFileSize use signed LONG offsets, so image files
        are capped at the largest block-aligned positive LONG value.  Reject
        anything larger here rather than silently truncating to 32 bits. */
@@ -335,7 +371,7 @@ struct BlockDev *BlockDev_CreateFile(const char *path, UQUAD size_bytes)
      * On filesystems that support sparse files (SFS, PFS) this is instant
      * and uses no disk space until written. On FFS it allocates fully. */
     res = SetFileSize(fh, (LONG)sz, OFFSET_BEGINNING);
-    if (res != 0) {
+    if (res != (LONG)sz) {   /* returns the new size on success, -1 on error */
         /* Fallback: write a single byte at the end to extend the file. */
         UBYTE zero = 0;
         if (Seek(fh, (LONG)(sz - 1), OFFSET_BEGINNING) < 0 ||
@@ -348,6 +384,7 @@ struct BlockDev *BlockDev_CreateFile(const char *path, UQUAD size_bytes)
     Close(fh);
 
     return BlockDev_OpenFile(path);
+#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -546,19 +583,63 @@ void BlockDev_Close(struct BlockDev *bd)
 /* BlockDev_ReadBlock                                                  */
 /* ------------------------------------------------------------------ */
 
+/* TD_READ64 single-block read (see the io_Actual note in BlockDev_ReadBlock). */
+static BOOL rd_td64(struct BlockDev *bd, ULONG blocknum, void *buf)
+{
+    UQUAD byte_off = (UQUAD)blocknum * bd->block_size;
+    bd->iotd.iotd_Req.io_Command = TD_READ64;
+    bd->iotd.iotd_Req.io_Length  = bd->block_size;
+    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+    bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
+    bd->iotd.iotd_Req.io_Actual  = (ULONG)(byte_off >> 32);  /* high 32 bits */
+    bd->iotd.iotd_Count          = (ULONG)(byte_off >> 32);  /* belt & braces */
+    bd->iotd.iotd_Req.io_Flags   = 0;
+    return DoIO((struct IORequest *)&bd->iotd) == 0;
+}
+
+/* CMD_READ single-block read: 32-bit byte offsets only.  Refuses rather than
+   wraps past 4 GB - without that gate the capacity probe reads a wrapped
+   offset (block 0) "successfully" and reports a huge disk. */
+static BOOL rd_cmdread(struct BlockDev *bd, ULONG blocknum, void *buf)
+{
+    UQUAD byte_off = (UQUAD)blocknum * bd->block_size;
+    if ((ULONG)(byte_off >> 32) != 0) return FALSE;
+    bd->iotd.iotd_Req.io_Command = CMD_READ;
+    bd->iotd.iotd_Req.io_Length  = bd->block_size;
+    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+    bd->iotd.iotd_Req.io_Offset  = (ULONG)byte_off;
+    bd->iotd.iotd_Req.io_Actual  = 0;
+    bd->iotd.iotd_Count          = 0;
+    bd->iotd.iotd_Req.io_Flags   = 0;
+    return DoIO((struct IORequest *)&bd->iotd) == 0;
+}
+
 BOOL BlockDev_ReadBlock(struct BlockDev *bd, ULONG blocknum, void *buf)
 {
     /* File backend: dos.library Seek + Read.
-     * AmigaOS Seek uses LONG offset, so image files are limited to ~2 GB. */
+     * AmigaOS Seek uses LONG offset, so image files are limited to ~2 GB
+     * there; the host build uses 64-bit positioned I/O instead. */
     if (bd->backend == BD_FILE) {
+#ifdef AMIPART_HOST
+        return HostFilePRead(bd->fh, buf, bd->block_size,
+                             (UQUAD)blocknum * bd->block_size) == (LONG)bd->block_size;
+#else
         LONG off = (LONG)(blocknum * bd->block_size);
         if (Seek(bd->fh, off, OFFSET_BEGINNING) < 0) return FALSE;
         return (Read(bd->fh, buf, bd->block_size) == (LONG)bd->block_size);
+#endif
     }
 
     /* Try HD_SCSICMD (SCSI READ(10)) first.
        Falls back to CMD_READ for devices that don't support HD_SCSICMD
-       (e.g. UAE uaehf.device, older non-SCSI drivers). */
+       (e.g. UAE uaehf.device, older non-SCSI drivers).
+       rd_pref remembers which of the three paths worked last time and is
+       tried FIRST, so a driver without HD_SCSICMD no longer pays for a
+       failed DoIO on every single block (2-3x faster whole-disk copies on
+       uaehf/gayle).  A failure of the preferred path falls through to the
+       full sequence, so a genuine read error still gets every chance. */
+    if (bd->rd_pref == 2 && rd_td64(bd, blocknum, buf)) return TRUE;
+    if (bd->rd_pref == 3 && rd_cmdread(bd, blocknum, buf)) return TRUE;
     {
         struct SCSICmd scmd;
         UBYTE cdb[10];
@@ -590,48 +671,21 @@ BOOL BlockDev_ReadBlock(struct BlockDev *bd, ULONG blocknum, void *buf)
         bd->iotd.iotd_Req.io_Flags   = 0;
         bd->iotd.iotd_Count          = 0;
         err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-        if (err == 0) return TRUE;
+        if (err == 0) { bd->rd_pref = 1; return TRUE; }
     }
 
     /* Fall back to TD_READ64.  The TD64 standard (and UAE/scsi.device) take the
        HIGH 32 bits of the byte offset from io_Actual, NOT iotd_Count - getting
        this wrong silently wraps every access past 4 GB to (offset mod 4 GB). */
-    {
-        UQUAD byte_off = (UQUAD)blocknum * bd->block_size;
-        bd->iotd.iotd_Req.io_Command = TD_READ64;
-        bd->iotd.iotd_Req.io_Length  = bd->block_size;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-        bd->iotd.iotd_Req.io_Actual  = (ULONG)(byte_off >> 32);  /* high 32 bits */
-        bd->iotd.iotd_Count          = (ULONG)(byte_off >> 32);  /* belt & braces */
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        if (DoIO((struct IORequest *)&bd->iotd) == 0) return TRUE;
-    }
+    if (bd->rd_pref != 2 && rd_td64(bd, blocknum, buf)) { bd->rd_pref = 2; return TRUE; }
 
     /* Last resort: CMD_READ (32-bit byte offset, no 64-bit support).
        Some older drivers / non-SCSI interfaces only implement CMD_READ.
-       RDB is always in the first 16 blocks so 32-bit addressing is fine here.
        Do NOT use CMD_READ as the primary path on A3000 scsi.device - it has
        DMA timing issues with SD card adapters that corrupt data; those devices
        succeed on the HD_SCSICMD path above and never reach this fallback. */
-    {
-        /* Refuse rather than wrap past 4 GB - the same gate the CMD_WRITE
-           fallback has.  Without it the capacity probe reads a wrapped
-           offset (block 0) "successfully" and reports a huge disk. */
-        if ((ULONG)(((UQUAD)blocknum * bd->block_size) >> 32) != 0)
-            return FALSE;
-    }
-    {
-        ULONG byte_off = blocknum * (ULONG)bd->block_size;
-        bd->iotd.iotd_Req.io_Command = CMD_READ;
-        bd->iotd.iotd_Req.io_Length  = bd->block_size;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = byte_off;
-        bd->iotd.iotd_Count          = 0;
-        bd->iotd.iotd_Req.io_Actual  = 0;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        return DoIO((struct IORequest *)&bd->iotd) == 0 ? TRUE : FALSE;
-    }
+    if (bd->rd_pref != 3 && rd_cmdread(bd, blocknum, buf)) { bd->rd_pref = 3; return TRUE; }
+    return FALSE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -643,8 +697,15 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
     BYTE err;
     UQUAD byte_off = (UQUAD)blocknum * bd->block_size;
 
-    /* File backend: dos.library Seek + Write. */
+    /* File backend: dos.library Seek + Write (host: 64-bit pwrite). */
     if (bd->backend == BD_FILE) {
+#ifdef AMIPART_HOST
+        if (HostFilePWrite(bd->fh, buf, bd->block_size, byte_off) != (LONG)bd->block_size) {
+            bd->last_io_err = 1;
+            return FALSE;
+        }
+        return TRUE;
+#else
         LONG off = (LONG)(blocknum * bd->block_size);
         if (Seek(bd->fh, off, OFFSET_BEGINNING) < 0) {
             bd->last_io_err = (BYTE)IoErr();
@@ -655,6 +716,7 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
             return FALSE;
         }
         return TRUE;
+#endif
     }
 
     /* TD_WRITE64.  CMD_WRITE and CMD_UPDATE both hang on cached filesystem
@@ -702,6 +764,93 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
 
     bd->last_io_err = err;
     return FALSE;
+}
+
+/* ------------------------------------------------------------------ */
+/* BlockDev_ReadBlocks / BlockDev_WriteBlocks - multi-block transfers   */
+/* ------------------------------------------------------------------ */
+
+static BOOL td64_multi(struct BlockDev *bd, UWORD cmd64, UWORD cmd32,
+                       ULONG start, ULONG count, void *buf)
+{
+    UQUAD byte_off = (UQUAD)start * bd->block_size;
+    ULONG length   = count * bd->block_size;
+    BYTE  err;
+
+    bd->iotd.iotd_Req.io_Command = cmd64;
+    bd->iotd.iotd_Req.io_Length  = length;
+    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+    bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
+    bd->iotd.iotd_Req.io_Actual  = (ULONG)(byte_off >> 32);  /* TD64: high 32 bits */
+    bd->iotd.iotd_Count          = (ULONG)(byte_off >> 32);  /* belt & braces */
+    bd->iotd.iotd_Req.io_Flags   = 0;
+    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
+    if (err == 0) return TRUE;
+
+    /* pre-TD64 driver (old gayle scsi.device): 32-bit offsets only */
+    if (err == IOERR_NOCMD && (ULONG)(byte_off >> 32) == 0) {
+        bd->iotd.iotd_Req.io_Command = cmd32;
+        bd->iotd.iotd_Req.io_Length  = length;
+        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+        bd->iotd.iotd_Req.io_Offset  = (ULONG)byte_off;
+        bd->iotd.iotd_Req.io_Actual  = 0;
+        bd->iotd.iotd_Count          = 0;
+        bd->iotd.iotd_Req.io_Flags   = 0;
+        return DoIO((struct IORequest *)&bd->iotd) == 0;
+    }
+    return FALSE;
+}
+
+BOOL BlockDev_ReadBlocks(struct BlockDev *bd, ULONG start, ULONG count, void *buf)
+{
+    ULONG i;
+    if (!bd || count == 0) return FALSE;
+    if (count == 1) return BlockDev_ReadBlock(bd, start, buf);
+    if (bd->backend == BD_FILE) {
+#ifdef AMIPART_HOST
+        return HostFilePRead(bd->fh, buf, count * bd->block_size,
+                             (UQUAD)start * bd->block_size) == (LONG)(count * bd->block_size);
+#else
+        LONG off = (LONG)(start * bd->block_size);
+        if (Seek(bd->fh, off, OFFSET_BEGINNING) < 0) return FALSE;
+        return Read(bd->fh, buf, (LONG)(count * bd->block_size)) == (LONG)(count * bd->block_size);
+#endif
+    }
+    if (td64_multi(bd, TD_READ64, CMD_READ, start, count, buf)) return TRUE;
+    /* driver would not do it in one go (or a block is bad): per block, so
+       the HD_SCSICMD path and the caller's per-block error handling apply */
+    for (i = 0; i < count; i++)
+        if (!BlockDev_ReadBlock(bd, start + i, (UBYTE *)buf + i * bd->block_size))
+            return FALSE;
+    return TRUE;
+}
+
+BOOL BlockDev_WriteBlocks(struct BlockDev *bd, ULONG start, ULONG count, const void *buf)
+{
+    ULONG i;
+    if (!bd || count == 0) return FALSE;
+    if (count == 1) return BlockDev_WriteBlock(bd, start, buf);
+    if (bd->backend == BD_FILE) {
+#ifdef AMIPART_HOST
+        if (HostFilePWrite(bd->fh, buf, count * bd->block_size,
+                           (UQUAD)start * bd->block_size) != (LONG)(count * bd->block_size)) {
+            bd->last_io_err = 1; return FALSE;
+        }
+        return TRUE;
+#else
+        LONG off = (LONG)(start * bd->block_size);
+        if (Seek(bd->fh, off, OFFSET_BEGINNING) < 0) { bd->last_io_err = (BYTE)IoErr(); return FALSE; }
+        if (Write(bd->fh, (APTR)buf, (LONG)(count * bd->block_size)) != (LONG)(count * bd->block_size)) {
+            bd->last_io_err = (BYTE)IoErr(); return FALSE;
+        }
+        return TRUE;
+#endif
+    }
+    if (td64_multi(bd, TD_WRITE64, CMD_WRITE, start, count, (void *)buf)) return TRUE;
+    for (i = 0; i < count; i++)
+        if (!BlockDev_WriteBlock(bd, start + i, (const UBYTE *)buf + i * bd->block_size))
+            return FALSE;
+    return TRUE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -882,6 +1031,60 @@ static BOOL chain_seen(ULONG *seen, UWORD *count, ULONG blk)
     return FALSE;
 }
 
+const char *RDB_TruncReasonStr(UBYTE reason)
+{
+    switch (reason) {
+    case RDB_TRUNC_READ:   return GS(MSG_RDB_TRUNC_READ);
+    case RDB_TRUNC_ID:     return GS(MSG_RDB_TRUNC_ID);
+    case RDB_TRUNC_CHKSUM: return GS(MSG_RDB_TRUNC_CHKSUM);
+    case RDB_TRUNC_LOOP:   return GS(MSG_RDB_TRUNC_LOOP);
+    default:               return GS(MSG_RDB_TRUNC_SANITY);
+    }
+}
+
+BOOL RDB_SameDisk(const UBYTE *blk, const struct RDBInfo *cur)
+{
+    const struct RigidDiskBlock *r = (const struct RigidDiskBlock *)blk;
+    if (!cur || !cur->valid) return TRUE;
+    if (BE32R(r->rdb_ID) != IDNAME_RIGIDDISK) return TRUE;   /* not an RDSK - nothing to compare */
+    if (BE32R(r->rdb_Cylinders) != cur->cylinders ||
+        BE32R(r->rdb_Heads)     != cur->heads     ||
+        BE32R(r->rdb_Sectors)   != cur->sectors)
+        return FALSE;
+    if (memcmp(r->rdb_DiskProduct, cur->disk_product, 16) != 0)
+        return FALSE;
+    return TRUE;
+}
+
+ULONG RDB_LastMetaBlock(const struct RDBInfo *rdb)
+{
+    ULONG hi = rdb->rdb_block_lo;
+    UWORD i;
+    if (rdb->block_num > hi) hi = rdb->block_num;
+    for (i = 0; i < rdb->num_parts; i++)
+        if (rdb->parts[i].block_num != RDB_END_MARK && rdb->parts[i].block_num > hi)
+            hi = rdb->parts[i].block_num;
+    for (i = 0; i < rdb->num_fs; i++) {
+        const struct FSInfo *fi = &rdb->filesystems[i];
+        if (fi->block_num != RDB_END_MARK && fi->block_num > hi) hi = fi->block_num;
+        if (fi->seg_last_blk != RDB_END_MARK && fi->seg_last_blk > hi) hi = fi->seg_last_blk;
+    }
+    if (rdb->bad_block_last != RDB_END_MARK && rdb->bad_block_last > hi)
+        hi = rdb->bad_block_last;
+    return hi;
+}
+
+/* Physical span of a partition in 512-byte "cylinder units".  A partition
+   whose DE_SIZEBLOCK is not 512 is addressed by its handler in units of that
+   size, so on a 512-byte-sector disk it physically covers block_size/512
+   times its cylinder span.  Overlap checks must compare THESE. */
+static void part_phys_span(const struct PartInfo *pi, ULONG *lo, ULONG *hi)
+{
+    ULONG scale = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
+    *lo = pi->low_cyl * scale;
+    *hi = (pi->high_cyl + 1) * scale - 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* RDB_Read                                                            */
 /* ------------------------------------------------------------------ */
@@ -895,6 +1098,13 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
 
     memset(rdb, 0, sizeof(*rdb));
     rdb->valid = FALSE;
+    rdb->bad_block_list = RDB_END_MARK;
+    rdb->bad_block_last = RDB_END_MARK;
+/* Record the FIRST point where a chain could not be followed (see rdb.h). */
+#define RDB_TRUNC(blk_, why_) do { if (!rdb->chain_truncated) { \
+        rdb->chain_truncated    = TRUE; \
+        rdb->chain_trunc_block  = (blk_); \
+        rdb->chain_trunc_reason = (why_); } } while (0)
 
     buf = (UBYTE *)AllocVec(512, MEMF_PUBLIC | MEMF_CLEAR);
     if (!buf)
@@ -958,6 +1168,9 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
 
         rdb->part_list   = BE32R(rdsk->rdb_PartitionList);
         rdb->fshdr_list  = BE32R(rdsk->rdb_FileSysHeaderList);
+        rdb->bad_block_list = BE32R(rdsk->rdb_BadBlockList);
+        if (rdb->bad_block_list == 0) rdb->bad_block_list = RDB_END_MARK;
+        rdb->bad_block_last = rdb->bad_block_list;
 
         memcpy(rdb->disk_vendor,   rdsk->rdb_DiskVendor,   8);  rdb->disk_vendor[8]   = '\0';
         memcpy(rdb->disk_product,  rdsk->rdb_DiskProduct,  16); rdb->disk_product[16] = '\0';
@@ -968,6 +1181,21 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
     if (!rdb->valid) {
         FreeVec(buf);
         return FALSE;
+    }
+
+    /* Find the end of the BADB chain (if any) so RDB_Write can keep the
+       chain covered by rdb_RDBBlocksHi.  Bounded, read-only, best effort. */
+    if (rdb->bad_block_list != RDB_END_MARK) {
+        ULONG bb = rdb->bad_block_list, n = 0;
+        while (bb != RDB_END_MARK && bb != 0 && n < 64) {
+            const ULONG *lp;
+            if (!BlockDev_ReadBlock(bd, bb, buf)) break;
+            lp = (const ULONG *)buf;
+            if (BE32R(lp[0]) != IDNAME_BADBLOCK) break;
+            rdb->bad_block_last = bb;
+            bb = BE32R(lp[4]);           /* bbb_Next */
+            n++;
+        }
     }
 
     /* Walk partition linked list */
@@ -981,13 +1209,15 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         UBYTE  len;
         struct PartInfo *pi;
 
-        if (next == 0 || next == rdb->block_num) break;  /* sanity: skip MBR/RDSK blocks */
-        if (chain_seen(part_seen, &part_seen_n, next))   break;  /* cycle detected */
+        if (next == 0 || next == rdb->block_num)         /* sanity: MBR/RDSK block */
+            { RDB_TRUNC(next, RDB_TRUNC_SANITY); break; }
+        if (chain_seen(part_seen, &part_seen_n, next))   /* cycle detected */
+            { RDB_TRUNC(next, RDB_TRUNC_LOOP); break; }
         if (!BlockDev_ReadBlock(bd, next, buf))
-            break;
+            { RDB_TRUNC(next, RDB_TRUNC_READ); break; }
         pb = (struct PartitionBlock *)buf;
         if (BE32R(pb->pb_ID) != IDNAME_PARTITION)
-            break;
+            { RDB_TRUNC(next, RDB_TRUNC_ID); break; }
         /* Checksum-validate the PART block - same logic as for RDSK:
            verify when SummedLongs is in range (2..128), else trust ID. */
         {
@@ -996,7 +1226,7 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             if (sl >= 2 && sl <= 128) {
                 ULONG sum = 0, ci;
                 for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
-                if (sum != 0) break;   /* checksum mismatch - corrupt or truncated chain */
+                if (sum != 0) { RDB_TRUNC(next, RDB_TRUNC_CHKSUM); break; }
             }
             /* sl out of range: non-standard tool; trust the PART ID */
         }
@@ -1070,13 +1300,15 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         ULONG lseg_blk;
         ULONG num_lseg;
 
-        if (next == 0 || next == rdb->block_num) break;  /* sanity: skip MBR/RDSK blocks */
-        if (chain_seen(fshd_seen, &fshd_seen_n, next))   break;  /* cycle detected */
+        if (next == 0 || next == rdb->block_num)         /* sanity: MBR/RDSK block */
+            { RDB_TRUNC(next, RDB_TRUNC_SANITY); break; }
+        if (chain_seen(fshd_seen, &fshd_seen_n, next))   /* cycle detected */
+            { RDB_TRUNC(next, RDB_TRUNC_LOOP); break; }
         if (!BlockDev_ReadBlock(bd, next, buf))
-            break;
+            { RDB_TRUNC(next, RDB_TRUNC_READ); break; }
         fhb = (struct FileSysHeaderBlock *)buf;
         if (BE32R(fhb->fhb_ID) != IDNAME_FSHEADER)
-            break;
+            { RDB_TRUNC(next, RDB_TRUNC_ID); break; }
         /* Checksum-validate the FSHD block - same logic as RDSK/PART. */
         {
             const ULONG *lp = (const ULONG *)buf;
@@ -1084,7 +1316,7 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             if (sl >= 2 && sl <= 128) {
                 ULONG sum = 0, ci;
                 for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
-                if (sum != 0) break;   /* checksum mismatch - corrupt or truncated chain */
+                if (sum != 0) { RDB_TRUNC(next, RDB_TRUNC_CHKSUM); break; }
             }
             /* sl out of range: non-standard tool; trust the FSHD ID */
         }
@@ -1100,6 +1332,7 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         fi->priority     = (LONG)BE32R(fhb->fhb_Priority);
         fi->global_vec   = (LONG)BE32R(fhb->fhb_GlobalVec);
         fi->seg_list_blk = BE32R(fhb->fhb_SegListBlocks);
+        fi->seg_last_blk = RDB_END_MARK;
         fi->code         = NULL;
         fi->code_size    = 0;
         memcpy(fi->fs_name, fhb->fhb_FileSysName, 84);
@@ -1130,6 +1363,8 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             }
             /* sl out of range: non-standard tool; trust the LSEG ID */
             num_lseg++;
+            if (fi->seg_last_blk == RDB_END_MARK || lseg_blk > fi->seg_last_blk)
+                fi->seg_last_blk = lseg_blk;
             lseg_blk = BE32R(lsb->lsb_Next);
         }
         } /* end LSEG count scope */
@@ -1296,8 +1531,10 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
         UWORD ai, bi;
         for (ai = 0; ai < rdb->num_parts; ai++) {
             for (bi = ai + 1; bi < rdb->num_parts; bi++) {
-                if (rdb->parts[ai].low_cyl  <= rdb->parts[bi].high_cyl &&
-                    rdb->parts[ai].high_cyl >= rdb->parts[bi].low_cyl) {
+                ULONG alo, ahi, blo, bhi;
+                part_phys_span(&rdb->parts[ai], &alo, &ahi);
+                part_phys_span(&rdb->parts[bi], &blo, &bhi);
+                if (alo <= bhi && ahi >= blo) {
                     IC_ERRLINE(GS(MSG_RDBC_OVERLAP),
                                rdb->parts[ai].drive_name,
                                (ULONG)rdb->parts[ai].low_cyl,
@@ -1330,7 +1567,7 @@ ULONG RDB_IntegrityCheck(struct BlockDev *bd, const struct RDBInfo *rdb,
         if (!BlockDev_ReadBlock(bd, fi->block_num, buf)) {
             IC_ERR(GS(MSG_RDBC_READ_FAILED_4));
         } else if (BE32R(buf[0]) != IDNAME_FSHEADER) {
-            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), BE32R(buf[0])); errors++;
+            IC_ERRLINE(GS(MSG_RDBC_ID_WRONG_4), BE32R(buf[0]));
         } else {
             IC_CHKSUM(BE32R(buf[1]), buf);
         }
@@ -1525,14 +1762,24 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     ULONG  part_blk, fshd_blk, lseg_blk;
     ULONG  lseg_starts[MAX_FILESYSTEMS];
     ULONG  last_used_blk;
+    ULONG  hi_blk;              /* rdb_RDBBlocksHi / rdb_HighRDSKBlock */
     ULONG  total_blocks;
-    BYTE   err;
 
     if (!bd || !rdb || !rdb->valid) return FALSE;
 
     /* Validate counts so write loops can never overrun their arrays */
     if (rdb->num_parts > MAX_PARTITIONS || rdb->num_fs > MAX_FILESYSTEMS)
         return FALSE;
+
+    /* A truncated chain means parts[]/filesystems[] is incomplete; writing
+       it would silently drop the entries we could not read.  The caller has
+       to warn the user and set allow_truncated_write explicitly. */
+    bd->last_write_refused_trunc = FALSE;
+    if (rdb->chain_truncated && !rdb->allow_truncated_write) {
+        bd->last_write_refused_trunc = TRUE;
+        bd->last_io_err = 0;
+        return FALSE;
+    }
     { UWORD _i;
       for (_i = 0; _i < rdb->num_parts; _i++) {
           const struct PartInfo *pi = &rdb->parts[_i];
@@ -1548,9 +1795,10 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
       for (_i = 0; _i < rdb->num_parts; _i++) {
           UWORD _j;
           for (_j = _i + 1; _j < rdb->num_parts; _j++) {
-              const struct PartInfo *a = &rdb->parts[_i];
-              const struct PartInfo *b = &rdb->parts[_j];
-              if (a->low_cyl <= b->high_cyl && b->low_cyl <= a->high_cyl)
+              ULONG alo, ahi, blo, bhi;
+              part_phys_span(&rdb->parts[_i], &alo, &ahi);
+              part_phys_span(&rdb->parts[_j], &blo, &bhi);
+              if (alo <= bhi && blo <= ahi)
                   return FALSE;
           }
       }
@@ -1724,6 +1972,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     rdb->block_num = rdb->rdb_block_lo;
     buf  = BLKPTR(rdb->rdb_block_lo);
     rdsk = (struct RigidDiskBlock *)buf;
+    hi_blk = last_used_blk;
 
     BE32W(rdsk->rdb_ID,          IDNAME_RIGIDDISK);
     BE32W(rdsk->rdb_SummedLongs, bd->block_size / 4);
@@ -1732,8 +1981,20 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     BE32W(rdsk->rdb_BlockBytes,  bd->block_size);
     BE32W(rdsk->rdb_Flags,       rdb->flags | RDBFF_LASTTID); /* RDBFF_LAST/LASTLUN user-controlled; LASTTID always set */
 
-    /* Optional block list heads: 0xFFFFFFFF = none */
-    BE32W(rdsk->rdb_BadBlockList,      RDB_END_MARK);
+    /* Optional block list heads: 0xFFFFFFFF = none.  A BADB chain written by
+       the bad-block scan lives OUTSIDE our sequential layout; keep it (and
+       cover it in RDBBlocksHi below) unless this layout now overwrites it. */
+    if (rdb->bad_block_list != RDB_END_MARK && rdb->bad_block_list != 0 &&
+        (rdb->bad_block_list < rdb->rdb_block_lo ||
+         rdb->bad_block_list > last_used_blk)) {
+        BE32W(rdsk->rdb_BadBlockList, rdb->bad_block_list);
+        if (rdb->bad_block_last != RDB_END_MARK && rdb->bad_block_last > hi_blk)
+            hi_blk = rdb->bad_block_last;
+    } else {
+        BE32W(rdsk->rdb_BadBlockList, RDB_END_MARK);
+        rdb->bad_block_list = RDB_END_MARK;
+        rdb->bad_block_last = RDB_END_MARK;
+    }
     BE32W(rdsk->rdb_PartitionList,     rdb->part_list);
     BE32W(rdsk->rdb_FileSysHeaderList, rdb->fshdr_list);
     BE32W(rdsk->rdb_DriveInit,         RDB_END_MARK);
@@ -1757,12 +2018,13 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
 
     /* Logical drive characteristics */
     BE32W(rdsk->rdb_RDBBlocksLo,    rdb->rdb_block_lo);
-    BE32W(rdsk->rdb_RDBBlocksHi,    last_used_blk);
+    BE32W(rdsk->rdb_RDBBlocksHi,    hi_blk);
     BE32W(rdsk->rdb_LoCylinder,     rdb->lo_cyl);
     BE32W(rdsk->rdb_HiCylinder,     rdb->hi_cyl);
     BE32W(rdsk->rdb_CylBlocks,      rdb->heads * rdb->sectors);
     BE32W(rdsk->rdb_AutoParkSeconds, 0);
-    BE32W(rdsk->rdb_HighRDSKBlock,  last_used_blk);
+    BE32W(rdsk->rdb_HighRDSKBlock,  hi_blk);
+    rdb->rdb_block_hi = hi_blk;
 
     /* Drive identification strings (preserve if read earlier) */
     memcpy(rdsk->rdb_DiskVendor,   rdb->disk_vendor,   8);
@@ -1776,13 +2038,18 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     /* --- Write one block at a time via BlockDev_WriteBlock ---
        A3000 SDMAC multi-block SCSI WRITE DMA produces a 4-byte data shift
        on disk regardless of buffer memory type.  Single-block transfers
-       (cdb[8]=1) do not have this problem; BlockDev_WriteBlock uses them. */
+       (cdb[8]=1) do not have this problem; BlockDev_WriteBlock uses them.
+       ORDER: the PART/FSHD/LSEG blocks go first and the RDSK (layout slot 0,
+       which points at them) LAST, so a power loss mid-write leaves either
+       the old RDSK with the old chains or the new RDSK with complete new
+       chains - never a new RDSK pointing at half-written blocks. */
     {
         ULONG b;
         for (b = 0; b < total_blocks; b++) {
-            ULONG blknum = rdb->rdb_block_lo + b;
+            ULONG slot   = (b + 1 < total_blocks) ? b + 1 : 0;
+            ULONG blknum = rdb->rdb_block_lo + slot;
             if (!BlockDev_WriteBlock(bd, blknum,
-                                     big_buf + b * bd->block_size)) {
+                                     big_buf + slot * bd->block_size)) {
                 FreeVec(big_buf);
                 return FALSE;
             }
@@ -1838,6 +2105,27 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
             FreeVec(vbuf);
         }
         /* If vbuf alloc failed, treat write as successful (no verify) */
+    }
+
+    /* Retire any OTHER RDSK block in the ROM scan range 0..15.  The ROM (and
+       RDB_Read) take the first one they find, so a stale header left at a
+       lower block by another tool would keep winning over the one just
+       written.  Only blocks carrying the RDSK ID are touched - an MBR at
+       block 0 or our own PART/FSHD blocks are left alone. */
+    {
+        ULONG blk;
+        UBYTE *zb = big_buf;             /* reuse: zeroed below */
+        memset(zb, 0, bd->block_size);
+        for (blk = 0; blk < RDB_SCAN_LIMIT; blk++) {
+            UBYTE *rb;
+            if (blk == rdb->rdb_block_lo) continue;
+            rb = (UBYTE *)AllocVec(bd->block_size, MEMF_PUBLIC);
+            if (!rb) break;
+            if (BlockDev_ReadBlock(bd, blk, rb) &&
+                BE32R(((const ULONG *)rb)[0]) == IDNAME_RIGIDDISK)
+                (void)BlockDev_WriteBlock(bd, blk, zb);
+            FreeVec(rb);
+        }
     }
 
     FreeVec(big_buf);

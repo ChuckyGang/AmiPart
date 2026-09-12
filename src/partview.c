@@ -39,6 +39,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include "gt_compat.h"
 #include <proto/icon.h>
 
 #include "clib.h"
@@ -1499,7 +1500,6 @@ static BOOL build_gadgets(APTR vi,
     UWORD btn_y   = win_h - bor_b - pad - btn_h;
     UWORD lv_top;
     UWORD lv_h;
-    UWORD eighth_unused_; /* replaced by eighth inside button block */
 
     lay->ix = (WORD)(bor_l + pad);
     lay->iy = (WORD)(bor_t + pad);
@@ -1868,15 +1868,35 @@ static void refresh_all_gadgets(struct Window *win, struct Gadget *glist)
     }
 }
 
+/* Device name for the title bar.  An image target is "FILE:<path>" and the
+   path can be 255 chars, so shorten long names in the middle ("FILE:Work:Em...
+   /Disk.hdf") - the title buffers are fixed-size statics. */
+#define PV_TITLE_DEV_MAX 44
+static const char *pv_title_devname(const char *devname, char *out, ULONG outsz)
+{
+    ULONG len = (ULONG)strlen(devname);
+    ULONG head, tail;
+    if (len < outsz && len <= PV_TITLE_DEV_MAX) return devname;
+    if (outsz < 8) { out[0] = '\0'; return out; }
+    head = (outsz - 4) / 2;            /* room for "..." + NUL */
+    tail = outsz - 4 - head;
+    memcpy(out, devname, head);
+    memcpy(out + head, "...", 3);
+    memcpy(out + head + 3, devname + len - tail, tail);
+    out[head + 3 + tail] = '\0';
+    return out;
+}
+
 /* Update the window titlebar to flag unsaved (pending-write) changes. */
 static void set_title_dirty(struct Window *win, const char *devname, ULONG unit,
                             BOOL dirty)
 {
-    static char t[96];
+    static char t[160];
+    char dn[PV_TITLE_DEV_MAX + 1];
     int n = DP_SNPRINTF(t, "%s", AMIPART_VERTITLE);
-    sprintf(t + n, GS(MSG_PV_TITLE_UNIT_FMT),
-            devname, (unsigned long)unit,
-            dirty ? GS(MSG_PV_TITLE_UNSAVED) : "");
+    snprintf(t + n, sizeof(t) - (size_t)n, GS(MSG_PV_TITLE_UNIT_FMT),
+             pv_title_devname(devname, dn, sizeof(dn)), (unsigned long)unit,
+             dirty ? GS(MSG_PV_TITLE_UNSAVED) : "");
     SetWindowTitles(win, (UBYTE *)t, (UBYTE *)~0UL);  /* leave screen title */
 }
 
@@ -1913,7 +1933,7 @@ static BOOL name_eq_ci(const char *a, const char *b)
 /* reboot.  Skips names that were re-added.  Returns TRUE if any device     */
 /* could not be unmounted (in use) - the caller should still require reboot.*/
 /* ------------------------------------------------------------------ */
-static BOOL unmount_deleted_partitions(struct Window *win, struct RDBInfo *rdb)
+static BOOL unmount_deleted_partitions(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
 {
     char  report[512];
     ULONG rlen = 0;
@@ -1934,7 +1954,8 @@ static BOOL unmount_deleted_partitions(struct Window *win, struct RDBInfo *rdb)
 
         any = 1;
         err[0] = '\0';
-        if (UnmountDevice(nm, err, sizeof(err))) {
+        /* device+unit qualified: a same-named DH0 on another disk is left alone */
+        if (UnmountPartition(bd, nm, NULL, NULL, err, sizeof(err))) {
             DP_SNPRINTF(line, GS(MSG_PV_UNMOUNTED), nm);
         } else {
             DP_SNPRINTF(line, GS(MSG_PV_STILL_MOUNTED), nm, err);
@@ -2040,7 +2061,7 @@ BOOL partview_run(const char *devname, ULONG unit)
        highlighted on a freshly-opened one. */
     g_part_sel = -1;
     static char       wfmt[512];            /* formatted write-fail message - static: off stack */
-    static char       win_title[80];
+    static char       win_title[160];
 
     /* Custom pointer - chip RAM copy of ptr_resize_src, NULL if alloc failed */
     UWORD            *ptr_chip   = NULL;
@@ -2087,7 +2108,6 @@ BOOL partview_run(const char *devname, ULONG unit)
     BOOL  drag_new       = FALSE;
     ULONG drag_new_lo    = 0;
     ULONG drag_new_hi    = 0;
-    ULONG drag_new_start = 0;
     ULONG drag_new_min   = 0;   /* free-space left boundary */
     ULONG drag_new_max   = 0;   /* free-space right boundary */
 
@@ -2119,6 +2139,22 @@ BOOL partview_run(const char *devname, ULONG unit)
 
     if (bd) {
         RDB_Read(bd, rdb);
+        /* Damaged chain: entries behind the bad block are missing and a
+           Write would drop them.  Say so BEFORE anything can be changed;
+           "Continue" acknowledges that writes are allowed (rdb.h). */
+        if (rdb->valid && rdb->chain_truncated) {
+            struct EasyStruct tes;
+            static char tmsg[400];
+            DP_SNPRINTF(tmsg, GS(MSG_PV_TRUNC_BODY_FMT), devname, (unsigned long)unit,
+                        (unsigned long)rdb->chain_trunc_block,
+                        RDB_TruncReasonStr(rdb->chain_trunc_reason));
+            tes.es_StructSize   = sizeof(tes);
+            tes.es_Flags        = 0;
+            tes.es_Title        = (UBYTE *)GS(MSG_PV_TRUNC_TITLE);
+            tes.es_TextFormat   = (UBYTE *)tmsg;
+            tes.es_GadgetFormat = (UBYTE *)GS(MSG_PV_TRUNC_GADGETS);
+            rdb->allow_truncated_write = (EasyRequest(NULL, &tes, NULL) == 1);
+        }
         /* nothing extra - names and DosTypes come from disk (PART/FSHD blocks) */
         if (!rdb->valid && bd) {
             ULONG cyls = 0, heads = 0, secs = 0;
@@ -2189,9 +2225,12 @@ BOOL partview_run(const char *devname, ULONG unit)
         }
 
         {
+            char dn[PV_TITLE_DEV_MAX + 1];
             int n = DP_SNPRINTF(win_title, "%s", AMIPART_VERTITLE);
-            sprintf(win_title + n, GS(MSG_PV_TITLE_UNIT_FMT),
-                    devname, (unsigned long)unit, "");
+            snprintf(win_title + n, sizeof(win_title) - (size_t)n,
+                     GS(MSG_PV_TITLE_UNIT_FMT),
+                     pv_title_devname(devname, dn, sizeof(dn)),
+                     (unsigned long)unit, "");
         }
 
         {
@@ -2200,7 +2239,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                 { WA_Top,       win_top },
                 { WA_Width,     win_w }, { WA_Height, win_h },
                 { WA_Title,     (ULONG)win_title },
-                { WA_Gadgets,   NULL },          /* added after open, see below */
+                { WA_Gadgets,   0 },             /* added after open, see below */
                 { WA_PubScreen, (ULONG)scr },
                 { WA_MinWidth,  min_w },
                 { WA_MinHeight, min_h },
@@ -2482,8 +2521,11 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     needs_reboot = FALSE;
                                 }
                             } else {
-                                DP_SNPRINTF(wfmt, GS(MSG_PV_WRITE_FAILED_FMT),
-                                        (int)bd->last_io_err);
+                                if (bd->last_write_refused_trunc)
+                                    DP_SNPRINTF(wfmt, "%s", GS(MSG_PV_TRUNC_REFUSED_BODY));
+                                else
+                                    DP_SNPRINTF(wfmt, GS(MSG_PV_WRITE_FAILED_FMT),
+                                            (int)bd->last_io_err);
                                 es.es_TextFormat   = (UBYTE *)wfmt;
                                 es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                                 EasyRequest(win, &es, NULL);
@@ -2730,7 +2772,6 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     if (ini_hi < drag_new_min) ini_hi = drag_new_min;
                                     if (ini_hi > drag_new_max) ini_hi = drag_new_max;
                                     drag_new       = TRUE;
-                                    drag_new_start = drag_new_min;  /* unused but keep tidy */
                                     drag_new_lo    = drag_new_min;
                                     drag_new_hi    = ini_hi;
                                     dbl_part       = -1;
@@ -2961,7 +3002,6 @@ BOOL partview_run(const char *devname, ULONG unit)
                         draw_map(win, rdb, sel, bx, by, bw, bh);
                         draw_drag_info(win, rdb, drag_part, bx, by, bw, bh);
                     } else if (drag_move_part >= 0 && rdb && rdb->valid) {
-                        WORD  mx2   = bx + 1;
                         UWORD mw2   = bw - 2;
                         ULONG total = rdb->hi_cyl + 1;
                         LONG  dpx   = (LONG)(mouse_x - drag_move_anchor_x);
@@ -3130,7 +3170,6 @@ BOOL partview_run(const char *devname, ULONG unit)
                         break;
 
                     case GID_INITRDB: {
-                        struct EasyStruct es;
                         ULONG real_cyls = 0, real_heads = 0, real_secs = 0;
                         char  driver_warn[200];
 
@@ -3506,7 +3545,12 @@ BOOL partview_run(const char *devname, ULONG unit)
 
                         write_ok = (bd != NULL) && RDB_Write(bd, rdb);
 
-                        if (!write_ok && bd && bd->last_io_err == 0) {
+                        if (!write_ok && bd && bd->last_write_refused_trunc) {
+                            /* refused: damaged chain not acknowledged */
+                            es.es_TextFormat   = (UBYTE *)GS(MSG_PV_TRUNC_REFUSED_BODY);
+                            es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                            EasyRequest(win, &es, NULL);
+                        } else if (!write_ok && bd && bd->last_io_err == 0) {
                             /* Metadata overflow - try to offer a lo_cyl increase */
                             ULONG blks_per_cyl = rdb->heads * rdb->sectors;
                             ULONG new_lo       = (blks_per_cyl > 0)
@@ -3583,7 +3627,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                             dirty = FALSE;
                             if (format_pending_partitions(win, bd, rdb))
                                 needs_reboot = TRUE;
-                            if (unmount_deleted_partitions(win, rdb))
+                            if (unmount_deleted_partitions(win, bd, rdb))
                                 needs_reboot = TRUE;
                             /* Only offer to erase an MBR that we didn't put there
                                ourselves (s_mbr->valid means we wrote/read it).
@@ -3622,7 +3666,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     dirty = FALSE;
                                     if (format_pending_partitions(win, bd, rdb))
                                         needs_reboot = TRUE;
-                                    if (unmount_deleted_partitions(win, rdb))
+                                    if (unmount_deleted_partitions(win, bd, rdb))
                                         needs_reboot = TRUE;
                                     if (needs_reboot) {
                                         offer_reboot(win, GS(MSG_PV_REBOOT_WRITTEN));

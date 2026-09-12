@@ -73,6 +73,8 @@ struct BlockDev {
     char             disk_brand[36];      /* vendor+product from SCSI INQUIRY    */
     ULONG            last_overflow_need;  /* blocks needed  (set on overflow)    */
     ULONG            last_overflow_avail; /* blocks available (set on overflow)  */
+    BOOL             last_write_refused_trunc; /* RDB_Write refused: chain truncated, not acknowledged */
+    UBYTE            rd_pref;             /* read path that worked last: 0 none, 1 HD_SCSICMD, 2 TD_READ64, 3 CMD_READ */
     UQUAD            td_total_bytes;      /* capacity from TD_GETGEOMETRY        */
     ULONG            rc_total_blocks;     /* READ CAPACITY(10) total blocks (0=unavail) */
     ULONG            rc_block_size;       /* READ CAPACITY(10) bytes per block   */
@@ -105,6 +107,15 @@ void             BlockDev_Close(struct BlockDev *bd);
 BOOL             BlockDev_ReadBlock(struct BlockDev *bd, ULONG blocknum, void *buf);
 BOOL             BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf);
 
+/* Read/write `count` consecutive blocks in ONE transfer (TD_READ64/TD_WRITE64
+ * with a multi-block length, CMD_READ/CMD_WRITE on pre-TD64 drivers, a single
+ * positioned read/write on image files).  Falls back to per-block calls when
+ * the driver rejects the multi-block request, so it never fails where the
+ * single-block functions would succeed.  buf must hold count * block_size.
+ * Use these for bulk copies: one DoIO per 64 KB instead of one per 512 bytes. */
+BOOL             BlockDev_ReadBlocks(struct BlockDev *bd, ULONG start, ULONG count, void *buf);
+BOOL             BlockDev_WriteBlocks(struct BlockDev *bd, ULONG start, ULONG count, const void *buf);
+
 /*
  * Query geometry for RDB initialisation.  Prefers READ CAPACITY (10)
  * total block count (stored in bd->rc_total_blocks by BlockDev_Open)
@@ -132,6 +143,12 @@ BOOL             BlockDev_IsHardDisk(struct BlockDev *bd);
 /* Erase MBR partition table entries + boot signature from block 0.
    Leaves boot code area (bytes 0-445) intact. */
 BOOL             BlockDev_EraseMBR(struct BlockDev *bd);
+
+/* Every resize/move engine (ffsresize, pfsresize, sfsresize, partmove) writes
+   its diagnostics into a caller-supplied err_buf that MUST hold at least this
+   many bytes; the engines bound their snprintf() calls to it.  Localized
+   success diagnostics run past 200 characters with 8-13 numbers in them. */
+#define ENGINE_ERRBUF_SIZE 512
 
 /* ------------------------------------------------------------------ */
 /* In-memory partition / RDB info (filled by RDB_Read)                */
@@ -179,6 +196,7 @@ struct FSInfo {
     LONG  priority;
     LONG  global_vec;
     ULONG seg_list_blk;   /* first LSEG block, or RDB_END_MARK */
+    ULONG seg_last_blk;   /* highest LSEG block seen in the chain, or RDB_END_MARK */
     UBYTE *code;          /* AllocVec'd filesystem binary, NULL if none */
     ULONG  code_size;     /* bytes in code buffer */
     char   fs_name[84];   /* fhb_FileSysName: path to handler file (e.g. "L:pfs3aio") */
@@ -205,9 +223,37 @@ struct RDBInfo {
     UWORD num_fs;
     ULONG dbg_part_id;     /* pb_ID of first PART block read (debug) */
     BOOL  dbg_part_read;   /* TRUE if BlockDev_ReadBlock(part_list) succeeded */
+    ULONG bad_block_list;  /* rdb_BadBlockList as read (RDB_END_MARK = none); RDB_Write keeps it */
+    ULONG bad_block_last;  /* last block of that BADB chain (for RDBBlocksHi), or RDB_END_MARK */
+    /* Chain damage.  RDB_Read stops walking the PART/FSHD list at the first
+       block it cannot use (read error, bad ID, bad checksum, loop).  The
+       entries behind it are then MISSING from parts[]/filesystems[], and a
+       plain RDB_Write would drop them from the disk for good.  RDB_Write
+       therefore refuses while chain_truncated is set, until the caller has
+       warned the user and set allow_truncated_write. */
+    BOOL  chain_truncated;
+    ULONG chain_trunc_block;
+    UBYTE chain_trunc_reason;      /* RDB_TRUNC_* */
+    BOOL  allow_truncated_write;
     struct PartInfo parts[MAX_PARTITIONS];
     struct FSInfo   filesystems[MAX_FILESYSTEMS];
 };
+
+#define RDB_TRUNC_READ    1   /* block unreadable */
+#define RDB_TRUNC_ID      2   /* wrong block ID */
+#define RDB_TRUNC_CHKSUM  3   /* checksum mismatch */
+#define RDB_TRUNC_LOOP    4   /* chain loops back on itself */
+#define RDB_TRUNC_SANITY  5   /* pointer to block 0 / the RDSK block */
+/* Localized one-line description of an RDB_TRUNC_* reason. */
+const char *RDB_TruncReasonStr(UBYTE reason);
+/* Highest block used by RDB metadata known in memory (RDSK, PART, FSHD, LSEG,
+   BADB) - a floor for rdb_HighRDSKBlock, which some tools leave at 0. */
+ULONG RDB_LastMetaBlock(const struct RDBInfo *rdb);
+
+/* TRUE if the raw RDSK block `blk` describes the same physical disk as `cur`
+   (cylinders/heads/sectors and product string match).  Used before restoring
+   a backup onto a disk.  A `cur` that is not valid compares TRUE (unknown). */
+BOOL RDB_SameDisk(const UBYTE *blk, const struct RDBInfo *cur);
 
 BOOL RDB_Read     (struct BlockDev *bd, struct RDBInfo *rdb);
 BOOL RDB_Write    (struct BlockDev *bd, struct RDBInfo *rdb);
