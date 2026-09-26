@@ -102,6 +102,8 @@ static BOOL is_storage_device(const char *name)
     };
     static const char * const known[] = {
         "a4091",        /* Commodore/DKB A4091 Zorro III SCSI-2          */
+        "a4092",        /* A4092 SCSI (a4091.device family)              */
+        "a4770",        /* A4770 SCSI                                    */
         "hddisk",       /* Commodore A2090/A2090A                        */
         "oktagon",      /* BSC Oktagon 2008 / 508                        */
         "fastlane",     /* Advanced Systems & Software Fastlane Z3       */

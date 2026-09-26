@@ -166,6 +166,8 @@ static const struct { const char *name; ULONG max_unit; } known_devs[] = {
     { "hddisk.device",     3 },
     { "gvpscsi.device",    6 },
     { "a4091.device",      6 },
+    { "a4092.device",      6 },
+    { "a4770.device",      6 },
     { "oktagon.device",    6 },
     { "fastlane.device",   6 },
     { "cybscsi.device",    6 },
