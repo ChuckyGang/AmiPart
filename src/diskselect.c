@@ -74,13 +74,60 @@ static BOOL str_contains_ci(const char *hay, const char *needle)
     return FALSE;
 }
 
-/* Returns TRUE if devname looks like a storage device worth showing by default. */
+/*
+ * Returns TRUE if devname looks like a storage device worth showing by
+ * default.  Two tiers:
+ *
+ *   keys[]   - generic substrings that cover whole families of drivers
+ *              (anything with "scsi"/"ide"/"ata"/"sd"/"usb" in the name).
+ *   known[]  - explicit whitelist of HD controller drivers whose names
+ *              carry none of those substrings.  Every known Amiga HD
+ *              controller must appear in the default view, so when a
+ *              name can't be recognised generically it goes here.
+ *              (Issue report: a4091.device only showed under Show All.)
+ *
+ * Both lists are case-insensitive substring matches; keep entries as the
+ * driver's base name without ".device" so renamed/numbered variants
+ * ("2nd.scsi.device", "oktagon2.device") still match.
+ */
 static BOOL is_storage_device(const char *name)
 {
-    static const char * const keys[] = { "ide", "scsi", "flash", "usb", "uae", "gvp", "phase5", "ppc", "sd", "mmc", "nvme", "card", "warp", NULL };
+    static const char * const keys[] = {
+        "ide", "scsi", "ata",             /* scsi/ide/ata/fastata/lide/sata */
+        "flash", "usb", "massstorage",    /* USB mass storage (Poseidon)     */
+        "uae",                            /* uaehf / uaescsi                 */
+        "gvp", "phase5", "ppc", "warp",   /* accelerator-card controllers    */
+        "sd", "mmc", "emmc", "nvme", "ahci", "card",
+        NULL
+    };
+    static const char * const known[] = {
+        "a4091",        /* Commodore/DKB A4091 Zorro III SCSI-2          */
+        "hddisk",       /* Commodore A2090/A2090A                        */
+        "oktagon",      /* BSC Oktagon 2008 / 508                        */
+        "fastlane",     /* Advanced Systems & Software Fastlane Z3       */
+        "squirrel",     /* HiSoft Squirrel PCMCIA SCSI                   */
+        "buddha",       /* Individual Computers Buddha / Catweasel Z-II  */
+        "highway",      /* E3B Highway (kept: listed in devices.c)       */
+        "hardframe",    /* MicroBotics HardFrame                         */
+        "trumpcard",    /* IVS Trumpcard / Trumpcard Pro                 */
+        "grandslam",    /* IVS Grand Slam                                */
+        "golem",        /* Kupke Golem SCSI                              */
+        "supra",        /* Supra SupraDrive (supradirect.device)         */
+        "trifecta",     /* ICD Trifecta                                  */
+        "alfapower",    /* AlfaData AlfaPower                            */
+        "tandem",       /* BSC Tandem CD+IDE                             */
+        "atbus",        /* BSC AT-Bus 2008                               */
+        "gayle",        /* A600/A1200 internal via 3rd-party drivers     */
+        "dataflyer",    /* Expansion Systems DataFlyer                   */
+        "emplant",      /* Utilities Unlimited Emplant SCSI              */
+        "omni",         /* omniscsi / omnibus                            */
+        NULL
+    };
     UWORD i;
     for (i = 0; keys[i]; i++)
         if (str_contains_ci(name, keys[i])) return TRUE;
+    for (i = 0; known[i]; i++)
+        if (str_contains_ci(name, known[i])) return TRUE;
     return FALSE;
 }
 
