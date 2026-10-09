@@ -89,6 +89,47 @@ static void show_ok(struct Window *win, const char *title, const char *body)
     EasyRequest(win, &es, NULL);
 }
 
+/* After a block-for-block copy the destination carries the SOURCE geometry.
+   When the destination is larger, offer to extend the RDB's cylinder count
+   (heads/sectors kept, partitions untouched) so the extra space becomes
+   usable with Grow / Add (issue #14/2). */
+static void offer_grow_dest_rdb(struct Window *win, struct BlockDev *dest)
+{
+    struct RDBInfo *drdb;
+    ULONG oc, nc;
+
+    drdb = (struct RDBInfo *)AllocVec(sizeof(*drdb), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!drdb) return;
+    if (RDB_Read(dest, drdb) && drdb->valid && !drdb->chain_truncated &&
+        RDB_GrowToDevice(drdb, dest, &oc, &nc)) {
+        struct EasyStruct es;
+        char body[400], sz_old[20], sz_new[20];
+        ULONG bsz = (drdb->blk_size > 0) ? drdb->blk_size : 512;
+
+        FormatSize((UQUAD)oc * drdb->heads * drdb->sectors * bsz, sz_old);
+        FormatSize(dest->total_bytes, sz_new);
+        DP_SNPRINTF(body, GS(MSG_DC_GROW_GEOM_FMT),
+                    (unsigned long)oc, sz_old, (unsigned long)nc, sz_new);
+        es.es_StructSize   = sizeof(es);
+        es.es_Flags        = 0;
+        es.es_Title        = (UBYTE *)GS(MSG_DC_TITLE);
+        es.es_TextFormat   = (UBYTE *)body;
+        es.es_GadgetFormat = (UBYTE *)GS(MSG_DC_GROW_GEOM_GADGETS);
+        if (EasyRequest(win, &es, NULL) == 1) {
+            drdb->cylinders = nc;
+            drdb->hi_cyl    = nc - 1;
+            if (RDB_Write(dest, drdb)) {
+                show_ok(win, GS(MSG_DC_TITLE), GS(MSG_DC_GROW_GEOM_OK));
+            } else {
+                DP_SNPRINTF(body, GS(MSG_DC_GROW_GEOM_FAIL_FMT), (int)dest->last_io_err);
+                show_ok(win, GS(MSG_DC_TITLE), body);
+            }
+        }
+    }
+    RDB_FreeCode(drdb);
+    FreeVec(drdb);
+}
+
 void copy_whole_disk_to_disk(struct Window *win, struct BlockDev *bd,
                              const char *cur_devname, ULONG cur_unit)
 {
@@ -193,6 +234,9 @@ void copy_whole_disk_to_disk(struct Window *win, struct BlockDev *bd,
             show_ok(win, GS(MSG_DC_TITLE), done_msg);
         } else if (ok) {
             show_ok(win, GS(MSG_DC_TITLE), GS(MSG_DC_OK));
+        }
+        if (ok) {
+            offer_grow_dest_rdb(win, dest);
         } else if (prog.cancelled) {
             show_ok(win, GS(MSG_DC_TITLE), GS(MSG_DC_CANCELLED));
         } else {

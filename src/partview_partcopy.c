@@ -256,7 +256,7 @@ static WORD pcp_pick_partition(struct Window *parent, struct RDBInfo *drdb,
                 { WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                             IDCMP_GADGETDOWN | IDCMP_REFRESHWINDOW },
                 { WA_Flags, WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_CLOSEGADGET |
-                            WFLG_ACTIVATE | WFLG_SIMPLE_REFRESH },
+                            WFLG_ACTIVATE | PV_REFRESH_FLAG },
                 { TAG_DONE, 0 }
             };
             win = OpenWindowTagList(NULL, win_tags);

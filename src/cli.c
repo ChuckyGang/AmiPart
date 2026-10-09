@@ -73,6 +73,7 @@ extern struct DosLibrary *DOSBase;
     "GROW/M,"                                                     \
     "ZEROPART/S,"                                                  \
     "CLEARRDB/S,"                                                  \
+    "LOWCHIP/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
     "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S,SAFE/S"
@@ -120,6 +121,7 @@ enum {
     ARG_GROW,
     ARG_ZEROPART,
     ARG_CLEARRDB,
+    ARG_LOWCHIP,
     ARG_ADDMBR,
     ARG_DELMBR,
     ARG_MBRTYPE,
@@ -142,7 +144,9 @@ enum {
 
 static BOOL s_nowarning = FALSE;
 
+static BOOL s_lowchip = FALSE;
 BOOL cli_nowarning(void) { return s_nowarning; }
+BOOL cli_lowchip(void)   { return s_lowchip; }
 
 /* ------------------------------------------------------------------ */
 /* Shared statics (too large / too slow to put on stack)              */
@@ -3478,6 +3482,7 @@ LONG cli_run(void)
     }
 
     s_nowarning = (BOOL)args[ARG_NOWARNING];
+    s_lowchip   = (BOOL)args[ARG_LOWCHIP];
 
     /* No recognised command -> empty command line, caller opens GUI.
      * NOWARNING is not a command on its own, so it falls through too.

@@ -395,6 +395,15 @@ NOWARNING
   Skip the "I have a backup" warning requester when the GUI is started
   from the CLI (the WB icon takes a NOWARNING tooltype instead).
 
+LOWCHIP
+  Open the GUI windows as SIMPLE_REFRESH instead of SMART_REFRESH.  By
+  default Intuition keeps a backing copy of every open AmiPart window so
+  it is repainted when a dialog on top of it closes or is moved; that
+  costs chip RAM (roughly window width x height x screen depth / 8 bytes
+  per window).  Use LOWCHIP on a 512 KB chip machine if windows fail to
+  open; uncovered areas are then only repainted after the dialog closes.
+  (The WB icon takes a LOWCHIP tooltype instead.)
+
 DAMAGED RDB CHAINS
   If the RDB's partition or filesystem chain is cut short by an unreadable
   or corrupt block, every command prints a WARNING naming the block, and

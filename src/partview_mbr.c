@@ -197,7 +197,7 @@ LONG init_rdb_dialog(struct Window *parent, const char *body,
             { WA_PubScreen, (ULONG)scr },
             { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_CLOSEWINDOW |
                             IDCMP_REFRESHWINDOW },
-            { WA_Flags,     WFLG_DRAGBAR | WFLG_ACTIVATE | WFLG_SIMPLE_REFRESH },
+            { WA_Flags,     WFLG_DRAGBAR | WFLG_ACTIVATE | PV_REFRESH_FLAG },
             { TAG_DONE, 0 }
         };
         win = OpenWindowTagList(NULL, wt);
@@ -425,7 +425,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                 { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                                 IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_CLOSEGADGET |
-                                WFLG_ACTIVATE | WFLG_SIMPLE_REFRESH },
+                                WFLG_ACTIVATE | PV_REFRESH_FLAG },
                 { TAG_DONE, 0 }
             };
             win = OpenWindowTagList(NULL, wt);

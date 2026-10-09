@@ -19,6 +19,7 @@
 
 #include "clib.h"
 #include "locale_support.h"
+#include "partview.h"
 #include "progresswin.h"
 
 #define PROG_GID_CANCEL  100
@@ -93,7 +94,7 @@ void ProgressWin_Open(struct ProgressWin *p, const char *title)
             { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_CLOSEWINDOW |
                             IDCMP_VANILLAKEY | IDCMP_REFRESHWINDOW },
             { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
-                            WFLG_CLOSEGADGET | WFLG_SMART_REFRESH |
+                            WFLG_CLOSEGADGET | PV_REFRESH_FLAG |
                             WFLG_ACTIVATE },
             { TAG_DONE,     0 }
         };

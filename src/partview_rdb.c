@@ -1074,7 +1074,7 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 },
               { WA_MinHeight, min_h },
@@ -1711,7 +1711,7 @@ void rdb_raw_scan(struct Window *win, struct BlockDev *bd)
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 },
               { WA_MinHeight, min_h },
@@ -2204,7 +2204,7 @@ void raw_disk_read(struct Window *win, struct BlockDev *bd)
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 }, { WA_MinHeight, min_h },
               { WA_MaxWidth,  scr_w }, { WA_MaxHeight, scr_h },
@@ -2399,7 +2399,7 @@ static BOOL vrdb_ask_block(ULONG deflt, ULONG *out)
               { WA_Gadgets,(ULONG)glist }, { WA_PubScreen, (ULONG)scr },
               { WA_IDCMP,  IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
               { WA_Flags,  WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
-                           WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH },
+                           WFLG_ACTIVATE|PV_REFRESH_FLAG },
               { TAG_DONE, 0 } };
           dwin = OpenWindowTagList(NULL, wt); }
     }
@@ -2562,7 +2562,7 @@ void raw_hex_dump(struct Window *win, struct BlockDev *bd)
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 },
               { WA_MinHeight, min_h },
@@ -2959,7 +2959,7 @@ smart_show:
               { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                               IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
-                              WFLG_CLOSEGADGET | WFLG_ACTIVATE | WFLG_SIMPLE_REFRESH |
+                              WFLG_CLOSEGADGET | WFLG_ACTIVATE | PV_REFRESH_FLAG |
                               WFLG_SIZEGADGET | WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 }, { WA_MinHeight, min_h },
               { WA_MaxWidth,  scr_w }, { WA_MaxHeight, scr_h },
@@ -3230,7 +3230,7 @@ void bad_block_scan(struct Window *win, struct BlockDev *bd,
                                         IDCMP_REFRESHWINDOW },
                         { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                         WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                        WFLG_SIMPLE_REFRESH },
+                                        PV_REFRESH_FLAG },
                         { TAG_DONE, 0 }
                     };
                     scan_win = OpenWindowTagList(NULL, wt);
@@ -3360,7 +3360,7 @@ void bad_block_scan(struct Window *win, struct BlockDev *bd,
               { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                               IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
-                              WFLG_CLOSEGADGET | WFLG_ACTIVATE | WFLG_SIMPLE_REFRESH |
+                              WFLG_CLOSEGADGET | WFLG_ACTIVATE | PV_REFRESH_FLAG |
                               WFLG_SIZEGADGET | WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 }, { WA_MinHeight, min_h },
               { WA_MaxWidth,  scr_w }, { WA_MaxHeight, scr_h },
@@ -3502,7 +3502,7 @@ void rdb_integrity_check(struct Window *win, struct BlockDev *bd,
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 },
               { WA_MinHeight, min_h },
@@ -3883,7 +3883,7 @@ void rdb_verify_extended(struct Window *win, struct BlockDev *bd)
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH|
+                              WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
                               WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
               { WA_MinWidth,  300 },
               { WA_MinHeight, min_h },

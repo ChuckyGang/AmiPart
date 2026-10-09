@@ -63,6 +63,7 @@ struct Library       *ExpansionBase  = NULL;
  * that don't supply a custom _start (e.g. Bebbo) - WB tooltype
  * lookup will then be a no-op. */
 struct WBStartup *AmiPart_WBStartup = NULL;
+BOOL AmiPart_LowChip = FALSE;      /* see partview.h */
 
 /* ------------------------------------------------------------------ */
 /* Gadget IDs                                                           */
@@ -270,7 +271,7 @@ static BOOL image_size_dialog(const char *path, char *out, ULONG outsz)
                                 IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                 WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                WFLG_SIMPLE_REFRESH },
+                                PV_REFRESH_FLAG },
                 { TAG_DONE,     0 }
             };
             win = OpenWindowTagList(NULL, win_tags);
@@ -458,8 +459,9 @@ int main(void)
      * or set as a tooltype on the program icon (Workbench launch). */
     {
         BOOL skip_warning = cli_nowarning();
+        if (cli_lowchip()) AmiPart_LowChip = TRUE;
 
-        if (!skip_warning && IconBase && AmiPart_WBStartup &&
+        if (IconBase && AmiPart_WBStartup &&
             AmiPart_WBStartup->sm_NumArgs >= 1) {
             struct WBArg    *wa  = &AmiPart_WBStartup->sm_ArgList[0];
             struct DiskObject *dobj;
@@ -471,6 +473,9 @@ int main(void)
                 if (FindToolType((STRPTR *)dobj->do_ToolTypes,
                                  (STRPTR)"NOWARNING"))
                     skip_warning = TRUE;
+                if (FindToolType((STRPTR *)dobj->do_ToolTypes,
+                                 (STRPTR)"LOWCHIP"))
+                    AmiPart_LowChip = TRUE;
                 FreeDiskObject(dobj);
             }
             CurrentDir(prev_dir);

@@ -1444,8 +1444,21 @@
 #define MSG_CLR_MOUNTED_FMT          1438
 #define MSG_CLI_CLEARRDB_SUPERFLOPPY 1439
 #define MSG_CLI_CLEARRDB_TAIL_NOTE   1440
+#define MSG_PV_INIT_GEOM_SAME_FMT    1441
+#define MSG_PV_INIT_GEOM_GROWN_FMT   1442
+#define MSG_PV_WRITE_REFUSED_FMT     1443
+#define MSG_RDBW_INVALID             1444
+#define MSG_RDBW_COUNTS              1445
+#define MSG_RDBW_RANGE_FMT           1446
+#define MSG_RDBW_OVERLAP_FMT         1447
+#define MSG_RDBW_NOMEM               1448
+#define MSG_RDBW_UNKNOWN             1449
+#define MSG_DC_GROW_GEOM_FMT         1450
+#define MSG_DC_GROW_GEOM_GADGETS     1451
+#define MSG_DC_GROW_GEOM_OK          1452
+#define MSG_DC_GROW_GEOM_FAIL_FMT    1453
 
-#define MSG_COUNT 1441
+#define MSG_COUNT 1454
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2898,5 +2911,18 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1438 MSG_CLR_MOUNTED_FMT */ "This disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; clearing\nthe table underneath them can corrupt or crash.\nReboot without them first.",
     /* 1439 MSG_CLI_CLEARRDB_SUPERFLOPPY */ "CLEARRDB: block 0 is a FAT boot sector (superfloppy) - its FATs and root\ndirectory are inside the zeroed area, the FILES on this card WILL be lost.\n",
     /* 1440 MSG_CLI_CLEARRDB_TAIL_NOTE */ "CLEARRDB: driver reports a cylinder-rounded size - the backup GPT at the\nvery end of the disk may be missed; check on a PC afterwards.\n",
+    /* 1441 MSG_PV_INIT_GEOM_SAME_FMT */ "Disk is not larger than the RDB geometry.\n\nRDB : %lu cyl x %lu hd x %lu sec = %s\nDisk: %s\n\nNo update needed. The driver may simply report\nthe same disk with another head/sector shape.",
+    /* 1442 MSG_PV_INIT_GEOM_GROWN_FMT */ "RDB cylinder count extended: %lu -> %lu\n(%lu heads x %lu sectors kept, partitions unchanged).\n\nPress Write to store it, then grow or add\npartitions in the new space.",
+    /* 1443 MSG_PV_WRITE_REFUSED_FMT */ "Write refused:\n%s",
+    /* 1444 MSG_RDBW_INVALID */ "no valid RDB in memory",
+    /* 1445 MSG_RDBW_COUNTS */ "too many partitions or filesystems",
+    /* 1446 MSG_RDBW_RANGE_FMT */ "partition %s (cyl %lu-%lu) lies outside the\nusable range (cyl %lu-%lu)",
+    /* 1447 MSG_RDBW_OVERLAP_FMT */ "partitions %s and %s overlap",
+    /* 1448 MSG_RDBW_NOMEM */ "out of memory",
+    /* 1449 MSG_RDBW_UNKNOWN */ "unknown reason",
+    /* 1450 MSG_DC_GROW_GEOM_FMT */ "The destination disk is larger than the copied\nRDB geometry:\n\n  RDB : %lu cylinders (%s)\n  Disk: %lu cylinders (%s)\n\nExtend the RDB to the full disk? Partitions stay\nas they are; grow or add partitions afterwards.",
+    /* 1451 MSG_DC_GROW_GEOM_GADGETS */ "Extend|Keep",
+    /* 1452 MSG_DC_GROW_GEOM_OK */ "Destination RDB extended to the full disk.",
+    /* 1453 MSG_DC_GROW_GEOM_FAIL_FMT */ "Could not write the extended RDB (err %d).\nThe copy itself is complete.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

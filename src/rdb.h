@@ -74,6 +74,9 @@ struct BlockDev {
     ULONG            last_overflow_need;  /* blocks needed  (set on overflow)    */
     ULONG            last_overflow_avail; /* blocks available (set on overflow)  */
     BOOL             last_write_refused_trunc; /* RDB_Write refused: chain truncated, not acknowledged */
+    UBYTE            last_write_fail;     /* RDBW_* reason of the last RDB_Write FALSE */
+    UWORD            last_write_fail_part; /* partition index for RDBW_RANGE / RDBW_OVERLAP */
+    UWORD            last_write_fail_part2;/* second partition for RDBW_OVERLAP */
     UBYTE            rd_pref;             /* read path that worked last: 0 none, 1 HD_SCSICMD, 2 TD_READ64, 3 CMD_READ */
     UQUAD            td_total_bytes;      /* capacity from TD_GETGEOMETRY        */
     ULONG            rc_total_blocks;     /* READ CAPACITY(10) total blocks (0=unavail) */
@@ -251,6 +254,24 @@ const char *RDB_TruncReasonStr(UBYTE reason);
 /* Highest block used by RDB metadata known in memory (RDSK, PART, FSHD, LSEG,
    BADB) - a floor for rdb_HighRDSKBlock, which some tools leave at 0. */
 ULONG RDB_LastMetaBlock(const struct RDBInfo *rdb);
+
+/* Why the last RDB_Write() returned FALSE (bd->last_write_fail). */
+#define RDBW_NONE      0
+#define RDBW_INVALID   1   /* no valid RDB in memory                     */
+#define RDBW_COUNTS    2   /* num_parts / num_fs beyond the arrays       */
+#define RDBW_TRUNC     3   /* damaged chain not acknowledged             */
+#define RDBW_RANGE     4   /* a partition lies outside lo_cyl..hi_cyl    */
+#define RDBW_OVERLAP   5   /* two partitions overlap                     */
+#define RDBW_OVERFLOW  6   /* metadata spills into the first partition   */
+#define RDBW_NOMEM     7
+#define RDBW_IO        8   /* a block write or verify failed             */
+
+/* Cylinder count the RDB would need to cover the whole device while
+   keeping its own heads/sectors (the CLI NEWGEO rule).  Returns TRUE when
+   that is MORE than the current count, i.e. an update would gain space;
+   old_cyls / new_cyls are always filled. */
+BOOL RDB_GrowToDevice(const struct RDBInfo *rdb, const struct BlockDev *bd,
+                      ULONG *old_cyls, ULONG *new_cyls);
 
 /* TRUE if the raw RDSK block `blk` describes the same physical disk as `cur`
    (cylinders/heads/sectors and product string match).  Used before restoring

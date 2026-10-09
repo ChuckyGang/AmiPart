@@ -19,6 +19,7 @@
 #include <exec/types.h>
 #include <intuition/intuition.h>
 #include "rdb.h"
+#include "partview.h"
 #include "devices.h"
 
 /* ------------------------------------------------------------------ */

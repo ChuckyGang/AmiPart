@@ -67,6 +67,7 @@ Run `AmiPart` from the Shell or double-click from Workbench.
 When launched by double-clicking its icon, AmiPart reads these tooltypes from the icon (set them via the icon's **Information** window, or `NOWARNING` on the CLI):
 
 - `NOWARNING` — suppresses the startup disclaimer.
+- `LOWCHIP` — keep windows SIMPLE_REFRESH (no chip-RAM backing bitmap); uncovered window areas are then repainted only after the dialog on top closes. Default is SMART_REFRESH.
 - `WINDOW=left/top/width/height` — restores the partition editor window to this position and size on open, e.g. `WINDOW=50/30/640/400`. Ignored (falls back to the default centered size) if the saved geometry no longer fits the current screen — for example after switching to a smaller resolution. Not read when AmiPart is run from the Shell.
 
 ---

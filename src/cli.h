@@ -35,5 +35,7 @@ LONG cli_run(void);
  * its own, so cli_run still falls through to GUI mode).
  */
 BOOL cli_nowarning(void);
+/* cli_lowchip - TRUE if LOWCHIP/S was given (GUI keeps SIMPLE_REFRESH windows). */
+BOOL cli_lowchip(void);
 
 #endif /* CLI_H */

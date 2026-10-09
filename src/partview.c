@@ -417,7 +417,7 @@ static void offer_reboot(struct Window *win, const char *msg)
                 { WA_Width,     (ULONG)w }, { WA_Height, (ULONG)h },
                 { WA_Title,     (ULONG)GS(MSG_PV_PLEASE_WAIT) },
                 { WA_PubScreen, (ULONG)scr },
-                { WA_Flags,     WFLG_DRAGBAR | WFLG_SIMPLE_REFRESH },
+                { WA_Flags,     WFLG_DRAGBAR | PV_REFRESH_FLAG },
                 { WA_IDCMP,     0 },
                 { TAG_DONE,     0 }
             };
@@ -2264,7 +2264,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                                 IDCMP_NEWSIZE | IDCMP_MENUPICK },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                 WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                WFLG_SIMPLE_REFRESH | WFLG_REPORTMOUSE |
+                                PV_REFRESH_FLAG | WFLG_REPORTMOUSE |
                                 WFLG_SIZEGADGET | WFLG_SIZEBBOTTOM },
                 { TAG_DONE, 0 }
             };
@@ -3292,42 +3292,40 @@ BOOL partview_run(const char *devname, ULONG unit)
                                                 ix, iy, iw, bx, by, bw, bh,
                                                 hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
                                 } else if (choice == 2) {
-                                    /* Update Geometry (EXPERIMENTAL) - translate each
-                                       partition's cyl boundaries to the new bytes-per-cyl
-                                       so partitions stay on the same physical bytes and
-                                       the in-memory view is self-consistent (matches what
-                                       a reload-after-write would show). */
-                                    ULONG bsz     = (rdb->blk_size > 0) ? rdb->blk_size : 512;
-                                    UQUAD old_bpc = (UQUAD)rdb->heads * rdb->sectors * bsz;
-                                    UQUAD new_bpc = (UQUAD)real_heads * real_secs    * bsz;
-                                    if (old_bpc > 0 && new_bpc > 0) {
-                                        UWORD k;
-                                        for (k = 0; k < rdb->num_parts; k++) {
-                                            struct PartInfo *p = &rdb->parts[k];
-                                            UQUAD start = (UQUAD)p->low_cyl        * old_bpc;
-                                            UQUAD end   = (UQUAD)(p->high_cyl + 1) * old_bpc;
-                                            ULONG nlo   = (ULONG)(start / new_bpc);
-                                            ULONG nhi_excl = (ULONG)(end / new_bpc);
-                                            if (nhi_excl == 0) nhi_excl = 1;
-                                            p->low_cyl  = nlo;
-                                            p->high_cyl = nhi_excl - 1;
-                                            if (p->high_cyl > real_cyls - 1)
-                                                p->high_cyl = real_cyls - 1;
-                                            if (p->low_cyl  > p->high_cyl)
-                                                p->low_cyl  = p->high_cyl;
-                                            p->heads   = real_heads;
-                                            p->sectors = real_secs;
-                                        }
+                                    /* Update Geometry: the CLI NEWGEO rule.  Keep the
+                                       RDB's own heads/sectors (partition cylinder
+                                       numbers stay valid) and only extend the cylinder
+                                       count to cover the whole device.  Reshaping to the
+                                       driver's C/H/S broke partitions whose boundaries
+                                       were not multiples of the new cylinder (issue #14/3). */
+                                    ULONG oc, nc;
+                                    char  gmsg[400], sz_rdb[20], sz_dev[20];
+                                    struct EasyStruct ges;
+                                    ges.es_StructSize = sizeof(ges);
+                                    ges.es_Flags      = 0;
+                                    ges.es_Title      = (UBYTE *)GS(MSG_PV_INIT_TITLE);
+                                    ges.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                                    if (bd && RDB_GrowToDevice(rdb, bd, &oc, &nc)) {
+                                        rdb->cylinders = nc;
+                                        rdb->hi_cyl    = nc - 1;
+                                        dirty = TRUE;
+                                        DP_SNPRINTF(gmsg, GS(MSG_PV_INIT_GEOM_GROWN_FMT),
+                                            (unsigned long)oc, (unsigned long)nc,
+                                            (unsigned long)rdb->heads, (unsigned long)rdb->sectors);
+                                        refresh_listview(win, lv_gad, rdb, sel);
+                                        draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                                    ix, iy, iw, bx, by, bw, bh,
+                                                    hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                    } else {
+                                        ULONG bsz = (rdb->blk_size > 0) ? rdb->blk_size : 512;
+                                        FormatSize((UQUAD)rdb->cylinders * rdb->heads * rdb->sectors * bsz, sz_rdb);
+                                        FormatSize(bd ? bd->total_bytes : 0, sz_dev);
+                                        DP_SNPRINTF(gmsg, GS(MSG_PV_INIT_GEOM_SAME_FMT),
+                                            (unsigned long)rdb->cylinders, (unsigned long)rdb->heads,
+                                            (unsigned long)rdb->sectors, sz_rdb, sz_dev);
                                     }
-                                    rdb->cylinders = real_cyls;
-                                    rdb->heads     = real_heads;
-                                    rdb->sectors   = real_secs;
-                                    rdb->hi_cyl    = real_cyls - 1;
-                                    dirty = TRUE;
-                                    refresh_listview(win, lv_gad, rdb, sel);
-                                    draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
-                                                ix, iy, iw, bx, by, bw, bh,
-                                                hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                    ges.es_TextFormat = (UBYTE *)gmsg;
+                                    EasyRequest(win, &ges, NULL);
                                 } else if (choice == 3) {
                                     /* Manual - re-enter geometry, then re-show dialog */
                                     if (geometry_dialog(real_cyls, real_heads, real_secs,
@@ -3584,6 +3582,33 @@ BOOL partview_run(const char *devname, ULONG unit)
                         if (!write_ok && bd && bd->last_write_refused_trunc) {
                             /* refused: damaged chain not acknowledged */
                             es.es_TextFormat   = (UBYTE *)GS(MSG_PV_TRUNC_REFUSED_BODY);
+                            es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                            EasyRequest(win, &es, NULL);
+                        } else if (!write_ok && bd && bd->last_io_err == 0 &&
+                                   bd->last_write_fail != RDBW_OVERFLOW) {
+                            /* Refused before any block was written: say why instead
+                               of the old catch-all "metadata overflow" (issue #14/3). */
+                            char why[200];
+                            switch (bd->last_write_fail) {
+                            case RDBW_INVALID: strncpy(why, GS(MSG_RDBW_INVALID), sizeof(why)-1); break;
+                            case RDBW_COUNTS:  strncpy(why, GS(MSG_RDBW_COUNTS),  sizeof(why)-1); break;
+                            case RDBW_NOMEM:   strncpy(why, GS(MSG_RDBW_NOMEM),   sizeof(why)-1); break;
+                            case RDBW_RANGE: {
+                                const struct PartInfo *rp = &rdb->parts[bd->last_write_fail_part];
+                                DP_SNPRINTF(why, GS(MSG_RDBW_RANGE_FMT), rp->drive_name,
+                                    (unsigned long)rp->low_cyl, (unsigned long)rp->high_cyl,
+                                    (unsigned long)rdb->lo_cyl, (unsigned long)rdb->hi_cyl);
+                                break; }
+                            case RDBW_OVERLAP:
+                                DP_SNPRINTF(why, GS(MSG_RDBW_OVERLAP_FMT),
+                                    rdb->parts[bd->last_write_fail_part].drive_name,
+                                    rdb->parts[bd->last_write_fail_part2].drive_name);
+                                break;
+                            default:           strncpy(why, GS(MSG_RDBW_UNKNOWN), sizeof(why)-1); break;
+                            }
+                            why[sizeof(why)-1] = '\0';
+                            DP_SNPRINTF(wfmt, GS(MSG_PV_WRITE_REFUSED_FMT), why);
+                            es.es_TextFormat   = (UBYTE *)wfmt;
                             es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                             EasyRequest(win, &es, NULL);
                         } else if (!write_ok && bd && bd->last_io_err == 0) {

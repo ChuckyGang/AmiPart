@@ -419,7 +419,7 @@ void partition_advanced_dialog(struct PartInfo *pi)
                 { WA_PubScreen, (ULONG)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                                WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH },
+                                WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG },
                 { TAG_DONE, 0 }
             };
             win = OpenWindowTagList(NULL, wt);
@@ -839,7 +839,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 { WA_PubScreen, (ULONG)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
-                                WFLG_CLOSEGADGET|WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH },
+                                WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG },
                 { TAG_DONE, 0 }
             };
             win = OpenWindowTagList(NULL, wt);
@@ -1233,7 +1233,7 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
                                 IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                 WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                WFLG_SIMPLE_REFRESH },
+                                PV_REFRESH_FLAG },
                 { TAG_DONE, 0 }
             };
             win = OpenWindowTagList(NULL, wt);

@@ -4450,3 +4450,42 @@ CLEARRDB: block 0 is a FAT boot sector (superfloppy) - its FATs and root\ndirect
 MSG_CLI_CLEARRDB_TAIL_NOTE
 CLEARRDB: driver reports a cylinder-rounded size - the backup GPT at the\nvery end of the disk may be missed; check on a PC afterwards.\n
 ;
+MSG_PV_INIT_GEOM_SAME_FMT
+Disk is not larger than the RDB geometry.\n\nRDB : %lu cyl x %lu hd x %lu sec = %s\nDisk: %s\n\nNo update needed. The driver may simply report\nthe same disk with another head/sector shape.
+;
+MSG_PV_INIT_GEOM_GROWN_FMT
+RDB cylinder count extended: %lu -> %lu\n(%lu heads x %lu sectors kept, partitions unchanged).\n\nPress Write to store it, then grow or add\npartitions in the new space.
+;
+MSG_PV_WRITE_REFUSED_FMT
+Write refused:\n%s
+;
+MSG_RDBW_INVALID
+no valid RDB in memory
+;
+MSG_RDBW_COUNTS
+too many partitions or filesystems
+;
+MSG_RDBW_RANGE_FMT
+partition %s (cyl %lu-%lu) lies outside the\nusable range (cyl %lu-%lu)
+;
+MSG_RDBW_OVERLAP_FMT
+partitions %s and %s overlap
+;
+MSG_RDBW_NOMEM
+out of memory
+;
+MSG_RDBW_UNKNOWN
+unknown reason
+;
+MSG_DC_GROW_GEOM_FMT
+The destination disk is larger than the copied\nRDB geometry:\n\n  RDB : %lu cylinders (%s)\n  Disk: %lu cylinders (%s)\n\nExtend the RDB to the full disk? Partitions stay\nas they are; grow or add partitions afterwards.
+;
+MSG_DC_GROW_GEOM_GADGETS
+Extend|Keep
+;
+MSG_DC_GROW_GEOM_OK
+Destination RDB extended to the full disk.
+;
+MSG_DC_GROW_GEOM_FAIL_FMT
+Could not write the extended RDB (err %d).\nThe copy itself is complete.
+;

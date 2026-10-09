@@ -30,6 +30,7 @@
 #include "diskselect.h"
 #include "guilv.h"
 #include "locale_support.h"
+#include "partview.h"
 #include "version.h"
 
 /* ------------------------------------------------------------------ */
@@ -431,7 +432,7 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
                                 IDCMP_GADGETDOWN  | IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                 WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                WFLG_SIMPLE_REFRESH },
+                                PV_REFRESH_FLAG },
                 { TAG_DONE,     0 }
             };
             win = OpenWindowTagList(NULL, win_tags);
@@ -708,7 +709,7 @@ static void probe_win_open(struct ProbeWin *pw, const char *devname)
             { WA_PubScreen, (ULONG)scr },
             { WA_Gadgets,   (ULONG)pw->glist },
             { WA_IDCMP,     pw->glist ? IDCMP_GADGETUP : 0 },
-            { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_SMART_REFRESH },
+            { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET | PV_REFRESH_FLAG },
             { TAG_DONE,     0 }
         };
         pw->win = OpenWindowTagList(NULL, win_tags);
@@ -901,7 +902,7 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
                                     IDCMP_GADGETDOWN  | IDCMP_REFRESHWINDOW },
                     { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                     WFLG_CLOSEGADGET | WFLG_ACTIVATE |
-                                    WFLG_SIMPLE_REFRESH },
+                                    PV_REFRESH_FLAG },
                     { TAG_DONE,     0 }
                 };
                 win = OpenWindowTagList(NULL, win_tags);

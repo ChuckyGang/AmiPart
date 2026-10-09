@@ -1074,6 +1074,18 @@ ULONG RDB_LastMetaBlock(const struct RDBInfo *rdb)
     return hi;
 }
 
+BOOL RDB_GrowToDevice(const struct RDBInfo *rdb, const struct BlockDev *bd,
+                      ULONG *old_cyls, ULONG *new_cyls)
+{
+    ULONG bs = (bd && bd->block_size) ? bd->block_size : 512;
+    *old_cyls = rdb ? rdb->cylinders : 0;
+    *new_cyls = *old_cyls;
+    if (!rdb || !bd || rdb->heads == 0 || rdb->sectors == 0 || bd->total_bytes == 0)
+        return FALSE;
+    *new_cyls = (ULONG)((bd->total_bytes / bs) / ((UQUAD)rdb->heads * rdb->sectors));
+    return (BOOL)(*new_cyls > *old_cyls);
+}
+
 /* Physical span of a partition in 512-byte "cylinder units".  A partition
    whose DE_SIZEBLOCK is not 512 is addressed by its handler in units of that
    size, so on a 512-byte-sector disk it physically covers block_size/512
@@ -1765,11 +1777,20 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     ULONG  hi_blk;              /* rdb_RDBBlocksHi / rdb_HighRDSKBlock */
     ULONG  total_blocks;
 
-    if (!bd || !rdb || !rdb->valid) return FALSE;
+    if (bd) {
+        bd->last_write_fail       = RDBW_NONE;
+        bd->last_write_fail_part  = 0;
+        bd->last_write_fail_part2 = 0;
+        bd->last_overflow_need    = 0;
+        bd->last_overflow_avail   = 0;
+        bd->last_io_err           = 0;   /* stale value must not mask a refusal */
+    }
+    if (!bd) return FALSE;
+    if (!rdb || !rdb->valid) { bd->last_write_fail = RDBW_INVALID; return FALSE; }
 
     /* Validate counts so write loops can never overrun their arrays */
     if (rdb->num_parts > MAX_PARTITIONS || rdb->num_fs > MAX_FILESYSTEMS)
-        return FALSE;
+        { bd->last_write_fail = RDBW_COUNTS; return FALSE; }
 
     /* A truncated chain means parts[]/filesystems[] is incomplete; writing
        it would silently drop the entries we could not read.  The caller has
@@ -1777,12 +1798,15 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     bd->last_write_refused_trunc = FALSE;
     if (rdb->chain_truncated && !rdb->allow_truncated_write) {
         bd->last_write_refused_trunc = TRUE;
+        bd->last_write_fail = RDBW_TRUNC;
         bd->last_io_err = 0;
         return FALSE;
     }
     { UWORD _i;
       for (_i = 0; _i < rdb->num_parts; _i++) {
           const struct PartInfo *pi = &rdb->parts[_i];
+          bd->last_write_fail      = RDBW_RANGE;
+          bd->last_write_fail_part = _i;
           if (pi->low_cyl > pi->high_cyl) return FALSE;
           /* Reject partitions that start inside the RDB reserved area or run
              past the last usable cylinder.  The CLI/script/GUI front-ends
@@ -1791,6 +1815,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
           if (rdb->lo_cyl > 0 && pi->low_cyl < rdb->lo_cyl) return FALSE;
           if (rdb->hi_cyl > 0 && pi->high_cyl > rdb->hi_cyl) return FALSE;
       }
+      bd->last_write_fail = RDBW_NONE;
       /* Overlap check: O(n²) but n <= MAX_PARTITIONS (64) so it is fine */
       for (_i = 0; _i < rdb->num_parts; _i++) {
           UWORD _j;
@@ -1798,8 +1823,12 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
               ULONG alo, ahi, blo, bhi;
               part_phys_span(&rdb->parts[_i], &alo, &ahi);
               part_phys_span(&rdb->parts[_j], &blo, &bhi);
-              if (alo <= bhi && blo <= ahi)
+              if (alo <= bhi && blo <= ahi) {
+                  bd->last_write_fail       = RDBW_OVERLAP;
+                  bd->last_write_fail_part  = _i;
+                  bd->last_write_fail_part2 = _j;
                   return FALSE;
+              }
           }
       }
     }
@@ -1838,6 +1867,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
             /* Store the actual numbers so the caller can show a useful message. */
             bd->last_overflow_need  = last_used_blk + 1;
             bd->last_overflow_avail = reserved_end;
+            bd->last_write_fail     = RDBW_OVERFLOW;
             bd->last_io_err = 0;
             return FALSE;
         }
@@ -1846,7 +1876,8 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
     /* Single contiguous buffer - all blocks filled in-memory first, then
        written one block at a time. */
     big_buf = (UBYTE *)AllocVec(total_blocks * bd->block_size, MEMF_PUBLIC | MEMF_CLEAR);
-    if (!big_buf) return FALSE;
+    if (!big_buf) { bd->last_write_fail = RDBW_NOMEM; return FALSE; }
+    bd->last_write_fail = RDBW_IO;   /* any FALSE from here on is a device error */
 
 /* pointer into big_buf for an absolute block number */
 #define BLKPTR(blk) ((ULONG *)(big_buf + ((blk) - rdb->rdb_block_lo) * bd->block_size))

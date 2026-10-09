@@ -379,7 +379,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
               {WA_Gadgets,(ULONG)glist},{WA_PubScreen,(ULONG)scr},
               {WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW},
               {WA_Flags,WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
-                        WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH},
+                        WFLG_ACTIVATE|PV_REFRESH_FLAG},
               {TAG_DONE,0}};
           win=OpenWindowTagList(NULL,wt); }
     }
@@ -620,7 +620,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
               {WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                         IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW},
               {WA_Flags,WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
-                        WFLG_ACTIVATE|WFLG_SIMPLE_REFRESH},
+                        WFLG_ACTIVATE|PV_REFRESH_FLAG},
               {TAG_DONE,0}};
           win=OpenWindowTagList(NULL,wt); }
 
