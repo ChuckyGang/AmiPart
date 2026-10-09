@@ -1461,8 +1461,12 @@
 #define MSG_PV_UNDO_BODY             1455
 #define MSG_PV_UNDO_GADGETS          1456
 #define MSG_PV_UNDO_NOTHING          1457
+#define MSG_CLI_COPYDISK_GROW_FMT    1458
+#define MSG_CLI_COPYDISK_GROW_ASK    1459
+#define MSG_CLI_COPYDISK_GROW_OK     1460
+#define MSG_CLI_COPYDISK_GROW_FAIL_FMT 1461
 
-#define MSG_COUNT 1458
+#define MSG_COUNT 1462
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2932,5 +2936,9 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1455 MSG_PV_UNDO_BODY */ "Discard ALL unsaved changes and reload the\npartition table from disk?\n\nNothing has been written since the last Write,\nso the disk itself is untouched.",
     /* 1456 MSG_PV_UNDO_GADGETS */ "Undo|Keep editing",
     /* 1457 MSG_PV_UNDO_NOTHING */ "Nothing to undo - there are no unsaved changes.",
+    /* 1458 MSG_CLI_COPYDISK_GROW_FMT */ "Destination is larger than the copied RDB geometry: %lu -> %lu cylinders (%s -> %s).\n",
+    /* 1459 MSG_CLI_COPYDISK_GROW_ASK */ "Extend the destination RDB to the full disk (partitions unchanged)?",
+    /* 1460 MSG_CLI_COPYDISK_GROW_OK */ "Destination RDB extended to the full disk.\n",
+    /* 1461 MSG_CLI_COPYDISK_GROW_FAIL_FMT */ "Could not write the extended RDB (err %d); the copy itself is complete.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

@@ -1069,13 +1069,19 @@ static void draw_info(struct Window *win, const char *devname, ULONG unit,
     struct RastPort *rp = win->RPort;
     char   line1[120], line2[120], line3[120];
     char   sz[16];
+    BOOL   have_model = FALSE;
     WORD   fb  = rp->TxBaseline;
     WORD   fh  = rp->TxHeight;
     WORD   txw = rp->TxWidth ? (WORD)rp->TxWidth : 8;
     /* Checkbox gadgets occupy the right side of line 3 - leave a gap there.
        Width formula must match the cbw in build_gadgets. */
-    UWORD  cbw       = (UWORD)((UWORD)fh * 2 + 82);
-    UWORD  cb_res    = (UWORD)(cbw * 2 + 16);  /* 2 checkboxes + gap + small margin */
+    /* Same measure as build_gadgets: box + gap + label + margin, per box. */
+    UWORD  cb_res;
+    {
+        const char *t1 = GS(MSG_PV_CHK_LASTDISK), *t2 = GS(MSG_PV_CHK_LASTLUN);
+        cb_res = (UWORD)((26 + 8 + TextLength(rp, t1, (ULONG)strlen(t1)) + 6)
+                       + 4 + (26 + 8 + TextLength(rp, t2, (ULONG)strlen(t2)) + 6) + 8);
+    }
 
     /* Erase the full info area (checkboxes on line 3 are redrawn by draw_static) */
     SetAPen(rp, 0);
@@ -1095,6 +1101,7 @@ static void draw_info(struct Window *win, const char *devname, ULONG unit,
             snprintf(model, sizeof(model), "%s %s",
                      rdb->disk_vendor, rdb->disk_product);
         model[35] = '\0';
+        have_model = (BOOL)(model[0] != '\0');
 
         if (rdb && rdb->cylinders > 0) {
             ULONG bsz = (rdb->blk_size > 0) ? rdb->blk_size : 512;
@@ -1145,7 +1152,14 @@ static void draw_info(struct Window *win, const char *devname, ULONG unit,
         UWORD max_l3   = (cb_res + 4 < iw) ? (UWORD)((iw - 4 - cb_res) / (UWORD)txw) : 0;
         UWORD l;
 
-        l = (UWORD)strlen(line1); if (l > max_full) l = max_full;
+        l = (UWORD)strlen(line1);
+        if (l > max_full && have_model) {
+            /* Too long with the model name: drop it rather than clip it. */
+            snprintf(line1, sizeof(line1), GS(MSG_PV_INFO_LINE1),
+                     devname, (unsigned long)unit, sz);
+            l = (UWORD)strlen(line1);
+        }
+        if (l > max_full) l = max_full;
         Move(rp, ix + 2, iy + fb);
         Text(rp, line1, l);
 
@@ -1523,6 +1537,11 @@ static BOOL build_gadgets(APTR vi,
     UWORD lv_h;
     UWORD bw[8];                  /* measured button widths (issue #14/4) */
     BOOL  have_bw = FALSE;
+    UWORD cbw_disk = (UWORD)(font_h * 2 + 82);   /* checkbox + label widths, */
+    UWORD cbw_lun  = (UWORD)(font_h * 2 + 82);   /* measured below when possible */
+    UWORD btn_rows = 1;
+    BOOL  row_fit = FALSE;
+    UWORD row_slack = 0, row_x = 0;
     static const LONG btn_ids[8] = { MSG_PV_BTN_INITRDB, MSG_PV_BTN_ADD,
         MSG_PV_BTN_EDIT, MSG_PV_BTN_DELETE, MSG_PV_BTN_MOVE,
         MSG_PV_BTN_FILESYS, MSG_PV_BTN_WRITE, MSG_PV_BTN_BACK };
@@ -1613,6 +1632,14 @@ static BOOL build_gadgets(APTR vi,
                                     + tf->tf_XSize * 2 + 6);
                 }
                 have_bw = TRUE;
+                /* CHECKBOX_KIND is a fixed 26-px image with the label to its
+                   right: box + gap + text + margin. */
+                {
+                    const char *t = GS(MSG_PV_CHK_LASTDISK);
+                    cbw_disk = (UWORD)(26 + 8 + TextLength(&rp, t, (ULONG)strlen(t)) + 6);
+                    t = GS(MSG_PV_CHK_LASTLUN);
+                    cbw_lun  = (UWORD)(26 + 8 + TextLength(&rp, t, (ULONG)strlen(t)) + 6);
+                }
             }
 
 #undef MAXW
@@ -1625,6 +1652,20 @@ static BOOL build_gadgets(APTR vi,
     lv_hook.h_Entry    = (HOOKFUNC)lv_render;
     lv_hook.h_SubEntry = NULL;
     lv_hook.h_Data     = NULL;
+
+    /* When the eight labels do not fit one row at this width, use two rows
+       of four instead of squeezing the text (bare 640-px ADF boot). */
+    if (have_bw) {
+        UWORD avail = (UWORD)(inner_w - pad * 2 - pad * 7), sum = 0, k;
+        for (k = 0; k < 8; k++) sum += bw[k];
+        if (sum > avail) {
+            btn_rows = 2;
+            btn_y = (UWORD)(win_h - bor_b - pad - btn_h * 2 - pad);
+            lv_h  = (btn_y > lv_top + pad + row_h * 2)
+                    ? (btn_y - pad - lv_top) : row_h * 2;
+            lv_h  = (lv_h / row_h) * row_h;
+        }
+    }
 
     gctx = CreateContext(&glist);
     if (!gctx) return FALSE;
@@ -1655,22 +1696,31 @@ static BOOL build_gadgets(APTR vi,
     /* Button row: each button as wide as its label when all eight fit,
        with the slack shared out; equal eighths only as the fallback. */
     {
-        UWORD avail  = (UWORD)(inner_w - pad * 2 - pad * 7);
-        UWORD eighth = avail / 8;
-        UWORD x = (UWORD)(bor_l + pad), sum = 0, k;
-        if (have_bw) for (k = 0; k < 8; k++) sum += bw[k];
-        ng.ng_TopEdge = (WORD)btn_y;
-        ng.ng_Height  = btn_h;
+        UWORD per_row = (btn_rows == 2) ? 4 : 8;
+        UWORD avail   = (UWORD)(inner_w - pad * 2 - pad * (per_row - 1));
+        UWORD equal   = avail / per_row;
+        UWORD k;
+        ng.ng_Height = btn_h;
         for (k = 0; k < 8; k++) {
-            UWORD w = (have_bw && sum <= avail)
-                      ? (UWORD)(bw[k] + (avail - sum) / 8) : eighth;
-            ng.ng_LeftEdge   = (WORD)x;
+            UWORD col = k % per_row, rowi = k / per_row;
+            UWORD w;
+            if (col == 0) {
+                /* start of a row: measured widths + shared slack if they fit */
+                UWORD sum = 0, j;
+                if (have_bw) for (j = 0; j < per_row; j++) sum += bw[k + j];
+                row_fit   = (BOOL)(have_bw && sum <= avail);
+                row_slack = row_fit ? (UWORD)((avail - sum) / per_row) : 0;
+                row_x     = (UWORD)(bor_l + pad);
+            }
+            w = row_fit ? (UWORD)(bw[k] + row_slack) : equal;
+            ng.ng_LeftEdge   = (WORD)row_x;
+            ng.ng_TopEdge    = (WORD)(btn_y + rowi * (btn_h + pad));
             ng.ng_Width      = w;
             ng.ng_GadgetText = GS(btn_ids[k]);
             ng.ng_GadgetID   = btn_gids[k];
             prev = CreateGadgetA(BUTTON_KIND, prev, &ng, bt);
             if (!prev) { FreeGadgets(glist); return FALSE; }
-            x += w + pad;
+            row_x += w + pad;
         }
     }
 
@@ -1678,15 +1728,14 @@ static BOOL build_gadgets(APTR vi,
     {
         struct TagItem cbt[] = { { GTCB_Checked, 0 }, { TAG_DONE, 0 } };
         /* cbw must match the formula used in draw_info for the clip margin */
-        UWORD cbw   = (UWORD)(font_h * 2 + 82);
         WORD  chk_y = (WORD)(bor_t + pad + (WORD)(font_h + 2) * 2);
         UWORD chk_h = (UWORD)(font_h + 2);
         WORD  cb_right = (WORD)(bor_l + inner_w - pad); /* right edge of iw */
 
         cbt[0].ti_Data = (rdb_flags & RDBFF_LAST) ? 1UL : 0UL;
-        ng.ng_LeftEdge   = cb_right - (WORD)(cbw * 2 + pad * 3);
+        ng.ng_LeftEdge   = cb_right - (WORD)(cbw_lun + pad + cbw_disk);
         ng.ng_TopEdge    = chk_y;
-        ng.ng_Width      = cbw;
+        ng.ng_Width      = 26;
         ng.ng_Height     = chk_h;
         ng.ng_GadgetText = GS(MSG_PV_CHK_LASTDISK);
         ng.ng_GadgetID   = GID_LASTDISK;
@@ -1696,9 +1745,9 @@ static BOOL build_gadgets(APTR vi,
         prev = ldisk;
 
         cbt[0].ti_Data = (rdb_flags & RDBFF_LASTLUN) ? 1UL : 0UL;
-        ng.ng_LeftEdge   = cb_right - (WORD)cbw;
+        ng.ng_LeftEdge   = cb_right - (WORD)cbw_lun;
         ng.ng_TopEdge    = chk_y;
-        ng.ng_Width      = cbw;
+        ng.ng_Width      = 26;
         ng.ng_Height     = chk_h;
         ng.ng_GadgetText = GS(MSG_PV_CHK_LASTLUN);
         ng.ng_GadgetID   = GID_LASTLUN;

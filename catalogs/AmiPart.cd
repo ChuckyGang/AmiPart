@@ -4501,3 +4501,15 @@ Undo|Keep editing
 MSG_PV_UNDO_NOTHING
 Nothing to undo - there are no unsaved changes.
 ;
+MSG_CLI_COPYDISK_GROW_FMT
+Destination is larger than the copied RDB geometry: %lu -> %lu cylinders (%s -> %s).\n
+;
+MSG_CLI_COPYDISK_GROW_ASK
+Extend the destination RDB to the full disk (partitions unchanged)?
+;
+MSG_CLI_COPYDISK_GROW_OK
+Destination RDB extended to the full disk.\n
+;
+MSG_CLI_COPYDISK_GROW_FAIL_FMT
+Could not write the extended RDB (err %d); the copy itself is complete.\n
+;

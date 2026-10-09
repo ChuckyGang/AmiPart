@@ -3223,6 +3223,38 @@ static LONG cmd_copydisk(const char *devname, ULONG unit,
     ok = ImageCopy_DiskToDisk(bd, dbd, cli_prog_cb, &prog,
                               errbuf, sizeof(errbuf));
 
+    /* The copy carries the SOURCE geometry; on a larger destination offer
+       to extend the RDB's cylinder count (heads/sectors and partitions
+       untouched) so the extra space can be used with GROW / ADDPART. */
+    if (ok) {
+        struct RDBInfo *drdb = (struct RDBInfo *)AllocVec(sizeof(*drdb), MEMF_PUBLIC | MEMF_CLEAR);
+        ULONG oc, nc;
+        if (drdb) {
+            if (RDB_Read(dbd, drdb) && drdb->valid && !drdb->chain_truncated &&
+                RDB_GrowToDevice(drdb, dbd, &oc, &nc)) {
+                char  so[20], sn[20];
+                ULONG bsz = (drdb->blk_size > 0) ? drdb->blk_size : 512;
+                FormatSize((UQUAD)oc * drdb->heads * drdb->sectors * bsz, so);
+                FormatSize(dbd->total_bytes, sn);
+                DP_SNPRINTF(outbuf, GS(MSG_CLI_COPYDISK_GROW_FMT),
+                            (unsigned long)oc, (unsigned long)nc, so, sn);
+                cli_puts(outbuf);
+                if (ask_yn(GS(MSG_CLI_COPYDISK_GROW_ASK), force)) {
+                    drdb->cylinders = nc;
+                    drdb->hi_cyl    = nc - 1;
+                    if (RDB_Write(dbd, drdb)) {
+                        cli_puts(GS(MSG_CLI_COPYDISK_GROW_OK));
+                    } else {
+                        DP_SNPRINTF(outbuf, GS(MSG_CLI_COPYDISK_GROW_FAIL_FMT), (int)dbd->last_io_err);
+                        cli_puts(outbuf); rc_warn = TRUE;
+                    }
+                }
+            }
+            RDB_FreeCode(drdb);
+            FreeVec(drdb);
+        }
+    }
+
     BlockDev_Close(dbd);
     BlockDev_Close(bd);
 
