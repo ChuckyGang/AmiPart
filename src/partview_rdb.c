@@ -31,6 +31,7 @@
 
 #include "clib.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "rdb.h"
 #include "rdbbe.h"
 #include "devices.h"
@@ -704,6 +705,20 @@ static struct Node vrdb_nodes[VRDB_MAXLINES];
 static struct List vrdb_list;
 static UWORD       vrdb_count;
 
+/* Default width for a vrdb list window: wide enough for its longest line
+   (plus scrollbar and frame) but never wider than the screen (issue #14/4). */
+static UWORD vrdb_fit_w(struct Screen *scr, UWORD base)
+{
+    UWORD i, best = 0, need;
+    for (i = 0; i < vrdb_count; i++) {
+        UWORD w = GUI_TextW(scr, vrdb_strs[i]);
+        if (w > best) best = w;
+    }
+    need = (UWORD)(best + scr->WBorLeft + scr->WBorRight + 4 * 2 + 8 + 20);
+    if (need > base) base = need;
+    return GUI_FitW(scr, base);
+}
+
 static void vrdb_add(const char *s)
 {
     if (vrdb_count >= VRDB_MAXLINES) return;
@@ -1055,7 +1070,7 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 520;
+        win_w  = vrdb_fit_w(scr, 520);
         win_h  = bor_t + pad + row_h * 18 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -1692,7 +1707,7 @@ void rdb_raw_scan(struct Window *win, struct BlockDev *bd)
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 560;
+        win_w  = vrdb_fit_w(scr, 560);
         win_h  = bor_t + pad + row_h * 24 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -2185,7 +2200,7 @@ void raw_disk_read(struct Window *win, struct BlockDev *bd)
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 520;
+        win_w  = vrdb_fit_w(scr, 520);
         win_h  = bor_t + pad + row_h * 20 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -2351,9 +2366,19 @@ static BOOL vrdb_ask_block(ULONG deflt, ULONG *out)
         UWORD bor_b   = (UWORD)scr->WBorBottom;
         UWORD pad     = 4;
         UWORD row_h   = font_h + 6;
-        UWORD win_w   = 270;
-        UWORD inner_w = win_w - bor_l - bor_r;
         UWORD lbl_w   = 96;
+        UWORD win_w   = 270;
+        UWORD inner_w;
+        {   static const LONG bids[] = { MSG_OK, MSG_CANCEL };
+            UWORD t = (UWORD)(GUI_TextW(scr, GS(MSG_RDB_HEXDUMP_START_BLK)) + GUI_CharW(scr));
+            if (t > lbl_w) lbl_w = t;
+            t = (UWORD)(bor_l + lbl_w + GUI_CharW(scr) * 12 + pad + bor_r);
+            if (t > win_w) win_w = t;
+            t = (UWORD)(bor_l + pad * 3 + GUI_MaxBtnW(scr, bids, 2) * 2 + bor_r);
+            if (t > win_w) win_w = t;
+            win_w = GUI_FitW(scr, win_w);
+        }
+        inner_w = win_w - bor_l - bor_r;
         UWORD win_h   = bor_t + pad + row_h + pad + row_h + pad + bor_b;
         struct NewGadget ng;
 
@@ -2543,7 +2568,7 @@ void raw_hex_dump(struct Window *win, struct BlockDev *bd)
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 560;
+        win_w  = vrdb_fit_w(scr, 560);
         win_h  = bor_t + pad + row_h * 20 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -2940,7 +2965,7 @@ smart_show:
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 560;
+        win_w  = vrdb_fit_w(scr, 560);
         win_h  = bor_t + pad + row_h * 22 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  5 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -3483,7 +3508,7 @@ void rdb_integrity_check(struct Window *win, struct BlockDev *bd,
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 520;
+        win_w  = vrdb_fit_w(scr, 520);
         win_h  = bor_t + pad + row_h * 24 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;
@@ -3864,7 +3889,7 @@ void rdb_verify_extended(struct Window *win, struct BlockDev *bd)
         pad    = 4;
         row_h  = font_h + 2;
         btn_h  = font_h + 6;
-        win_w  = 520;
+        win_w  = vrdb_fit_w(scr, 520);
         win_h  = bor_t + pad + row_h * 20 + pad + btn_h + pad + bor_b;
         min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
         scr_w  = scr->Width;

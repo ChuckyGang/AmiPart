@@ -14,6 +14,7 @@
 
 #include "clib.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "version.h"
 #include "rdb.h"
 #include "partmove.h"
@@ -169,8 +170,32 @@ LONG init_rdb_dialog(struct Window *parent, const char *body,
     chk_h = (UWORD)(fh + 4);
     text_h = (UWORD)(num_lines * (fh + 2));
 
-    /* button widths: has_rdb uses 2 rows of 2; no_rdb uses 1 row of 3 */
+    /* Extract button labels from the existing gadget format strings */
+    gfmt = has_rdb ? GS(MSG_PV_INIT_HAS_RDB_GADGETS)
+                   : GS(MSG_PV_INIT_NO_RDB_GADGETS);
+    split_nth(gfmt, 0, lbl0, sizeof(lbl0));
+    split_nth(gfmt, 1, lbl1, sizeof(lbl1));
+    split_nth(gfmt, 2, lbl2, sizeof(lbl2));
+    if (has_rdb) split_nth(gfmt, 3, lbl3, sizeof(lbl3));
+
+    /* Width: the widest body line, the checkbox, or the button row -
+       whichever needs most - measured in the screen font (issue #14/4). */
     inner_w = 360;
+    {
+        UWORD need = GUI_MaxLineW(scr, body);
+        UWORD bmax = GUI_BtnW(scr, lbl0), t;
+        if ((t = GUI_BtnW(scr, lbl1)) > bmax) bmax = t;
+        if ((t = GUI_BtnW(scr, lbl2)) > bmax) bmax = t;
+        if (has_rdb && (t = GUI_BtnW(scr, lbl3)) > bmax) bmax = t;
+        t = has_rdb ? (UWORD)(bmax * 2 + pad) : (UWORD)(bmax * 3 + pad * 2);
+        if (t > need) need = t;
+        t = (UWORD)(fh + 2 + 4 + GUI_TextW(scr, GS(MSG_MBR_INIT_CHK)));
+        if (t > need) need = t;
+        if (need > inner_w) inner_w = need;
+        t = (UWORD)(scr->Width - bor_l - bor_r - pad * 2);
+        if (inner_w > t) inner_w = t;
+    }
+    /* button widths: has_rdb uses 2 rows of 2; no_rdb uses 1 row of 3 */
     btn_w   = has_rdb ? (UWORD)((inner_w - pad) / 2)
                       : (UWORD)((inner_w - 2 * pad) / 3);
     win_w   = (UWORD)(bor_l + pad + inner_w + pad + bor_r);
@@ -179,13 +204,6 @@ LONG init_rdb_dialog(struct Window *parent, const char *body,
     win_h = (UWORD)(bor_t + pad + text_h + pad + chk_h + pad + btn_h + pad
                     + (has_rdb ? btn_h + pad : 0) + bor_b);
 
-    /* Extract button labels from the existing gadget format strings */
-    gfmt = has_rdb ? GS(MSG_PV_INIT_HAS_RDB_GADGETS)
-                   : GS(MSG_PV_INIT_NO_RDB_GADGETS);
-    split_nth(gfmt, 0, lbl0, sizeof(lbl0));
-    split_nth(gfmt, 1, lbl1, sizeof(lbl1));
-    split_nth(gfmt, 2, lbl2, sizeof(lbl2));
-    if (has_rdb) split_nth(gfmt, 3, lbl3, sizeof(lbl3));
 
     {
         struct TagItem wt[] = {
@@ -411,7 +429,23 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
 
         (void)row_s;
 
+        {   /* measure labels / buttons in the screen font (issue #14/4) */
+            static const LONG lids[] = { MSG_MBR_DLG_TYPE, MSG_MBR_DLG_STARTCYL,
+                                         MSG_MBR_DLG_ENDCYL };
+            static const LONG bids[] = { MSG_OK, MSG_CANCEL };
+            UWORD t = GUI_MaxLabelW(scr, lids, 3);
+            if (t > lbl_w) lbl_w = t;
+            t = GUI_MaxBtnW(scr, bids, 2);
+            if (t > btn_w) btn_w = t;
+            t = (UWORD)(fh + 2 + 4 + GUI_TextW(scr, GS(MSG_MBR_DLG_ACTIVE)));
+            inner_w = (UWORD)(lbl_w + 4 + str_w);
+            if (t > inner_w) inner_w = t;
+            if ((UWORD)(btn_w * 2 + pad) > inner_w) inner_w = (UWORD)(btn_w * 2 + pad);
+            win_w = (UWORD)(bor_l + pad + inner_w + pad + bor_r);
+            gad_x = (WORD)(bor_l + pad + lbl_w + 4);
+        }
         if (win_w < 300) win_w = 300;
+        win_w = GUI_FitW(scr, win_w);
 
         {
             struct TagItem wt[] = {

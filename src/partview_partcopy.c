@@ -35,6 +35,7 @@
 #include "guilv.h"
 #include "partview_internal.h"
 #include "locale_support.h"
+#include "guisize.h"
 
 #define PCP_GID_LIST   1
 #define PCP_GID_SELECT 2
@@ -205,7 +206,13 @@ static WORD pcp_pick_partition(struct Window *parent, struct RDBInfo *drdb,
         UWORD bor_r = (UWORD)scr->WBorRight;
         UWORD bor_b = (UWORD)scr->WBorBottom;
         UWORD win_w = 460, pad = 4;
-        UWORD inner_w = win_w - bor_l - bor_r;
+        UWORD inner_w;
+        {   static const LONG bids[] = { MSG_PCP_CLONE_HERE, MSG_MAIN_BACK };
+            UWORD t = (UWORD)(bor_l + pad * 2 + GUI_MaxBtnW(scr, bids, 2) * 2 + pad + bor_r);
+            if (t > win_w) win_w = t;
+            win_w = GUI_FitW(scr, win_w);
+        }
+        inner_w = win_w - bor_l - bor_r;
         UWORD btn_h = font_h + 6;
         UWORD row_h = (UWORD)(font_h + 2);
         UWORD rows_shown = (nrows > 4) ? nrows : 4;

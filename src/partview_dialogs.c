@@ -23,6 +23,7 @@
 
 #include "clib.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "rdb.h"
 #include "pfsresize.h"
 #include "version.h"
@@ -346,6 +347,19 @@ void partition_advanced_dialog(struct PartInfo *pi)
                       + (UWORD)ADLG_ROWS * (row_h + pad)
                       + row_h + pad + bor_b;
 
+        {   /* measure labels in the screen font (issue #14/4) */
+            static const LONG lids[] = { MSG_DLG_RESERVED_BLKS, MSG_DLG_INTERLEAVE,
+                MSG_DLG_BUFFERS, MSG_DLG_BUF_MEM_TYPE, MSG_DLG_BOOT_BLOCKS,
+                MSG_DLG_MAXTRANSFER, MSG_DLG_MASK, MSG_DLG_CONTROL, MSG_DLG_DEV_FLAGS };
+            UWORD t = GUI_MaxLabelW(scr, lids, 9);
+            if (t > lbl_w) lbl_w = t;
+            t = (UWORD)(bor_l + lbl_w + GUI_CharW(scr) * 14 + pad + bor_r);
+            if (t > win_w) win_w = t;
+            win_w   = GUI_FitW(scr, win_w);
+            inner_w = win_w - bor_l - bor_r;
+            gad_x   = bor_l + lbl_w;
+            gad_w   = inner_w - lbl_w - pad;
+        }
         gctx = CreateContext(&glist);
         if (!gctx) goto cleanup;
 
@@ -636,6 +650,19 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                       + row_h + pad
                       + bor_b;
 
+        {   /* measure labels in the screen font (issue #14/4) */
+            static const LONG lids[] = { MSG_DLG_NAME, MSG_DLG_CYLINDER,
+                MSG_DLG_SIZE_MB, MSG_DLG_FILESYSTEM, MSG_DLG_BLOCK_SIZE,
+                MSG_DLG_BOOT_PRIORITY, MSG_DLG_VOLUME_NAME, MSG_DLG_DELDIR };
+            UWORD t = GUI_MaxLabelW(scr, lids, 8);
+            if (t > lbl_w) lbl_w = t;
+            t = (UWORD)(bor_l + lbl_w + GUI_CharW(scr) * 20 + pad + bor_r);
+            if (t > win_w) win_w = t;
+            win_w   = GUI_FitW(scr, win_w);
+            inner_w = win_w - bor_l - bor_r;
+            gad_x   = bor_l + lbl_w;
+            gad_w   = inner_w - lbl_w - pad;
+        }
         gctx = CreateContext(&glist);
         if (!gctx) goto cleanup;
 
@@ -1146,6 +1173,22 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
         warn_y  = bor_t + pad;
         warn_fh = font_h;
 
+        {   /* measure labels and warning lines in the screen font (issue #14/4) */
+            static const LONG lids[] = { MSG_DLG_CYLINDERS, MSG_DLG_HEADS,
+                                         MSG_DLG_SECTORS_TRK, MSG_DLG_SIZE_EG };
+            UWORD t = GUI_MaxLabelW(scr, lids, 4);
+            if (t > lbl_w) lbl_w = t;
+            t = (UWORD)(bor_l + lbl_w + GUI_CharW(scr) * 14 + pad + bor_r);
+            if (t > win_w) win_w = t;
+            t = (UWORD)(bor_l + pad * 2 + GUI_TextW(scr, GS(MSG_DLG_GEOM_WARN1)) + bor_r);
+            if (t > win_w) win_w = t;
+            t = (UWORD)(bor_l + pad * 2 + GUI_TextW(scr, GS(MSG_DLG_GEOM_WARN2)) + bor_r);
+            if (t > win_w) win_w = t;
+            win_w   = GUI_FitW(scr, win_w);
+            inner_w = win_w - bor_l - bor_r;
+            gad_x   = bor_l + lbl_w;
+            gad_w   = inner_w - lbl_w - pad;
+        }
         gctx = CreateContext(&glist);
         if (!gctx) goto geom_cleanup;
 

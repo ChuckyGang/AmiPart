@@ -31,6 +31,7 @@
 #include "partview_internal.h"
 #include "quickformat.h"
 #include "locale_support.h"
+#include "guisize.h"
 
 extern struct ExecBase      *SysBase;
 extern struct IntuitionBase *IntuitionBase;
@@ -357,6 +358,17 @@ BOOL offer_move_partition(struct Window *win,
     pad     = 4;
     row_h   = (UWORD)(font_h + 4);
     inner_w = 420;
+    {   /* buttons + the per-partition checkbox label (issue #14/4) */
+        static const LONG bids[] = { MSG_MOVE_BTN_MOVE, MSG_CANCEL };
+        char   tmp[48];
+        UWORD  t = (UWORD)(GUI_MaxBtnW(scr, bids, 2) * 2 + pad * 3);
+        DP_SNPRINTF(tmp, GS(MSG_MOVE_BACKUP_CHK_FMT), pi->drive_name);
+        if (t > inner_w) inner_w = t;
+        t = (UWORD)(pad * 2 + font_h + 2 + 4 + GUI_TextW(scr, tmp));
+        if (t > inner_w) inner_w = t;
+        t = (UWORD)(scr->Width - bor_l - scr->WBorRight);
+        if (inner_w > t) inner_w = t;
+    }
     win_w   = (UWORD)(bor_l + inner_w + scr->WBorRight);
 
     /* 8 warning text lines + 3 half-gaps */

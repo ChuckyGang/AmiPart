@@ -36,6 +36,7 @@
 #include "devices.h"
 #include "diskselect.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "partview.h"
 #include "rdb.h"
 #include "version.h"
@@ -206,7 +207,7 @@ static BOOL image_size_dialog(const char *path, char *out, ULONG outsz)
         UWORD btn_h  = font_h + 6;
         UWORD lbl_h  = font_h + 2;
         UWORD prompt_h = lbl_h * 2;       /* two-line prompt */
-        UWORD win_w  = 480;
+        UWORD win_w  = GUI_FitW(scr, 480);
         UWORD inner_w = win_w - bor_l - bor_r;
         UWORD str_y  = bor_t + pad + prompt_h + pad;
         UWORD btn_y  = str_y + btn_h + pad;

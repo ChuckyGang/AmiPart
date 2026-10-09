@@ -45,6 +45,7 @@
 #include "clib.h"
 #include "guilv.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "rdb.h"
 #include "mbr.h"
 #include "partview.h"
@@ -1520,6 +1521,13 @@ static BOOL build_gadgets(APTR vi,
     UWORD btn_y   = win_h - bor_b - pad - btn_h;
     UWORD lv_top;
     UWORD lv_h;
+    UWORD bw[8];                  /* measured button widths (issue #14/4) */
+    BOOL  have_bw = FALSE;
+    static const LONG btn_ids[8] = { MSG_PV_BTN_INITRDB, MSG_PV_BTN_ADD,
+        MSG_PV_BTN_EDIT, MSG_PV_BTN_DELETE, MSG_PV_BTN_MOVE,
+        MSG_PV_BTN_FILESYS, MSG_PV_BTN_WRITE, MSG_PV_BTN_BACK };
+    static const UWORD btn_gids[8] = { GID_INITRDB, GID_ADD, GID_EDIT,
+        GID_DELETE, GID_MOVE, GID_FILESYS, GID_WRITE, GID_BACK };
 
     lay->ix = (WORD)(bor_l + pad);
     lay->iy = (WORD)(bor_t + pad);
@@ -1597,6 +1605,15 @@ static BOOL build_gadgets(APTR vi,
             cx += sizew + gap + 8;
 
             lv_cols[LVCOL_BOOT].x = cx;  lv_cols[LVCOL_BOOT].w = bootw;
+            {   /* button labels: text + a char each side + bevel */
+                UWORD k;
+                for (k = 0; k < 8; k++) {
+                    const char *t = GS(btn_ids[k]);
+                    bw[k] = (UWORD)(TextLength(&rp, t, (ULONG)strlen(t))
+                                    + tf->tf_XSize * 2 + 6);
+                }
+                have_bw = TRUE;
+            }
 
 #undef MAXW
             CloseFont(tf);
@@ -1635,27 +1652,26 @@ static BOOL build_gadgets(APTR vi,
     }
     prev = lv;
 
-    /* Button row */
+    /* Button row: each button as wide as its label when all eight fit,
+       with the slack shared out; equal eighths only as the fallback. */
     {
-    UWORD eighth = (inner_w - pad * 2 - pad * 7) / 8;
-    ng.ng_TopEdge = (WORD)btn_y;
-    ng.ng_Height  = btn_h;
-    ng.ng_Width   = eighth;
-
-#define MKBTN(lx,txt,gid) \
-    ng.ng_LeftEdge=(lx); ng.ng_GadgetText=(txt); ng.ng_GadgetID=(gid); \
-    prev=CreateGadgetA(BUTTON_KIND,prev,&ng,bt); \
-    if (!prev) { FreeGadgets(glist); return FALSE; }
-
-    MKBTN(bor_l+pad,                     GS(MSG_PV_BTN_INITRDB), GID_INITRDB)
-    MKBTN(bor_l+pad+(eighth+pad)*1,      GS(MSG_PV_BTN_ADD),     GID_ADD)
-    MKBTN(bor_l+pad+(eighth+pad)*2,      GS(MSG_PV_BTN_EDIT),    GID_EDIT)
-    MKBTN(bor_l+pad+(eighth+pad)*3,      GS(MSG_PV_BTN_DELETE),  GID_DELETE)
-    MKBTN(bor_l+pad+(eighth+pad)*4,      GS(MSG_PV_BTN_MOVE),    GID_MOVE)
-    MKBTN(bor_l+pad+(eighth+pad)*5,      GS(MSG_PV_BTN_FILESYS), GID_FILESYS)
-    MKBTN(bor_l+pad+(eighth+pad)*6,      GS(MSG_PV_BTN_WRITE),   GID_WRITE)
-    MKBTN(bor_l+pad+(eighth+pad)*7,      GS(MSG_PV_BTN_BACK),    GID_BACK)
-#undef MKBTN
+        UWORD avail  = (UWORD)(inner_w - pad * 2 - pad * 7);
+        UWORD eighth = avail / 8;
+        UWORD x = (UWORD)(bor_l + pad), sum = 0, k;
+        if (have_bw) for (k = 0; k < 8; k++) sum += bw[k];
+        ng.ng_TopEdge = (WORD)btn_y;
+        ng.ng_Height  = btn_h;
+        for (k = 0; k < 8; k++) {
+            UWORD w = (have_bw && sum <= avail)
+                      ? (UWORD)(bw[k] + (avail - sum) / 8) : eighth;
+            ng.ng_LeftEdge   = (WORD)x;
+            ng.ng_Width      = w;
+            ng.ng_GadgetText = GS(btn_ids[k]);
+            ng.ng_GadgetID   = btn_gids[k];
+            prev = CreateGadgetA(BUTTON_KIND, prev, &ng, bt);
+            if (!prev) { FreeGadgets(glist); return FALSE; }
+            x += w + pad;
+        }
     }
 
     /* Last Disk / Last LUN checkboxes - right-aligned on info line 3 */
@@ -2226,6 +2242,23 @@ BOOL partview_run(const char *devname, ULONG unit)
         ULONG win_left = (ULONG)((scr->Width  - win_w) / 2);
         ULONG win_top  = (ULONG)((scr->Height - win_h) / 2);
 
+        /* The eight-button row must fit the widest labels in the screen
+           font (issue #14/4: 560 px split in eighths clipped "Init RDB" on a
+           640 px Topaz-8 screen), and the window must fit the screen. */
+        {
+            static const LONG bids[8] = { MSG_PV_BTN_INITRDB, MSG_PV_BTN_ADD,
+                MSG_PV_BTN_EDIT, MSG_PV_BTN_DELETE, MSG_PV_BTN_MOVE,
+                MSG_PV_BTN_FILESYS, MSG_PV_BTN_WRITE, MSG_PV_BTN_BACK };
+            UWORD need = (UWORD)(bor_l + bor_r + pad * 2 + pad * 7), k;
+            for (k = 0; k < 8; k++) need += GUI_BtnW(scr, GS(bids[k]));
+            if (need > win_w) win_w = need;
+            win_w = GUI_FitW(scr, win_w);
+            win_h = GUI_FitH(scr, win_h);
+            if (min_w > win_w) min_w = win_w;
+            if (min_h > win_h) min_h = win_h;
+            win_left = (ULONG)((scr->Width  - win_w) / 2);
+            win_top  = (ULONG)((scr->Height - win_h) / 2);
+        }
         if (load_window_geom(&geom_x, &geom_y, &geom_w, &geom_h) &&
             geom_x >= 0 && geom_y >= 0 &&
             geom_w >= min_w && geom_h >= min_h &&

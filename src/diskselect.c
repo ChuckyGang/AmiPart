@@ -30,6 +30,7 @@
 #include "diskselect.h"
 #include "guilv.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "partview.h"
 #include "version.h"
 
@@ -302,8 +303,18 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
         UWORD bor_r   = (UWORD)scr->WBorRight;
         UWORD bor_b   = (UWORD)scr->WBorBottom;
         UWORD win_w   = 400;
-        UWORD inner_w = win_w - bor_l - bor_r;
+        UWORD inner_w;
         UWORD pad     = 4;
+        {   /* button row must fit its labels (issue #14/4) */
+            static const LONG bids[] = { MSG_MAIN_SELECT, MSG_MAIN_FILTER,
+                MSG_MAIN_SHOWALL, MSG_MAIN_USE_IMAGE, MSG_MAIN_QUIT };
+            UWORD nb = allow_image ? 4 : 3;
+            UWORD t  = (UWORD)(bor_l + pad * 2 + GUI_MaxBtnW(scr, bids, 5) * nb
+                               + pad * (nb - 1) + bor_r);
+            if (t > win_w) win_w = t;
+            win_w = GUI_FitW(scr, win_w);
+        }
+        inner_w = win_w - bor_l - bor_r;
         /* Format device display strings now that we know the font width.
            Listview pixel width minus scrollbar (~16px) and frame borders
            (~4px each side) and text indent (~2px), divided by font x-size. */
@@ -817,7 +828,7 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
         UWORD bor_t   = (UWORD)scr->WBorTop + font_h + 1;
         UWORD bor_r   = (UWORD)scr->WBorRight;
         UWORD bor_b   = (UWORD)scr->WBorBottom;
-        UWORD win_w   = 520;
+        UWORD win_w   = GUI_FitW(scr, 520);
         UWORD inner_w = win_w - bor_l - bor_r;
         UWORD pad     = 4;
         UWORD btn_h   = font_h + 6;

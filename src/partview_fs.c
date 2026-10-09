@@ -24,6 +24,7 @@
 
 #include "clib.h"
 #include "locale_support.h"
+#include "guisize.h"
 #include "rdb.h"
 #include "partview_internal.h"
 
@@ -306,6 +307,22 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         struct NewGadget ng;
         struct Gadget *prev;
 
+        {   /* measure labels / Browse button in the screen font (issue #14/4) */
+            static const LONG lids[] = { MSG_FS_DOSTYPE_LBL, MSG_FS_FILE_LBL };
+            UWORD t = GUI_MaxLabelW(scr, lids, 2);
+            if (t > lbl_w) lbl_w = t;
+            t = GUI_BtnW(scr, GS(MSG_FS_BROWSE));
+            if (t > browse_w) browse_w = t;
+            t = (UWORD)(bor_l + lbl_w + dt_str_w + pad + GUI_CharW(scr) * 12 + bor_r);
+            if (t > win_w) win_w = t;
+            t = (UWORD)(bor_l + lbl_w + GUI_CharW(scr) * 16 + browse_w + pad * 2 + bor_r);
+            if (t > win_w) win_w = t;
+            win_w    = GUI_FitW(scr, win_w);
+            inner_w  = win_w - bor_l - bor_r;
+            gad_x    = bor_l + lbl_w;
+            file_w   = inner_w - lbl_w - browse_w - pad * 2;
+            dt_hex_w = inner_w - lbl_w - dt_str_w - pad * 2;
+        }
         gctx = CreateContext(&glist);
         if (!gctx) goto fs_add_cleanup;
 
@@ -551,6 +568,14 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
         struct NewGadget ng;
         struct Gadget *prev;
 
+        {   /* five buttons must fit their labels (issue #14/4) */
+            static const LONG bids[] = { MSG_FS_ADD, MSG_FS_EDIT, MSG_FS_DELETE,
+                                         MSG_FS_DONE, MSG_CANCEL };
+            UWORD t = (UWORD)(bor_l + pad * 2 + GUI_MaxBtnW(scr, bids, 5) * 5 + pad * 4 + bor_r);
+            if (t > win_w) win_w = t;
+            win_w   = GUI_FitW(scr, win_w);
+            inner_w = win_w - bor_l - bor_r;
+        }
         gctx = CreateContext(&glist);
         if (!gctx) goto fs_mgr_cleanup;
 
