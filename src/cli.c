@@ -830,6 +830,13 @@ static LONG cmd_clearrdb(const char *devname, ULONG unit, BOOL force)
     bd = cli_open_target(devname, unit);
     if (!bd) return RETURN_ERROR;
 
+    { char mn[160];
+      if (MountedPartitionsOnDevice(bd, mn, sizeof(mn))) {
+          DP_SNPRINTF(outbuf, GS(MSG_CLI_DST_MOUNTED_FMT), devname, unit, mn);
+          cli_puts(outbuf);
+          if (!force) { cli_puts(GS(MSG_CLI_DST_MOUNTED_REFUSED)); BlockDev_Close(bd); return RETURN_ERROR; }
+      } }
+
     memset(&s_rdb, 0, sizeof(s_rdb));
     cli_read_rdb(bd, &s_rdb);           /* invalid is fine - still cleared */
     memset(&mbr, 0, sizeof(mbr));
@@ -840,6 +847,8 @@ static LONG cmd_clearrdb(const char *devname, ULONG unit, BOOL force)
                 (unsigned long)(plan.head_blocks - 1),
                 plan.gpt ? GS(MSG_CLI_CLEARRDB_GPT) : "", devname, unit);
     cli_puts(outbuf);
+    if (plan.superfloppy)    cli_puts(GS(MSG_CLI_CLEARRDB_SUPERFLOPPY));
+    if (plan.tail_uncertain) cli_puts(GS(MSG_CLI_CLEARRDB_TAIL_NOTE));
 
     if (!ask_yn(GS(MSG_CLI_CLEARRDB_CONFIRM), force)) {
         cli_puts(GS(MSG_CLI_ABORTED_NO_CHANGES));
@@ -3497,6 +3506,18 @@ LONG cli_run(void)
     if (rc == RETURN_OK && args[ARG_CREATE])
         rc = maybe_create_image(args);
 
+    /* CLEARRDB runs BEFORE INIT/RESTORE/ADDPART so that
+     * "CLEARRDB INIT NEW ADDPART ..." on one line blanks the disk first and
+     * then builds the new table, not the other way round. */
+    if (rc == RETURN_OK && args[ARG_CLEARRDB]) {
+        char  devname[64];
+        ULONG unit;
+        if (!resolve_target(args, devname, &unit))
+            rc = RETURN_WARN;
+        else
+            rc = cmd_clearrdb(devname, unit, (BOOL)args[ARG_FORCE]);
+    }
+
     if (rc == RETURN_OK && args[ARG_INIT]) {
         char  devname[64];
         ULONG unit;
@@ -3524,7 +3545,6 @@ LONG cli_run(void)
          args[ARG_DELPART]   || args[ARG_CHECK]   ||
          args[ARG_IMAGEOUT]  || args[ARG_IMAGEIN]  || args[ARG_GROW] ||
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
-         args[ARG_CLEARRDB]  ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
          args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
          args[ARG_COPYDISK] || args[ARG_BADBLOCKS] || args[ARG_MOUNTLIST])) {
@@ -3631,9 +3651,6 @@ LONG cli_run(void)
             if (rc == RETURN_OK && args[ARG_ZEROPART])
                 rc = cmd_zeropart(devname, unit, force,
                                   (const char *)args[ARG_NAME]);
-
-            if (rc == RETURN_OK && args[ARG_CLEARRDB])
-                rc = cmd_clearrdb(devname, unit, force);
 
             if (rc == RETURN_OK && args[ARG_VERIFY])
                 rc = cmd_verify(devname, unit, (const char *)args[ARG_VERIFY]);

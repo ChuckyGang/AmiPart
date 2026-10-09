@@ -20,13 +20,20 @@ struct ClearPlan {
     BOOL  gpt;           /* a protective-MBR GPT entry (0xEE) was seen  */
     ULONG tail_start;    /* GPT only: first block of the backup area    */
     ULONG tail_blocks;   /* GPT only: number of blocks there (33)       */
+    BOOL  superfloppy;   /* block 0 is a FAT boot sector: FATs + root   */
+                         /* dir sit inside the zeroed area (data loss)  */
+    BOOL  tail_uncertain;/* GPT on a driver without READ CAPACITY: the  */
+                         /* size is cylinder-rounded, backup may be missed */
 };
 
 /* Work out what to zero.  rdb/mbr may be NULL or invalid (then only the
    16-block RDB scan area is cleared).  With a valid RDB the range grows to
    cover every metadata block the chain references (PART/FSHD/LSEG/BADB),
-   capped at CLEARRDB_MAX_HEAD blocks and at the disk size. */
-void ClearRDB_Plan(const struct BlockDev *bd, const struct RDBInfo *rdb,
+   capped at CLEARRDB_MAX_HEAD blocks and at the disk size.  GPT is
+   detected from the raw block-0 entry types (a protective 0xEE entry is
+   usually sized 0xFFFFFFFF, which MBR_Read rejects as insane), so block 0
+   is re-read here. */
+void ClearRDB_Plan(struct BlockDev *bd, const struct RDBInfo *rdb,
                    const struct MBRInfo *mbr, struct ClearPlan *plan);
 
 /* Zero every block the plan names.  err (>= 96 bytes) gets a localized

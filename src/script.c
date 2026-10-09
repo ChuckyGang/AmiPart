@@ -2287,7 +2287,17 @@ static LONG do_clearrdb(ULONG ln)
     if (!s_st.bd)
         { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
 
+    { char mn[160];
+      if (MountedPartitionsOnDevice(s_st.bd, mn, sizeof(mn))) {
+          DP_SNPRINTF(s_msg, GS(MSG_CLI_DST_MOUNTED_FMT), s_st.bd->devname,
+                      (unsigned long)s_st.bd->unit, mn);
+          sc_puts(s_msg);
+          if (!s_st.force) { sc_err(ln, GS(MSG_CLI_DST_MOUNTED_REFUSED)); return RETURN_ERROR; }
+      } }
+
     ClearRDB_Plan(s_st.bd, s_st.rdb_ready ? &s_st.rdb : NULL, &s_st.s_mbr, &plan);
+    if (plan.superfloppy)    sc_puts(GS(MSG_CLI_CLEARRDB_SUPERFLOPPY));
+    if (plan.tail_uncertain) sc_puts(GS(MSG_CLI_CLEARRDB_TAIL_NOTE));
 
     if (s_st.dryrun) {
         snprintf(s_msg, sizeof(s_msg), GS(MSG_SCR_CLEARRDB_DRYRUN_FMT),

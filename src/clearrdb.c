@@ -14,13 +14,34 @@
 
 #define CLR_CHUNK 64   /* blocks per write (32 KB at 512 bytes) */
 
-void ClearRDB_Plan(const struct BlockDev *bd, const struct RDBInfo *rdb,
+/* TRUE when block 0 carries a 0x55AA-signed table with a 0xEE entry.
+   Deliberately NOT based on MBRInfo: MBR_Read validates entry ranges and
+   a protective GPT entry sized 0xFFFFFFFF fails that check, leaving
+   mbr->valid FALSE and hiding the GPT. */
+static BOOL block0_has_gpt(struct BlockDev *bd)
+{
+    UBYTE *b;
+    BOOL   gpt = FALSE;
+    UWORD  i;
+
+    if (!bd) return FALSE;
+    b = (UBYTE *)AllocVec(bd->block_size ? bd->block_size : 512,
+                          MEMF_PUBLIC | MEMF_CLEAR);
+    if (!b) return FALSE;
+    if (BlockDev_ReadBlock(bd, 0, b) && b[510] == 0x55 && b[511] == 0xAA) {
+        for (i = 0; i < MBR_MAX_PARTS; i++)
+            if (b[446 + i * 16 + 4] == 0xEE) gpt = TRUE;
+    }
+    FreeVec(b);
+    return gpt;
+}
+
+void ClearRDB_Plan(struct BlockDev *bd, const struct RDBInfo *rdb,
                    const struct MBRInfo *mbr, struct ClearPlan *plan)
 {
     ULONG bs    = (bd && bd->block_size) ? bd->block_size : 512;
     ULONG total = (bd) ? (ULONG)(bd->total_bytes / bs) : 0;
     ULONG head  = RDB_SCAN_LIMIT;
-    UWORD i;
 
     memset(plan, 0, sizeof(*plan));
 
@@ -29,12 +50,13 @@ void ClearRDB_Plan(const struct BlockDev *bd, const struct RDBInfo *rdb,
         if (last != RDB_END_MARK && last + 1 > head) head = last + 1;
     }
 
-    if (mbr && mbr->valid) {
-        for (i = 0; i < MBR_MAX_PARTS; i++)
-            if (mbr->parts[i].present && mbr->parts[i].type == 0xEE)
-                plan->gpt = TRUE;
-    }
+    plan->superfloppy = (BOOL)(mbr && mbr->superfloppy);
+    plan->gpt = block0_has_gpt(bd);
     if (plan->gpt) {
+        /* A real device without READ CAPACITY reports a cylinder-rounded
+           total; the backup GPT sits at the true last LBA. */
+        plan->tail_uncertain = (BOOL)(bd && bd->backend == BD_DEVICE &&
+                                      bd->rc_total_blocks == 0);
         if (head < CLEARRDB_GPT_BLOCKS) head = CLEARRDB_GPT_BLOCKS;
         if (total > CLEARRDB_GPT_TAIL + CLEARRDB_GPT_BLOCKS) {
             plan->tail_start  = total - CLEARRDB_GPT_TAIL;

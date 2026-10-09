@@ -337,11 +337,19 @@ CLEARRDB
   primary and backup headers.  Partition DATA is not touched, but nothing
   can find it afterwards.  Use before handing a disk to Init RDB or a PC.
 
-  FORCE skips the Y/N confirmation prompt.
-  No WRITE is needed; reboot before using the disk again.
+  Runs BEFORE INIT/ADDPART/RESTORE when combined on one line, so
+  "CLEARRDB INIT NEW ADDPART ..." blanks the disk and then builds the new
+  table.  Refuses a disk with mounted partitions unless FORCE is given.
+  On a FAT superfloppy card (no partition table) the FATs and root
+  directory sit inside the zeroed area, so its files ARE lost - a warning
+  says so.
+
+  FORCE skips the Y/N confirmation prompt (and the mounted-partition
+  refusal).  No WRITE is needed; reboot before using the disk again.
 
   Examples:
     AmiPart DEV scsi.device:3 CLEARRDB
+    AmiPart DEV scsi.device:3 CLEARRDB INIT NEW ADDPART NAME=DH0 LOW=2 HIGH=END FORCE
     AmiPart DEV scsi.device:3 CLEARRDB FORCE
 
 DELPART NAME=<drive>

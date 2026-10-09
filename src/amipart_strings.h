@@ -1439,8 +1439,13 @@
 #define MSG_SCR_CLEARRDB_DRYRUN_FMT  1433
 #define MSG_SCR_CLEARRDB_OK_FMT      1434
 #define MSG_SCR_CLEARRDB_FAIL_FMT    1435
+#define MSG_CLR_SUPERFLOPPY_NOTE     1436
+#define MSG_CLR_TAIL_NOTE            1437
+#define MSG_CLR_MOUNTED_FMT          1438
+#define MSG_CLI_CLEARRDB_SUPERFLOPPY 1439
+#define MSG_CLI_CLEARRDB_TAIL_NOTE   1440
 
-#define MSG_COUNT 1436
+#define MSG_COUNT 1441
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2872,7 +2877,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1417 MSG_ATA_RPM_FMT */ "  %u RPM",
     /* 1418 MSG_PV_MENU_CLEAR_RDB */ "Clear RDB and MBR...",
     /* 1419 MSG_CLR_TITLE */ "Clear RDB and MBR",
-    /* 1420 MSG_CLR_WARN_BODY_FMT */ "This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?",
+    /* 1420 MSG_CLR_WARN_BODY_FMT */ "This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?",
     /* 1421 MSG_CLR_GPT_NOTE */ "\n\nA GPT was found: its backup header at the end\nof the disk will be zeroed as well.",
     /* 1422 MSG_CLR_CONFIRM_BODY_FMT */ "Really erase the RDB and MBR on\n\n  %s unit %lu ?\n\nThis cannot be undone.",
     /* 1423 MSG_CLR_CONFIRM_GADGETS */ "Yes, erase|Cancel",
@@ -2888,5 +2893,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1433 MSG_SCR_CLEARRDB_DRYRUN_FMT */ "CLEARRDB: dry run - would zero blocks 0-%lu%s.\n",
     /* 1434 MSG_SCR_CLEARRDB_OK_FMT */ "  Cleared: blocks 0-%lu%s (%lu blocks zeroed)\n",
     /* 1435 MSG_SCR_CLEARRDB_FAIL_FMT */ "CLEARRDB: failed: %s",
+    /* 1436 MSG_CLR_SUPERFLOPPY_NOTE */ "\n\nBlock 0 is a FAT boot sector (superfloppy card):\nits FAT copies and root directory live inside the\nzeroed area, so the FILES on it WILL be lost.",
+    /* 1437 MSG_CLR_TAIL_NOTE */ "\n\nThis driver reports a cylinder-rounded disk size,\nso the backup GPT at the very end of the disk may\nbe missed. Check it on a PC afterwards.",
+    /* 1438 MSG_CLR_MOUNTED_FMT */ "This disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; clearing\nthe table underneath them can corrupt or crash.\nReboot without them first.",
+    /* 1439 MSG_CLI_CLEARRDB_SUPERFLOPPY */ "CLEARRDB: block 0 is a FAT boot sector (superfloppy) - its FATs and root\ndirectory are inside the zeroed area, the FILES on this card WILL be lost.\n",
+    /* 1440 MSG_CLI_CLEARRDB_TAIL_NOTE */ "CLEARRDB: driver reports a cylinder-rounded size - the backup GPT at the\nvery end of the disk may be missed; check on a PC afterwards.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

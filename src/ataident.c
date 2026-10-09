@@ -28,7 +28,7 @@ static void ata_string(char *dst, const UBYTE *buf, int first_word, int nwords)
     }
     dst[n] = '\0';
     /* trim trailing blanks, then leading blanks (some drives right-align) */
-    while (n > 0 && (dst[n-1] == ' ' || dst[n-1] == '\0')) dst[--n] = '\0';
+    while (n > 0 && dst[n-1] == ' ') dst[--n] = '\0';
     i = 0;
     while (dst[i] == ' ') i++;
     if (i) memmove(dst, dst + i, (size_t)(n - i + 1));
@@ -107,12 +107,11 @@ int ATA_Identify(struct BlockDev *bd, struct AtaIdent *id)
     if (!buf) return -1;
 
     err = ata_identify_cdb(bd, buf, 16, &status);
-    if (err == IOERR_NOCMD) { FreeVec(buf); return -2; }
-    if (err != 0 || status != 0) {
+    if (err != IOERR_NOCMD && (err != 0 || status != 0)) {
         memset(buf, 0, 512);
         err = ata_identify_cdb(bd, buf, 12, &status);
-        if (err == IOERR_NOCMD) { FreeVec(buf); return -2; }
     }
+    if (err == IOERR_NOCMD) { rc = -2; goto out; }
     if (err != 0 || status != 0) goto out;
 
     /* Sanity: word 0 bit 15 set = ATAPI (IDENTIFY DEVICE aborts there

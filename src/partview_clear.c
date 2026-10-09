@@ -14,6 +14,7 @@
 #include "rdb.h"
 #include "mbr.h"
 #include "clearrdb.h"
+#include "quickformat.h"   /* MountedPartitionsOnDevice */
 #include "partview_internal.h"
 #include "locale_support.h"
 
@@ -24,7 +25,7 @@ BOOL offer_clear_rdb(struct Window *win, struct BlockDev *bd,
 {
     struct EasyStruct es;
     struct ClearPlan  plan;
-    char   body[400], err[96];
+    char   body[600], err[96];
     ULONG  zeroed = 0;
     BOOL   ok;
 
@@ -39,11 +40,25 @@ BOOL offer_clear_rdb(struct Window *win, struct BlockDev *bd,
         return FALSE;
     }
 
+    /* Same guard as Copy Whole Disk / Restore Image: live handlers on this
+       disk still hold the old layout. */
+    {
+        char mn[160];
+        if (MountedPartitionsOnDevice(bd, mn, sizeof(mn))) {
+            DP_SNPRINTF(body, GS(MSG_CLR_MOUNTED_FMT), mn);
+            es.es_TextFormat   = (UBYTE *)body;
+            es.es_GadgetFormat = (UBYTE *)GS(MSG_DC_MOUNTED_GADGETS);
+            if (EasyRequest(win, &es, NULL) != 1) return FALSE;
+        }
+    }
+
     ClearRDB_Plan(bd, rdb, mbr, &plan);
 
     DP_SNPRINTF(body, GS(MSG_CLR_WARN_BODY_FMT), bd->devname,
                 (unsigned long)bd->unit, (unsigned long)(plan.head_blocks - 1),
-                plan.gpt ? GS(MSG_CLR_GPT_NOTE) : "");
+                plan.gpt ? (plan.tail_uncertain ? GS(MSG_CLR_TAIL_NOTE)
+                                                : GS(MSG_CLR_GPT_NOTE)) : "",
+                plan.superfloppy ? GS(MSG_CLR_SUPERFLOPPY_NOTE) : "");
     es.es_TextFormat   = (UBYTE *)body;
     es.es_GadgetFormat = (UBYTE *)GS(MSG_IMG_CONTINUE_CANCEL);
     if (EasyRequest(win, &es, NULL) != 1) return FALSE;

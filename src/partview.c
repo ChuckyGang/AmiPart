@@ -2439,6 +2439,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     s_mbr = NULL;
                                 }
                                 sel = -1;
+                                dirty = FALSE;      /* nothing left to write */
                                 needs_reboot = TRUE;
                                 refresh_listview(win, lv_gad, rdb, sel);
                                 draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),

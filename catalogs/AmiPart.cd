@@ -4388,7 +4388,7 @@ MSG_CLR_TITLE
 Clear RDB and MBR
 ;
 MSG_CLR_WARN_BODY_FMT
-This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?
+This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?
 ;
 MSG_CLR_GPT_NOTE
 \n\nA GPT was found: its backup header at the end\nof the disk will be zeroed as well.
@@ -4434,4 +4434,19 @@ MSG_SCR_CLEARRDB_OK_FMT
 ;
 MSG_SCR_CLEARRDB_FAIL_FMT
 CLEARRDB: failed: %s
+;
+MSG_CLR_SUPERFLOPPY_NOTE
+\n\nBlock 0 is a FAT boot sector (superfloppy card):\nits FAT copies and root directory live inside the\nzeroed area, so the FILES on it WILL be lost.
+;
+MSG_CLR_TAIL_NOTE
+\n\nThis driver reports a cylinder-rounded disk size,\nso the backup GPT at the very end of the disk may\nbe missed. Check it on a PC afterwards.
+;
+MSG_CLR_MOUNTED_FMT
+This disk has MOUNTED partitions:\n%s\n\nTheir handlers still hold the old layout; clearing\nthe table underneath them can corrupt or crash.\nReboot without them first.
+;
+MSG_CLI_CLEARRDB_SUPERFLOPPY
+CLEARRDB: block 0 is a FAT boot sector (superfloppy) - its FATs and root\ndirectory are inside the zeroed area, the FILES on this card WILL be lost.\n
+;
+MSG_CLI_CLEARRDB_TAIL_NOTE
+CLEARRDB: driver reports a cylinder-rounded size - the backup GPT at the\nvery end of the disk may be missed; check on a PC afterwards.\n
 ;
