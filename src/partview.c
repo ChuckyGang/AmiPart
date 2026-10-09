@@ -1729,6 +1729,8 @@ static struct NewMenu partview_menu_def[] = {
     /* Menu 0 - application */
     { NM_TITLE, AMIPART_VERTITLE,        NULL,         0, 0, NULL },
     { NM_ITEM,  "About...",              NULL,         0, 0, NULL },  /* ITEM 0 */
+    { NM_ITEM,  NM_BARLABEL,             NULL,         0, 0, NULL },  /* ITEM 1 */
+    { NM_ITEM,  "Undo All Changes...",   "Z",          0, 0, NULL },  /* ITEM 2 */
     /* Menu 1 - Advanced: backup / restore operations */
     { NM_TITLE, "Advanced",              NULL,         0, 0, NULL },
     { NM_ITEM,  "Backup RDB Block",      NULL,         0, 0, NULL },  /* ITEM 0 */
@@ -1785,6 +1787,8 @@ static void localize_partview_menu(void)
     static const LONG ids[] = {
         -1,                          /* AMIPART_VERTITLE (menu 0 title)   */
         MSG_PV_MENU_ABOUT,
+        -1,                          /* NM_BARLABEL */
+        MSG_PV_MENU_UNDO,
         MSG_PV_MENU_ADVANCED,
         MSG_PV_MENU_BACKUP_RDB,
         MSG_PV_MENU_RESTORE_RDB,
@@ -2397,6 +2401,46 @@ BOOL partview_run(const char *devname, ULONG unit)
                         if (!it) break;
                         if (MENUNUM(mcode) == 0 && ITEMNUM(mcode) == 0)
                             show_about(win);
+                        else if (MENUNUM(mcode) == 0 && ITEMNUM(mcode) == 2) {
+                            /* Undo All Changes: drop the in-memory RDB/MBR and
+                               re-read them from disk.  Nothing was written
+                               since the last Write, so this is a pure reload. */
+                            struct EasyStruct ues;
+                            ues.es_StructSize = sizeof(ues);
+                            ues.es_Flags      = 0;
+                            ues.es_Title      = (UBYTE *)AMIPART_VERTITLE;
+                            if (!dirty) {
+                                ues.es_TextFormat   = (UBYTE *)GS(MSG_PV_UNDO_NOTHING);
+                                ues.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                                EasyRequest(win, &ues, NULL);
+                            } else {
+                                ues.es_TextFormat   = (UBYTE *)GS(MSG_PV_UNDO_BODY);
+                                ues.es_GadgetFormat = (UBYTE *)GS(MSG_PV_UNDO_GADGETS);
+                                if (EasyRequest(win, &ues, NULL) == 1) {
+                                    RDB_FreeCode(rdb);
+                                    memset(rdb, 0, sizeof(*rdb));
+                                    if (bd) {
+                                        RDB_Read(bd, rdb);
+                                        fill_geometry_if_no_rdb(bd, rdb);
+                                        if (MBR_Read(bd, &mbr_store)) s_mbr = &mbr_store;
+                                        else s_mbr = NULL;
+                                    } else {
+                                        s_mbr = NULL;
+                                    }
+                                    { struct TagItem st[]={{GTCB_Checked,0},{TAG_DONE,0}};
+                                      if (lastdisk_gad) { st[0].ti_Data=(rdb->flags&RDBFF_LAST)?1:0;    GT_SetGadgetAttrsA(lastdisk_gad,win,NULL,st); }
+                                      if (lastlun_gad)  { st[0].ti_Data=(rdb->flags&RDBFF_LASTLUN)?1:0; GT_SetGadgetAttrsA(lastlun_gad, win,NULL,st); } }
+                                    sel   = -1;
+                                    dirty = FALSE;
+                                    s_unmount_count = 0;
+                                    refresh_listview(win, lv_gad, rdb, sel);
+                                    draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                                ix, iy, iw, bx, by, bw, bh,
+                                                hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                    refresh_all_gadgets(win, glist);
+                                }
+                            }
+                        }
                         /* Advanced menu */
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 0)
                             rdb_backup_block(win, bd, rdb);

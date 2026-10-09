@@ -1457,8 +1457,12 @@
 #define MSG_DC_GROW_GEOM_GADGETS     1451
 #define MSG_DC_GROW_GEOM_OK          1452
 #define MSG_DC_GROW_GEOM_FAIL_FMT    1453
+#define MSG_PV_MENU_UNDO             1454
+#define MSG_PV_UNDO_BODY             1455
+#define MSG_PV_UNDO_GADGETS          1456
+#define MSG_PV_UNDO_NOTHING          1457
 
-#define MSG_COUNT 1454
+#define MSG_COUNT 1458
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2924,5 +2928,9 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1451 MSG_DC_GROW_GEOM_GADGETS */ "Extend|Keep",
     /* 1452 MSG_DC_GROW_GEOM_OK */ "Destination RDB extended to the full disk.",
     /* 1453 MSG_DC_GROW_GEOM_FAIL_FMT */ "Could not write the extended RDB (err %d).\nThe copy itself is complete.",
+    /* 1454 MSG_PV_MENU_UNDO */ "Undo All Changes...",
+    /* 1455 MSG_PV_UNDO_BODY */ "Discard ALL unsaved changes and reload the\npartition table from disk?\n\nNothing has been written since the last Write,\nso the disk itself is untouched.",
+    /* 1456 MSG_PV_UNDO_GADGETS */ "Undo|Keep editing",
+    /* 1457 MSG_PV_UNDO_NOTHING */ "Nothing to undo - there are no unsaved changes.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

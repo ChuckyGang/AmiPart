@@ -4489,3 +4489,15 @@ Destination RDB extended to the full disk.
 MSG_DC_GROW_GEOM_FAIL_FMT
 Could not write the extended RDB (err %d).\nThe copy itself is complete.
 ;
+MSG_PV_MENU_UNDO
+Undo All Changes...
+;
+MSG_PV_UNDO_BODY
+Discard ALL unsaved changes and reload the\npartition table from disk?\n\nNothing has been written since the last Write,\nso the disk itself is untouched.
+;
+MSG_PV_UNDO_GADGETS
+Undo|Keep editing
+;
+MSG_PV_UNDO_NOTHING
+Nothing to undo - there are no unsaved changes.
+;
