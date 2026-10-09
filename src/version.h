@@ -1,8 +1,8 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-#define AMIPART_VERNUM   "0.7"
-#define AMIPART_VERDATE  "12.09.2026"      /* dd.mm.yyyy, update with VERNUM */
+#define AMIPART_VERNUM   "0.8"
+#define AMIPART_VERDATE  "09.10.2026"      /* dd.mm.yyyy, update with VERNUM */
 #define AMIPART_VERSION  "V" AMIPART_VERNUM
 #define AMIPART_VERTITLE "AmiPart " AMIPART_VERSION
 /* AmigaOS "Version" command string; defined in main.c (kept alive there). */
