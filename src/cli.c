@@ -37,6 +37,7 @@
 #include "shrinkinfo.h"
 #include "partclone.h"
 #include "ataident.h"
+#include "clearrdb.h"
 
 /* Progress state shared by the image copiers and partition clone (defined
    here so the clone command handlers above cmd_imageout can use it). */
@@ -71,6 +72,7 @@ extern struct DosLibrary *DOSBase;
     "NOUNMOUNT/S,MOUNTLIST/K,"                                    \
     "GROW/M,"                                                     \
     "ZEROPART/S,"                                                  \
+    "CLEARRDB/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
     "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S,SAFE/S"
@@ -117,6 +119,7 @@ enum {
     ARG_MOUNTLIST,
     ARG_GROW,
     ARG_ZEROPART,
+    ARG_CLEARRDB,
     ARG_ADDMBR,
     ARG_DELMBR,
     ARG_MBRTYPE,
@@ -807,6 +810,52 @@ static LONG cmd_smart(const char *devname, ULONG unit)
     FreeVec(buf);
     BlockDev_Close(bd);
     return RETURN_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* CLEARRDB - zero the RDB / MBR / GPT area so the disk is blank      */
+/* ------------------------------------------------------------------ */
+
+static LONG cmd_clearrdb(const char *devname, ULONG unit, BOOL force)
+{
+    struct BlockDev *bd;
+    struct MBRInfo   mbr;
+    struct ClearPlan plan;
+    char   err[96];
+    ULONG  zeroed = 0;
+    BOOL   ok;
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), devname, unit);
+    cli_puts(outbuf);
+    bd = cli_open_target(devname, unit);
+    if (!bd) return RETURN_ERROR;
+
+    memset(&s_rdb, 0, sizeof(s_rdb));
+    cli_read_rdb(bd, &s_rdb);           /* invalid is fine - still cleared */
+    memset(&mbr, 0, sizeof(mbr));
+    MBR_Read(bd, &mbr);
+
+    ClearRDB_Plan(bd, &s_rdb, &mbr, &plan);
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_CLEARRDB_PLAN_FMT),
+                (unsigned long)(plan.head_blocks - 1),
+                plan.gpt ? GS(MSG_CLI_CLEARRDB_GPT) : "", devname, unit);
+    cli_puts(outbuf);
+
+    if (!ask_yn(GS(MSG_CLI_CLEARRDB_CONFIRM), force)) {
+        cli_puts(GS(MSG_CLI_ABORTED_NO_CHANGES));
+        RDB_FreeCode(&s_rdb); BlockDev_Close(bd); return RETURN_OK;
+    }
+
+    ok = ClearRDB_Run(bd, &plan, &zeroed, err);
+    if (ok)
+        DP_SNPRINTF(outbuf, GS(MSG_CLI_CLEARRDB_OK_FMT), (unsigned long)zeroed);
+    else
+        DP_SNPRINTF(outbuf, GS(MSG_CLI_CLEARRDB_FAIL_FMT), err);
+    cli_puts(outbuf);
+
+    RDB_FreeCode(&s_rdb);
+    BlockDev_Close(bd);
+    return ok ? RETURN_OK : RETURN_ERROR;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3432,6 +3481,7 @@ LONG cli_run(void)
         !args[ARG_CHECK]   && !args[ARG_CREATE]   &&
         !args[ARG_IMAGEOUT] && !args[ARG_IMAGEIN] && !args[ARG_GROW] &&
         !args[ARG_ZEROPART] && !args[ARG_ADDMBR] && !args[ARG_DELMBR] &&
+        !args[ARG_CLEARRDB] &&
         !args[ARG_SHRINKINFO] && !args[ARG_SHRINK] &&
         !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE] &&
         !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS] && !args[ARG_MOUNTLIST]) {
@@ -3474,6 +3524,7 @@ LONG cli_run(void)
          args[ARG_DELPART]   || args[ARG_CHECK]   ||
          args[ARG_IMAGEOUT]  || args[ARG_IMAGEIN]  || args[ARG_GROW] ||
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
+         args[ARG_CLEARRDB]  ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
          args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
          args[ARG_COPYDISK] || args[ARG_BADBLOCKS] || args[ARG_MOUNTLIST])) {
@@ -3580,6 +3631,9 @@ LONG cli_run(void)
             if (rc == RETURN_OK && args[ARG_ZEROPART])
                 rc = cmd_zeropart(devname, unit, force,
                                   (const char *)args[ARG_NAME]);
+
+            if (rc == RETURN_OK && args[ARG_CLEARRDB])
+                rc = cmd_clearrdb(devname, unit, force);
 
             if (rc == RETURN_OK && args[ARG_VERIFY])
                 rc = cmd_verify(devname, unit, (const char *)args[ARG_VERIFY]);

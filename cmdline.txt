@@ -330,6 +330,20 @@ ZEROPART NAME=<drive>
     AmiPart DEV scsi.device:0 ZEROPART NAME=DH1
     AmiPart DEV scsi.device:0 ZEROPART NAME=DH1 FORCE
 
+CLEARRDB
+  Zero the partition-table area so the disk looks completely blank: the
+  16-block RDB scan area (plus every RDB metadata block the current RDB
+  references), the PC MBR in block 0 and, when a GPT is present, its
+  primary and backup headers.  Partition DATA is not touched, but nothing
+  can find it afterwards.  Use before handing a disk to Init RDB or a PC.
+
+  FORCE skips the Y/N confirmation prompt.
+  No WRITE is needed; reboot before using the disk again.
+
+  Examples:
+    AmiPart DEV scsi.device:3 CLEARRDB
+    AmiPart DEV scsi.device:3 CLEARRDB FORCE
+
 DELPART NAME=<drive>
   Remove the named partition from the RDB and write the table.  The data
   blocks are not touched.  Asks Y/N first (FORCE skips it); the partition's
@@ -653,6 +667,20 @@ ZEROPART NAME=<drive>
 
     OPEN scsi.device 0
     ZEROPART NAME=DH1
+    CLOSE
+
+CLEARRDB
+  Zero the RDB scan area, MBR and GPT headers of the open disk so it is
+  completely blank (partition data is not touched).  Writes immediately -
+  no WRITE needed - and drops the in-memory RDB/MBR, so follow it with
+  INIT NEW to partition from scratch.
+  In DRYRUN mode, prints what would be zeroed without writing anything.
+
+    OPEN scsi.device 3
+    CLEARRDB
+    INIT NEW
+    ADDPART DH0 SIZE=100M
+    WRITE
     CLOSE
 
 WRITE

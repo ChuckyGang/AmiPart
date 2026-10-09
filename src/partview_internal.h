@@ -139,6 +139,11 @@ void  offer_edit_mbr_part(struct Window *win, struct BlockDev *bd,
                           UBYTE slot);
 
 /* Zero-out an MBR partition (converts LBA to approximate cyl range). */
+/* partview_clear.c - Advanced > Clear RDB and MBR...  TRUE = disk written. */
+struct MBRInfo;
+BOOL  offer_clear_rdb(struct Window *win, struct BlockDev *bd,
+                      const struct RDBInfo *rdb, const struct MBRInfo *mbr);
+
 void  offer_zero_mbr_part(struct Window *win, struct BlockDev *bd,
                           const struct RDBInfo *rdb, const struct MBRInfo *mbr,
                           UBYTE slot);

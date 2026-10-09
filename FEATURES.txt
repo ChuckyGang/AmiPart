@@ -192,6 +192,9 @@ scripting interface.
    touching the RDB.  Makes disk images far more compressible (zeroed blocks
    shrink well with zip/lha).  Available in the GUI (Advanced > Zero
    Partition...), CLI (ZEROPART NAME=<drive>), and scripts (ZEROPART NAME=).
+ * Clear RDB and MBR: zero the RDB scan area (and all RDB metadata blocks),
+   the MBR and any GPT headers so a disk reads as blank everywhere.  GUI
+   (Advanced > Clear RDB and MBR...), CLI (CLEARRDB), scripts (CLEARRDB).
 
 
 --------------------------------------------------------------------------------

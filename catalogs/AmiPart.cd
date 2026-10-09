@@ -4377,3 +4377,61 @@ MSG_ATA_SSD
 MSG_ATA_RPM_FMT
   %u RPM
 ;
+;==========================================================================
+; Clear RDB and MBR (clearrdb.c + partview_clear.c + CLI CLEARRDB +
+; script CLEARRDB) - zero the partition-table area so the disk is blank
+;==========================================================================
+MSG_PV_MENU_CLEAR_RDB
+Clear RDB and MBR...
+;
+MSG_CLR_TITLE
+Clear RDB and MBR
+;
+MSG_CLR_WARN_BODY_FMT
+This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?
+;
+MSG_CLR_GPT_NOTE
+\n\nA GPT was found: its backup header at the end\nof the disk will be zeroed as well.
+;
+MSG_CLR_CONFIRM_BODY_FMT
+Really erase the RDB and MBR on\n\n  %s unit %lu ?\n\nThis cannot be undone.
+;
+MSG_CLR_CONFIRM_GADGETS
+Yes, erase|Cancel
+;
+MSG_CLR_DONE_FMT
+Done: %lu blocks zeroed.\n\nPartitions from this disk that are still mounted\nstay mounted until you reboot.
+;
+MSG_CLR_FAIL_FMT
+Clear failed: %s
+;
+MSG_CLR_ERR_WRITE_FMT
+write error at block %lu (io_Error %ld)
+;
+MSG_CLR_ERR_NOMEM
+out of memory
+;
+MSG_CLI_CLEARRDB_PLAN_FMT
+CLEARRDB: will zero blocks 0-%lu%s on %s unit %lu.\n
+;
+MSG_CLI_CLEARRDB_GPT
+ and the GPT backup (last 33 blocks)
+;
+MSG_CLI_CLEARRDB_CONFIRM
+Erase the RDB, MBR and GPT headers? Partition data is not touched,\nbut nothing will be able to find it afterwards.
+;
+MSG_CLI_CLEARRDB_OK_FMT
+CLEARRDB: %lu blocks zeroed. Reboot before using this disk again.\n
+;
+MSG_CLI_CLEARRDB_FAIL_FMT
+CLEARRDB: failed: %s\n
+;
+MSG_SCR_CLEARRDB_DRYRUN_FMT
+CLEARRDB: dry run - would zero blocks 0-%lu%s.\n
+;
+MSG_SCR_CLEARRDB_OK_FMT
+  Cleared: blocks 0-%lu%s (%lu blocks zeroed)\n
+;
+MSG_SCR_CLEARRDB_FAIL_FMT
+CLEARRDB: failed: %s
+;

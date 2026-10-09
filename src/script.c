@@ -44,6 +44,7 @@
 #include "rdb.h"
 #include "rdbbe.h"
 #include "mbr.h"
+#include "clearrdb.h"
 #include "partmove.h"
 #include "imagecopy.h"
 #include "mountlist.h"
@@ -2273,6 +2274,50 @@ static LONG do_partin(ULONG ln, char **tok, UWORD ntok)
 }
 
 /* ------------------------------------------------------------------ */
+/* CLEARRDB - zero the RDB / MBR / GPT area so the disk is blank      */
+/*   CLEARRDB                                                         */
+/* ------------------------------------------------------------------ */
+
+static LONG do_clearrdb(ULONG ln)
+{
+    struct ClearPlan plan;
+    char   err[96];
+    ULONG  zeroed = 0;
+
+    if (!s_st.bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+
+    ClearRDB_Plan(s_st.bd, s_st.rdb_ready ? &s_st.rdb : NULL, &s_st.s_mbr, &plan);
+
+    if (s_st.dryrun) {
+        snprintf(s_msg, sizeof(s_msg), GS(MSG_SCR_CLEARRDB_DRYRUN_FMT),
+                 (unsigned long)(plan.head_blocks - 1),
+                 plan.gpt ? GS(MSG_CLI_CLEARRDB_GPT) : "");
+        sc_puts(s_msg);
+        return RETURN_OK;
+    }
+
+    if (!ClearRDB_Run(s_st.bd, &plan, &zeroed, err)) {
+        snprintf(s_msg, sizeof(s_msg), GS(MSG_SCR_CLEARRDB_FAIL_FMT), err);
+        sc_err(ln, s_msg);
+        return RETURN_ERROR;
+    }
+
+    /* The disk is blank now: drop the in-memory RDB/MBR so a following
+       INIT NEW starts from nothing and a stray WRITE has nothing to put back. */
+    RDB_FreeCode(&s_st.rdb);
+    memset(&s_st.rdb, 0, sizeof(s_st.rdb));
+    memset(&s_st.s_mbr, 0, sizeof(s_st.s_mbr));
+    s_st.dirty = FALSE;
+
+    snprintf(s_msg, sizeof(s_msg), GS(MSG_SCR_CLEARRDB_OK_FMT),
+             (unsigned long)(plan.head_blocks - 1),
+             plan.gpt ? GS(MSG_CLI_CLEARRDB_GPT) : "", (unsigned long)zeroed);
+    sc_puts(s_msg);
+    return RETURN_OK;
+}
+
+/* ------------------------------------------------------------------ */
 /* ZEROPART - overwrite every block in a partition with zeros         */
 /*   ZEROPART NAME=<drive>                                            */
 /* ------------------------------------------------------------------ */
@@ -2924,6 +2969,7 @@ static LONG run_line(char *line, ULONG ln)
     if (ci_eq(tok[0], "PARTOUT"))  return do_partout(ln, tok, ntok);
     if (ci_eq(tok[0], "PARTIN"))   return do_partin(ln, tok, ntok);
     if (ci_eq(tok[0], "SHRINKINFO")) return do_shrinkinfo(ln, tok, ntok);
+    if (ci_eq(tok[0], "CLEARRDB")) return do_clearrdb(ln);
     if (ci_eq(tok[0], "ZEROPART")) return do_zeropart(ln, tok, ntok);
     if (ci_eq(tok[0], "WRITE"))   return do_write(ln);
     if (ci_eq(tok[0], "INFO"))    return do_info(ln);

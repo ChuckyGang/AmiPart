@@ -1421,8 +1421,26 @@
 #define MSG_ATA_VERSION_FMT          1415
 #define MSG_ATA_SSD                  1416
 #define MSG_ATA_RPM_FMT              1417
+#define MSG_PV_MENU_CLEAR_RDB        1418
+#define MSG_CLR_TITLE                1419
+#define MSG_CLR_WARN_BODY_FMT        1420
+#define MSG_CLR_GPT_NOTE             1421
+#define MSG_CLR_CONFIRM_BODY_FMT     1422
+#define MSG_CLR_CONFIRM_GADGETS      1423
+#define MSG_CLR_DONE_FMT             1424
+#define MSG_CLR_FAIL_FMT             1425
+#define MSG_CLR_ERR_WRITE_FMT        1426
+#define MSG_CLR_ERR_NOMEM            1427
+#define MSG_CLI_CLEARRDB_PLAN_FMT    1428
+#define MSG_CLI_CLEARRDB_GPT         1429
+#define MSG_CLI_CLEARRDB_CONFIRM     1430
+#define MSG_CLI_CLEARRDB_OK_FMT      1431
+#define MSG_CLI_CLEARRDB_FAIL_FMT    1432
+#define MSG_SCR_CLEARRDB_DRYRUN_FMT  1433
+#define MSG_SCR_CLEARRDB_OK_FMT      1434
+#define MSG_SCR_CLEARRDB_FAIL_FMT    1435
 
-#define MSG_COUNT 1418
+#define MSG_COUNT 1436
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2852,5 +2870,23 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1415 MSG_ATA_VERSION_FMT */ "  ATA/ATAPI-%u",
     /* 1416 MSG_ATA_SSD */ "  Solid-state / non-rotating device",
     /* 1417 MSG_ATA_RPM_FMT */ "  %u RPM",
+    /* 1418 MSG_PV_MENU_CLEAR_RDB */ "Clear RDB and MBR...",
+    /* 1419 MSG_CLR_TITLE */ "Clear RDB and MBR",
+    /* 1420 MSG_CLR_WARN_BODY_FMT */ "This zeroes the partition-table area of\n\n  %s unit %lu\n\nBlocks 0-%lu will be overwritten with zeros, so\nthe disk looks completely blank to AmigaOS and PCs.%s\n\nPartition DATA is not touched, but without the\ntables nothing can find it any more.\n\nContinue?",
+    /* 1421 MSG_CLR_GPT_NOTE */ "\n\nA GPT was found: its backup header at the end\nof the disk will be zeroed as well.",
+    /* 1422 MSG_CLR_CONFIRM_BODY_FMT */ "Really erase the RDB and MBR on\n\n  %s unit %lu ?\n\nThis cannot be undone.",
+    /* 1423 MSG_CLR_CONFIRM_GADGETS */ "Yes, erase|Cancel",
+    /* 1424 MSG_CLR_DONE_FMT */ "Done: %lu blocks zeroed.\n\nPartitions from this disk that are still mounted\nstay mounted until you reboot.",
+    /* 1425 MSG_CLR_FAIL_FMT */ "Clear failed: %s",
+    /* 1426 MSG_CLR_ERR_WRITE_FMT */ "write error at block %lu (io_Error %ld)",
+    /* 1427 MSG_CLR_ERR_NOMEM */ "out of memory",
+    /* 1428 MSG_CLI_CLEARRDB_PLAN_FMT */ "CLEARRDB: will zero blocks 0-%lu%s on %s unit %lu.\n",
+    /* 1429 MSG_CLI_CLEARRDB_GPT */ " and the GPT backup (last 33 blocks)",
+    /* 1430 MSG_CLI_CLEARRDB_CONFIRM */ "Erase the RDB, MBR and GPT headers? Partition data is not touched,\nbut nothing will be able to find it afterwards.",
+    /* 1431 MSG_CLI_CLEARRDB_OK_FMT */ "CLEARRDB: %lu blocks zeroed. Reboot before using this disk again.\n",
+    /* 1432 MSG_CLI_CLEARRDB_FAIL_FMT */ "CLEARRDB: failed: %s\n",
+    /* 1433 MSG_SCR_CLEARRDB_DRYRUN_FMT */ "CLEARRDB: dry run - would zero blocks 0-%lu%s.\n",
+    /* 1434 MSG_SCR_CLEARRDB_OK_FMT */ "  Cleared: blocks 0-%lu%s (%lu blocks zeroed)\n",
+    /* 1435 MSG_SCR_CLEARRDB_FAIL_FMT */ "CLEARRDB: failed: %s",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

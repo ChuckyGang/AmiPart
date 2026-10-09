@@ -442,6 +442,20 @@ static void offer_reboot(struct Window *win, const char *msg)
    the open device instance, so re-reading the just-written blocks on the
    SAME still-open handle can silently return the pre-write data; closing
    and reopening the device is what actually drops that cache. */
+/* Without an RDB the list and map still need the device geometry (MBR
+   entries are shown in cylinders of it).  RDB_Read zeroes the struct, so
+   call this after every read that may come back invalid. */
+static void fill_geometry_if_no_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
+{
+    ULONG cyls = 0, heads = 0, secs = 0;
+    if (!bd || !rdb || rdb->valid) return;
+    if (BlockDev_GetGeometry(bd, &cyls, &heads, &secs)) {
+        rdb->cylinders = cyls;
+        rdb->heads     = heads;
+        rdb->sectors   = secs;
+    }
+}
+
 static struct BlockDev *reopen_after_raw_write(struct BlockDev *bd,
                                                 const char *devname, ULONG unit)
 {
@@ -625,7 +639,12 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
     SetDrMd(rp, JAM2);
     RectFill(rp, mx, my, mx+(WORD)mw-1, my+(WORD)mh-1);
 
-    if (!rdb || !rdb->valid) {
+    /* No RDB: still draw the MBR partitions (in device-geometry cylinders)
+       when block 0 holds a valid table - the list shows them, so must the
+       map.  Only a disk with nothing at all gets the "No RDB" banner. */
+    if (!rdb || (!rdb->valid &&
+                 !(s_mbr && s_mbr->valid && MBR_Count(s_mbr) > 0 &&
+                   rdb->cylinders > 0))) {
         const char *msg = GS(MSG_PV_MAP_NO_RDB);
         UWORD mlen = strlen(msg);
         WORD  tw   = rp->TxWidth ? (WORD)(mlen*(UWORD)rp->TxWidth):(WORD)(mlen*8);
@@ -638,7 +657,7 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
 
     {
         ULONG lo    = rdb->lo_cyl;
-        ULONG hi    = rdb->hi_cyl;
+        ULONG hi    = rdb->valid ? rdb->hi_cyl : rdb->cylinders - 1;
         ULONG total = hi + 1;   /* full disk cylinder count (including RDB area) */
 
 #define MAP_X(cyl) ((WORD)(mx + (WORD)((UQUAD)(cyl) * mw / total)))
@@ -1723,6 +1742,8 @@ static struct NewMenu partview_menu_def[] = {
     { NM_ITEM,  NM_BARLABEL,             NULL,         0, 0, NULL },  /* ITEM 24 */
     { NM_ITEM,  "Dump Partition to File...",   NULL,   0, 0, NULL },  /* ITEM 25 */
     { NM_ITEM,  "Restore Partition from File...", NULL, 0, 0, NULL }, /* ITEM 26 */
+    { NM_ITEM,  NM_BARLABEL,             NULL,         0, 0, NULL },  /* ITEM 27 */
+    { NM_ITEM,  "Clear RDB and MBR...",  NULL,         0, 0, NULL },  /* ITEM 28 */
     /* Menu 2 - Health: disk diagnostics */
     { NM_TITLE, "Health",                NULL,         0, 0, NULL },
     { NM_ITEM,  "SMART Status",          NULL,         0, 0, NULL },  /* ITEM 0 */
@@ -1776,6 +1797,8 @@ static void localize_partview_menu(void)
         -1,                          /* NM_BARLABEL */
         MSG_PV_MENU_DUMP_PART,
         MSG_PV_MENU_RESTORE_PART,
+        -1,                          /* NM_BARLABEL */
+        MSG_PV_MENU_CLEAR_RDB,
         MSG_PV_MENU_HEALTH,
         MSG_PV_MENU_SMART,
         MSG_PV_MENU_BADBLOCK,
@@ -2153,14 +2176,7 @@ BOOL partview_run(const char *devname, ULONG unit)
             rdb->allow_truncated_write = (EasyRequest(NULL, &tes, NULL) == 1);
         }
         /* nothing extra - names and DosTypes come from disk (PART/FSHD blocks) */
-        if (!rdb->valid && bd) {
-            ULONG cyls = 0, heads = 0, secs = 0;
-            if (BlockDev_GetGeometry(bd, &cyls, &heads, &secs)) {
-                rdb->cylinders = cyls;
-                rdb->heads     = heads;
-                rdb->sectors   = secs;
-            }
-        }
+        fill_geometry_if_no_rdb(bd, rdb);
         /* Read MBR (non-fatal - just leaves mbr_store.valid = FALSE). */
         if (MBR_Read(bd, &mbr_store))
             s_mbr = &mbr_store;
@@ -2409,6 +2425,28 @@ BOOL partview_run(const char *devname, ULONG unit)
                             image_restore_disk(win, bd);
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 14)
                             pv_export_mountlist(win, bd, rdb);
+                        else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 28) {
+                            if (offer_clear_rdb(win, bd, rdb, s_mbr)) {
+                                bd = reopen_after_raw_write(bd, devname, unit);
+                                RDB_FreeCode(rdb);
+                                memset(rdb, 0, sizeof(*rdb));
+                                if (bd) {
+                                    RDB_Read(bd, rdb);
+                                    fill_geometry_if_no_rdb(bd, rdb);
+                                    if (MBR_Read(bd, &mbr_store)) s_mbr = &mbr_store;
+                                    else s_mbr = NULL;
+                                } else {
+                                    s_mbr = NULL;
+                                }
+                                sel = -1;
+                                needs_reboot = TRUE;
+                                refresh_listview(win, lv_gad, rdb, sel);
+                                draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                            ix, iy, iw, bx, by, bw, bh,
+                                            hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                refresh_all_gadgets(win, glist);
+                            }
+                        }
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 16) {
                             if (sel >= 0 && bd && rdb && sel < (WORD)rdb->num_parts)
                                 offer_zero_partition(win, bd, rdb, &rdb->parts[sel]);
