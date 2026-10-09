@@ -1401,8 +1401,28 @@
 #define MSG_NF_WRITE_FAIL_PFS        1395
 #define MSG_NF_WRITE_FAIL_SFS        1396
 #define MSG_NF_SFS_VARIANT           1397
+#define MSG_ATA_HDR                  1398
+#define MSG_ATA_NOT_AVAIL            1399
+#define MSG_ATA_MODEL_FMT            1400
+#define MSG_ATA_SERIAL_FMT           1401
+#define MSG_ATA_FIRMWARE_FMT         1402
+#define MSG_ATA_CHS_FMT              1403
+#define MSG_ATA_CHS_REAL             1404
+#define MSG_ATA_CHS_PLACEHOLDER      1405
+#define MSG_ATA_CAPACITY_FMT         1406
+#define MSG_ATA_LBA48                1407
+#define MSG_ATA_LBA28                1408
+#define MSG_ATA_FLAGS_FMT            1409
+#define MSG_ATA_YES_ENABLED          1410
+#define MSG_ATA_YES_DISABLED         1411
+#define MSG_ATA_MODES_FMT            1412
+#define MSG_ATA_MULTI_FMT            1413
+#define MSG_ATA_LEGACY_FMT           1414
+#define MSG_ATA_VERSION_FMT          1415
+#define MSG_ATA_SSD                  1416
+#define MSG_ATA_RPM_FMT              1417
 
-#define MSG_COUNT 1398
+#define MSG_COUNT 1418
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2812,5 +2832,25 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1395 MSG_NF_WRITE_FAIL_PFS */ "PFS3: write failed",
     /* 1396 MSG_NF_WRITE_FAIL_SFS */ "SFS: write failed",
     /* 1397 MSG_NF_SFS_VARIANT */ "SFS: only SFS\000 and SFS2 are supported by the internal formatter - use SAFE for the OS formatter",
+    /* 1398 MSG_ATA_HDR */ "  Drive identification (ATA IDENTIFY DEVICE):",
+    /* 1399 MSG_ATA_NOT_AVAIL */ "  ATA IDENTIFY not available (not an ATA drive, or no ATA pass-through).",
+    /* 1400 MSG_ATA_MODEL_FMT */ "  Model   : %s",
+    /* 1401 MSG_ATA_SERIAL_FMT */ "  Serial  : %s",
+    /* 1402 MSG_ATA_FIRMWARE_FMT */ "  Firmware: %s",
+    /* 1403 MSG_ATA_CHS_FMT */ "  %5lu cylinders, %2lu heads, %2lu sectors/track  (CHS, %s)",
+    /* 1404 MSG_ATA_CHS_REAL */ "real",
+    /* 1405 MSG_ATA_CHS_PLACEHOLDER */ "placeholder",
+    /* 1406 MSG_ATA_CAPACITY_FMT */ "  %lu LBA sectors = %s  (%s)",
+    /* 1407 MSG_ATA_LBA48 */ "LBA48",
+    /* 1408 MSG_ATA_LBA28 */ "LBA28",
+    /* 1409 MSG_ATA_FLAGS_FMT */ "  LBA: %s   DMA: %s   SMART: %s",
+    /* 1410 MSG_ATA_YES_ENABLED */ "Yes (enabled)",
+    /* 1411 MSG_ATA_YES_DISABLED */ "Yes (disabled)",
+    /* 1412 MSG_ATA_MODES_FMT */ "  Max PIO mode %s, Multiword DMA mode %s, Ultra DMA mode %s",
+    /* 1413 MSG_ATA_MULTI_FMT */ "  %u sectors/interrupt (READ/WRITE MULTIPLE)",
+    /* 1414 MSG_ATA_LEGACY_FMT */ "  %lu KB sector buffer, %u ECC bytes",
+    /* 1415 MSG_ATA_VERSION_FMT */ "  ATA/ATAPI-%u",
+    /* 1416 MSG_ATA_SSD */ "  Solid-state / non-rotating device",
+    /* 1417 MSG_ATA_RPM_FMT */ "  %u RPM",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

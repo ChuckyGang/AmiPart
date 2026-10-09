@@ -36,6 +36,7 @@
 #include "pfsresize.h"
 #include "shrinkinfo.h"
 #include "partclone.h"
+#include "ataident.h"
 
 /* Progress state shared by the image copiers and partition clone (defined
    here so the clone command handlers above cmd_imageout can use it). */
@@ -670,6 +671,13 @@ static const char *smart_name(UBYTE id)
     return "Unknown";
 }
 
+static void cli_emit_line(void *ctx, const char *s)
+{
+    (void)ctx;
+    cli_puts(s);
+    cli_puts("\n");
+}
+
 static LONG cmd_smart(const char *devname, ULONG unit)
 {
     struct BlockDev *bd;
@@ -691,6 +699,16 @@ static LONG cmd_smart(const char *devname, ULONG unit)
         cli_puts(GS(MSG_CLI_OUT_OF_MEMORY));
         BlockDev_Close(bd);
         return RETURN_ERROR;
+    }
+
+    /* WhatIDE-style identification block (ATA IDENTIFY DEVICE) first. */
+    {
+        struct AtaIdent ident;
+        if (ATA_Identify(bd, &ident) == 0)
+            ATA_IdentPrint(&ident, cli_emit_line, NULL);
+        else
+            cli_emit_line(NULL, GS(MSG_ATA_NOT_AVAIL));
+        cli_puts("\n");
     }
 
     /*

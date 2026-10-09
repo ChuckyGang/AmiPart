@@ -4312,3 +4312,68 @@ SFS: write failed
 MSG_NF_SFS_VARIANT
 SFS: only SFS\0 and SFS\2 are supported by the internal formatter - use SAFE for the OS formatter
 ;
+;==========================================================================
+; ataident.c - ATA IDENTIFY DEVICE block shown above the SMART data
+; (WhatIDE-style drive identification: model/serial/firmware, geometry,
+; LBA/DMA/transfer modes).  GUI lines, no trailing \n - the CLI adds it.
+;==========================================================================
+MSG_ATA_HDR
+  Drive identification (ATA IDENTIFY DEVICE):
+;
+MSG_ATA_NOT_AVAIL
+  ATA IDENTIFY not available (not an ATA drive, or no ATA pass-through).
+;
+MSG_ATA_MODEL_FMT
+  Model   : %s
+;
+MSG_ATA_SERIAL_FMT
+  Serial  : %s
+;
+MSG_ATA_FIRMWARE_FMT
+  Firmware: %s
+;
+MSG_ATA_CHS_FMT
+  %5lu cylinders, %2lu heads, %2lu sectors/track  (CHS, %s)
+;
+MSG_ATA_CHS_REAL
+real
+;
+MSG_ATA_CHS_PLACEHOLDER
+placeholder
+;
+MSG_ATA_CAPACITY_FMT
+  %lu LBA sectors = %s  (%s)
+;
+MSG_ATA_LBA48
+LBA48
+;
+MSG_ATA_LBA28
+LBA28
+;
+MSG_ATA_FLAGS_FMT
+  LBA: %s   DMA: %s   SMART: %s
+;
+MSG_ATA_YES_ENABLED
+Yes (enabled)
+;
+MSG_ATA_YES_DISABLED
+Yes (disabled)
+;
+MSG_ATA_MODES_FMT
+  Max PIO mode %s, Multiword DMA mode %s, Ultra DMA mode %s
+;
+MSG_ATA_MULTI_FMT
+  %u sectors/interrupt (READ/WRITE MULTIPLE)
+;
+MSG_ATA_LEGACY_FMT
+  %lu KB sector buffer, %u ECC bytes
+;
+MSG_ATA_VERSION_FMT
+  ATA/ATAPI-%u
+;
+MSG_ATA_SSD
+  Solid-state / non-rotating device
+;
+MSG_ATA_RPM_FMT
+  %u RPM
+;

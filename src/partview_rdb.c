@@ -37,6 +37,7 @@
 #include "version.h"
 #include "mountlist.h"
 #include "partview_internal.h"
+#include "ataident.h"
 
 extern struct ExecBase      *SysBase;
 extern struct DosLibrary    *DOSBase;
@@ -2754,6 +2755,12 @@ static int smart_send(struct BlockDev *bd, UBYTE feature, UBYTE *buf)
     return -1;
 }
 
+static void smart_emit_line(void *ctx, const char *s)
+{
+    (void)ctx;
+    vrdb_add(s);
+}
+
 /* ------------------------------------------------------------------ */
 /* smart_status - display ATA SMART health data for the open device.  */
 /* ------------------------------------------------------------------ */
@@ -2800,6 +2807,17 @@ void smart_status(struct Window *win, struct BlockDev *bd)
         vrdb_add(line);
     }
     vrdb_add("");
+
+    /* WhatIDE-style identification block from ATA IDENTIFY DEVICE,
+       shown above the SMART data.  Same pass-through pipe as SMART. */
+    {
+        struct AtaIdent ident;
+        if (ATA_Identify(bd, &ident) == 0)
+            ATA_IdentPrint(&ident, smart_emit_line, NULL);
+        else
+            vrdb_add(GS(MSG_ATA_NOT_AVAIL));
+        vrdb_add("");
+    }
 
     smart_send(bd, 0xD8, NULL);          /* SMART ENABLE OPERATIONS (best effort) */
 
