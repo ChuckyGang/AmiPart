@@ -106,6 +106,23 @@ jobs:
           ./amipart IMAGE=ci.hdf INFO
           ./amipart IMAGE=ci.hdf CHECK
 
+      # Same layout written through the device backend while the shim
+      # impersonates (a) an NSD-only driver that answers the old TD64
+      # opcodes with TDERR_NotSpecified - warpATA.device on the CS-Lab
+      # Warp, which made every RDB write fail with "err 20" in 0.8 - and
+      # (b) a pre-NSD driver that does the same.  Both images must be
+      # byte-identical to the file-backend one above.
+      - name: Driver-dialect regression (NSD-only / legacy err-20 shim)
+        run: |
+          cd host
+          for drv in warpata legacy20; do
+            dd if=/dev/zero of=/dev/shm/ci_$drv.hdf bs=1M count=8 status=none
+            sed "s#OPEN FILE ci.hdf#OPEN /dev/shm/ci_$drv.hdf 0#; /BACKUPEXT\|VERIFYEXT/d" ci.script > ci_$drv.script
+            AMIPART_SHIM_DRIVER=$drv ./amipart SCRIPT ci_$drv.script FORCE
+            AMIPART_SHIM_DRIVER=$drv ./amipart DEV=/dev/shm/ci_$drv.hdf CHECK
+            cmp ci.hdf /dev/shm/ci_$drv.hdf && echo "$drv: byte-identical to file backend"
+          done
+
       - name: Endian regression harness
         run: |
           ./test/host/build.sh

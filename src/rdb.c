@@ -54,6 +54,12 @@ struct NSDeviceQueryResult {
     const UWORD *SupportedCommands;  /* 0-terminated command list     */
 };
 #endif
+#ifndef NSCMD_TD_WRITE64
+#define NSCMD_TD_WRITE64   0xC001
+#endif
+#ifndef TDERR_NotSpecified
+#define TDERR_NotSpecified 20
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Local CreateMsgPort / DeleteMsgPort                                 */
@@ -229,22 +235,30 @@ static ULONG probe_last_block(struct BlockDev *bd, ULONG floor_blocks)
 }
 
 /* ------------------------------------------------------------------ */
-/* device_is_modern                                                    */
+/* probe_nsd                                                           */
 /*                                                                     */
-/* TRUE if the driver answers NSCMD_DEVICEQUERY and advertises 64-bit  */
-/* reads (NSCMD_TD_READ64).  Such drivers (e.g. lide.device 4.x,       */
-/* scsi.device 43+, fat trackdisk) report honest geometry, so we trust */
-/* their TD_GETGEOMETRY total and skip the past-end capacity probe.    */
-/* Pre-NSD drivers reject the query (IOERR_NOCMD) and return FALSE,    */
-/* so the truncation probe still runs for the old controllers that     */
-/* need it (e.g. A3000 scsi.device under-reporting large drives).      */
+/* Ask the driver (NSCMD_DEVICEQUERY) which New-Style Device commands  */
+/* it implements and record the two we use: NSCMD_TD_READ64 (0xC000)   */
+/* and NSCMD_TD_WRITE64 (0xC001).  Used two ways:                      */
+/*                                                                     */
+/*  - nsd_read64 set = "modern driver" (lide.device 4.x, scsi.device   */
+/*    43+, fat trackdisk): honest TD_GETGEOMETRY, so BlockDev_Open     */
+/*    skips the past-end capacity probe.  Pre-NSD drivers reject the   */
+/*    query (IOERR_NOCMD) and keep both flags clear, so the truncation */
+/*    probe still runs for the old controllers that need it (A3000     */
+/*    scsi.device under-reporting large drives).                       */
+/*                                                                     */
+/*  - the 64-bit I/O paths use the NSD opcode when it is advertised    */
+/*    instead of the older TD64 opcodes 24/25 (see rd64_cmd/wr64_cmd). */
 /* ------------------------------------------------------------------ */
 
-static BOOL device_is_modern(struct BlockDev *bd)
+static void probe_nsd(struct BlockDev *bd)
 {
     struct NSDeviceQueryResult nsd;
     const UWORD *cmd;
 
+    bd->nsd_read64  = 0;
+    bd->nsd_write64 = 0;
     memset(&nsd, 0, sizeof(nsd));
 
     bd->iotd.iotd_Req.io_Command = NSCMD_DEVICEQUERY;
@@ -255,15 +269,43 @@ static BOOL device_is_modern(struct BlockDev *bd)
     bd->iotd.iotd_Req.io_Flags   = 0;
     bd->iotd.iotd_Count          = 0;
 
-    if (DoIO((struct IORequest *)&bd->iotd) != 0) return FALSE; /* pre-NSD */
+    if (DoIO((struct IORequest *)&bd->iotd) != 0) return;      /* pre-NSD */
 
     /* A valid reply must point at a 0-terminated command list.  nsd was
        zero-initialised, so a driver that succeeded without filling it in
        leaves SupportedCommands NULL and is treated as not-modern. */
-    if (!nsd.SupportedCommands) return FALSE;
-    for (cmd = nsd.SupportedCommands; *cmd; cmd++)
-        if (*cmd == NSCMD_TD_READ64) return TRUE;
-    return FALSE;
+    if (!nsd.SupportedCommands) return;
+    for (cmd = nsd.SupportedCommands; *cmd; cmd++) {
+        if (*cmd == NSCMD_TD_READ64)  bd->nsd_read64  = 1;
+        if (*cmd == NSCMD_TD_WRITE64) bd->nsd_write64 = 1;
+    }
+}
+
+/* 64-bit transfer opcode for this driver.  Prefer the NSD commands when
+   the driver advertises them: NSD-only drivers exist that do not implement
+   the older TD64 opcodes 24/25 at all - warpATA.device (CS-Lab Warp
+   560/1260) is one, and it answers them with TDERR_NotSpecified rather
+   than IOERR_NOCMD, so AmiPart 0.8 could read such a disk (HD_SCSICMD
+   path) but every RDB write failed with "err 20". */
+static UWORD rd64_cmd(const struct BlockDev *bd)
+{
+    return bd->nsd_read64  ? NSCMD_TD_READ64  : TD_READ64;
+}
+static UWORD wr64_cmd(const struct BlockDev *bd)
+{
+    return bd->nsd_write64 ? NSCMD_TD_WRITE64 : TD_WRITE64;
+}
+
+/* TRUE when err means "driver does not implement that command" rather
+   than "the transfer failed".  The exec convention is IOERR_NOCMD (-3);
+   warpATA.device uses TDERR_NotSpecified (20) for the same thing.  A
+   driver that reports a *real* failure as 20 merely gets one retry of the
+   same data at the same offset through the 32-bit command, which is
+   harmless; real media errors (TDERR_WriteProt, TDERR_BadSecPreamble,
+   ...) are never retried. */
+static BOOL cmd_unsupported(BYTE err)
+{
+    return err == IOERR_NOCMD || err == TDERR_NotSpecified;
 }
 
 #ifdef AMIPART_HOST
@@ -443,6 +485,10 @@ struct BlockDev *BlockDev_Open(const char *devname, ULONG unit)
         bd->device_type_known = TRUE;
     }
 
+    /* Which 64-bit commands does the driver speak?  Decides the opcode the
+       I/O paths use and whether the capacity probe below is needed. */
+    probe_nsd(bd);
+
     bd->block_size  = 512;   /* RDB format requires 512-byte blocks */
     {
         ULONG sec_sz = (geom.dg_SectorSize >= 512) ? geom.dg_SectorSize : 512;
@@ -546,7 +592,7 @@ struct BlockDev *BlockDev_Open(const char *devname, ULONG unit)
        and its past-end reads can hang/crash drivers that don't range-check
        out-of-bounds blocks (e.g. lide.device).  Only legacy pre-NSD drivers
        - the ones that actually under-report - reach the probe. */
-    if (bd->rc_total_blocks == 0 && !device_is_modern(bd)) {
+    if (bd->rc_total_blocks == 0 && !bd->nsd_read64) {
         ULONG floor_blocks = (ULONG)(bd->td_total_bytes / 512);
         ULONG probed = probe_last_block(bd, floor_blocks);
         if (probed > 0) {
@@ -583,11 +629,12 @@ void BlockDev_Close(struct BlockDev *bd)
 /* BlockDev_ReadBlock                                                  */
 /* ------------------------------------------------------------------ */
 
-/* TD_READ64 single-block read (see the io_Actual note in BlockDev_ReadBlock). */
+/* 64-bit single-block read, TD_READ64 or NSCMD_TD_READ64 (see rd64_cmd and
+   the io_Actual note in BlockDev_ReadBlock). */
 static BOOL rd_td64(struct BlockDev *bd, ULONG blocknum, void *buf)
 {
     UQUAD byte_off = (UQUAD)blocknum * bd->block_size;
-    bd->iotd.iotd_Req.io_Command = TD_READ64;
+    bd->iotd.iotd_Req.io_Command = rd64_cmd(bd);
     bd->iotd.iotd_Req.io_Length  = bd->block_size;
     bd->iotd.iotd_Req.io_Data    = (APTR)buf;
     bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
@@ -719,7 +766,8 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
 #endif
     }
 
-    /* TD_WRITE64.  CMD_WRITE and CMD_UPDATE both hang on cached filesystem
+    /* TD_WRITE64 / NSCMD_TD_WRITE64 (whichever the driver speaks, see
+       wr64_cmd).  CMD_WRITE and CMD_UPDATE both hang on cached filesystem
        partition blocks in UAE/Amiberry - they block waiting for the
        filesystem handler to flush its cache, which can deadlock if the
        handler is blocked.  TD_WRITE64 bypasses the driver's sector cache
@@ -727,7 +775,7 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
        HD_SCSICMD WRITE must not be used (4-byte DMA shift on A3000 SD
        adapters).  CMD_UPDATE removed: TD_WRITE64 already commits the data
        directly, so CMD_UPDATE is redundant and hangs on active partitions. */
-    bd->iotd.iotd_Req.io_Command = TD_WRITE64;
+    bd->iotd.iotd_Req.io_Command = wr64_cmd(bd);
     bd->iotd.iotd_Req.io_Length  = bd->block_size;
     bd->iotd.iotd_Req.io_Data    = (APTR)buf;
     bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
@@ -738,19 +786,22 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
     if (err == 0) return TRUE;
 
     /* Fallback: CMD_WRITE (32-bit byte offset) for drivers that don't
-       implement TD_WRITE64 and reject it with IOERR_NOCMD (-3) - notably
+       implement the 64-bit write and reject it - with IOERR_NOCMD (-3) on
        the old Commodore gayle scsi.device on A600/A1200 (KS 3.0/3.1), which
-       predates the TD64/NSD commands.  (The read path already falls back to
-       CMD_READ for the same drivers; the write path was missing this.)
+       predates the TD64/NSD commands, or with TDERR_NotSpecified (20) on
+       warpATA.device (see cmd_unsupported).  (The read path already falls
+       back to CMD_READ for the same drivers; the write path was missing this.)
 
-       Gated strictly on IOERR_NOCMD so a genuine TD_WRITE64 write failure is
-       never silently retried through a different path.  The UAE/Amiberry
+       Gated on those two "not implemented" codes only, so a genuine 64-bit
+       write failure is never silently retried through a different path
+       (other than one harmless same-data retry on a driver that misuses
+       TDERR_NotSpecified for a real error).  The UAE/Amiberry
        "CMD_WRITE hangs on cached FS blocks" hazard only affects live, mounted
        partitions; AmiPart writes run with the partition inhibited/unmounted,
        and UAE supports TD_WRITE64 so it never reaches this fallback anyway.
        These pre-NSD drivers address at most 4 GB, so the 32-bit offset is
        sufficient - refuse rather than wrap if a >4 GB block is ever asked. */
-    if (err == IOERR_NOCMD && (ULONG)(byte_off >> 32) == 0) {
+    if (cmd_unsupported(err) && (ULONG)(byte_off >> 32) == 0) {
         bd->iotd.iotd_Req.io_Command = CMD_WRITE;
         bd->iotd.iotd_Req.io_Length  = bd->block_size;
         bd->iotd.iotd_Req.io_Data    = (APTR)buf;
@@ -787,8 +838,9 @@ static BOOL td64_multi(struct BlockDev *bd, UWORD cmd64, UWORD cmd32,
     err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
     if (err == 0) return TRUE;
 
-    /* pre-TD64 driver (old gayle scsi.device): 32-bit offsets only */
-    if (err == IOERR_NOCMD && (ULONG)(byte_off >> 32) == 0) {
+    /* pre-TD64 driver (old gayle scsi.device, or warpATA answering with
+       TDERR_NotSpecified - see cmd_unsupported): 32-bit offsets only */
+    if (cmd_unsupported(err) && (ULONG)(byte_off >> 32) == 0) {
         bd->iotd.iotd_Req.io_Command = cmd32;
         bd->iotd.iotd_Req.io_Length  = length;
         bd->iotd.iotd_Req.io_Data    = (APTR)buf;
@@ -816,7 +868,7 @@ BOOL BlockDev_ReadBlocks(struct BlockDev *bd, ULONG start, ULONG count, void *bu
         return Read(bd->fh, buf, (LONG)(count * bd->block_size)) == (LONG)(count * bd->block_size);
 #endif
     }
-    if (td64_multi(bd, TD_READ64, CMD_READ, start, count, buf)) return TRUE;
+    if (td64_multi(bd, rd64_cmd(bd), CMD_READ, start, count, buf)) return TRUE;
     /* driver would not do it in one go (or a block is bad): per block, so
        the HD_SCSICMD path and the caller's per-block error handling apply */
     for (i = 0; i < count; i++)
@@ -846,7 +898,7 @@ BOOL BlockDev_WriteBlocks(struct BlockDev *bd, ULONG start, ULONG count, const v
         return TRUE;
 #endif
     }
-    if (td64_multi(bd, TD_WRITE64, CMD_WRITE, start, count, (void *)buf)) return TRUE;
+    if (td64_multi(bd, wr64_cmd(bd), CMD_WRITE, start, count, (void *)buf)) return TRUE;
     for (i = 0; i < count; i++)
         if (!BlockDev_WriteBlock(bd, start + i, (const UBYTE *)buf + i * bd->block_size))
             return FALSE;

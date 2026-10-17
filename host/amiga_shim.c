@@ -120,6 +120,17 @@ LONG IoErr(void) { return g_ioerr; }
 /* pwrite, full 64-bit offsets).  Everything else - HD_SCSICMD,       */
 /* NSCMD_DEVICEQUERY - returns IOERR_NOCMD, which rdb.c already       */
 /* handles gracefully on the Amiga for drivers without those commands.*/
+/*                                                                     */
+/* Test knob AMIPART_SHIM_DRIVER picks which 64-bit dialect the fake   */
+/* driver speaks, so rdb.c's opcode selection and fallbacks can be     */
+/* regression-tested without the hardware that exposed them:          */
+/*   (unset)   TD64 24/25 + CMD_READ/WRITE; NSD query -> IOERR_NOCMD   */
+/*   warpata   NSD query lists 0xC000/0xC001 and only those (plus      */
+/*             CMD_READ/WRITE) work; 24/25 answer TDERR_NotSpecified   */
+/*             (20) - what warpATA.device on a CS-Lab Warp does        */
+/*   legacy20  no NSD; 24/25 answer 20; only CMD_READ/WRITE work       */
+/* When the knob is set a regular file may stand in for the block      */
+/* device so the tests need no root/loop device.                       */
 /* ------------------------------------------------------------------ */
 #include <fcntl.h>
 #include <unistd.h>
@@ -141,6 +152,31 @@ struct HostDev {
     uint32_t sector;
 };
 
+#define SHIM_NSCMD_DEVICEQUERY 0x4000
+#define SHIM_NSCMD_TD_READ64   0xC000
+#define SHIM_NSCMD_TD_WRITE64  0xC001
+struct ShimNSDQuery {
+    ULONG        DevQueryFormat;
+    ULONG        SizeAvailable;
+    UWORD        DeviceType;
+    UWORD        DeviceSubType;
+    const UWORD *SupportedCommands;
+};
+static const UWORD shim_nsd_cmds[] = {
+    CMD_READ, CMD_WRITE, TD_GETGEOMETRY,
+    SHIM_NSCMD_TD_READ64, SHIM_NSCMD_TD_WRITE64, 0
+};
+enum { SHIM_DRV_DEFAULT, SHIM_DRV_WARPATA, SHIM_DRV_LEGACY20 };
+static int shim_driver(void)
+{
+    const char *e = getenv("AMIPART_SHIM_DRIVER");
+    if (!e || !*e)                return SHIM_DRV_DEFAULT;
+    if (!strcmp(e, "warpata"))    return SHIM_DRV_WARPATA;
+    if (!strcmp(e, "legacy20"))   return SHIM_DRV_LEGACY20;
+    fprintf(stderr, "AMIPART_SHIM_DRIVER=%s: unknown (warpata|legacy20)\n", e);
+    return SHIM_DRV_DEFAULT;
+}
+
 struct MsgPort *CreateMsgPort(void) { return NULL; }
 void DeleteMsgPort(struct MsgPort *p) { (void)p; }
 
@@ -158,7 +194,8 @@ LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
         fprintf(stderr, "%s: %s\n", name, strerror(errno));
         return -1;
     }
-    if (!S_ISBLK(st.st_mode)) {
+    if (!S_ISBLK(st.st_mode) &&
+        !(shim_driver() != SHIM_DRV_DEFAULT && S_ISREG(st.st_mode))) {
         fprintf(stderr, "%s: not a block device (use IMAGE=<file> for image files)\n", name);
         return -1;
     }
@@ -241,6 +278,22 @@ BYTE DoIO(struct IORequest *io)
 
     switch (req->io_Command) {
 
+    case SHIM_NSCMD_DEVICEQUERY: {
+        struct ShimNSDQuery *q = (struct ShimNSDQuery *)req->io_Data;
+        if (shim_driver() != SHIM_DRV_WARPATA || !q ||
+            req->io_Length < sizeof(*q)) {
+            req->io_Error = IOERR_NOCMD;
+            return IOERR_NOCMD;
+        }
+        q->DevQueryFormat    = 0;
+        q->SizeAvailable     = sizeof(*q);
+        q->DeviceType        = 5;   /* NSDEVTYPE_TRACKDISK */
+        q->DeviceSubType     = 0;
+        q->SupportedCommands = shim_nsd_cmds;
+        req->io_Actual = sizeof(*q);
+        return 0;
+    }
+
     case TD_GETGEOMETRY: {
         struct DriveGeometry *dg = (struct DriveGeometry *)req->io_Data;
         /* Report a conventional 512-byte-sector, 16 heads x 63 sectors
@@ -264,21 +317,29 @@ BYTE DoIO(struct IORequest *io)
     }
 
     case TD_READ64:
-    case CMD_READ:
-        off = (req->io_Command == TD_READ64)
-              ? ((uint64_t)req->io_Actual << 32) | req->io_Offset
-              : (uint64_t)req->io_Offset;
-        n = pread(hd->fd, req->io_Data, req->io_Length, (off_t)off);
-        if (n != (ssize_t)req->io_Length) { req->io_Error = 20; return 20; }
-        req->io_Actual = req->io_Length;
-        return 0;
-
     case TD_WRITE64:
+        /* The NSD-only and "legacy, answers 20" test drivers do not
+           implement the old TD64 opcodes, and say so the warpATA way. */
+        if (shim_driver() != SHIM_DRV_DEFAULT) { req->io_Error = 20; return 20; }
+        goto do_io;
+    case SHIM_NSCMD_TD_READ64:
+    case SHIM_NSCMD_TD_WRITE64:
+        if (shim_driver() != SHIM_DRV_WARPATA) { req->io_Error = IOERR_NOCMD; return IOERR_NOCMD; }
+        goto do_io;
+    case CMD_READ:
     case CMD_WRITE:
+    do_io:
+        off = (req->io_Command == CMD_READ || req->io_Command == CMD_WRITE)
+              ? (uint64_t)req->io_Offset
+              : ((uint64_t)req->io_Actual << 32) | req->io_Offset;
+        if (req->io_Command == CMD_READ || req->io_Command == TD_READ64 ||
+            req->io_Command == SHIM_NSCMD_TD_READ64) {
+            n = pread(hd->fd, req->io_Data, req->io_Length, (off_t)off);
+            if (n != (ssize_t)req->io_Length) { req->io_Error = 20; return 20; }
+            req->io_Actual = req->io_Length;
+            return 0;
+        }
         if (hd->read_only) { req->io_Error = 28; return 28; } /* write protect */
-        off = (req->io_Command == TD_WRITE64)
-              ? ((uint64_t)((struct IOExtTD *)req)->iotd_Req.io_Actual << 32) | req->io_Offset
-              : (uint64_t)req->io_Offset;
         (void)td;
         n = pwrite(hd->fd, req->io_Data, req->io_Length, (off_t)off);
         if (n != (ssize_t)req->io_Length) { req->io_Error = 20; return 20; }
