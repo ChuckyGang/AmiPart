@@ -1474,8 +1474,11 @@
 #define MSG_RDBFAIL_VERIFY_READ_FMT  1468
 #define MSG_DEV_FLAG_LASTDISK        1469
 #define MSG_DEV_FLAG_LASTLUN         1470
+#define MSG_PV_BTN_ZOOMFIT           1471
+#define MSG_PV_BTN_ZOOMSEL           1472
+#define MSG_PV_ZOOM_FMT              1473
 
-#define MSG_COUNT 1471
+#define MSG_COUNT 1474
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2958,5 +2961,8 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1468 MSG_RDBFAIL_VERIFY_READ_FMT */ "ERROR: device error %ld reading back block %lu after the write.\n",
     /* 1469 MSG_DEV_FLAG_LASTDISK */ "  [LAST DISK]",
     /* 1470 MSG_DEV_FLAG_LASTLUN */ "  [LAST LUN]",
+    /* 1471 MSG_PV_BTN_ZOOMFIT */ "Fit",
+    /* 1472 MSG_PV_BTN_ZOOMSEL */ "Selected",
+    /* 1473 MSG_PV_ZOOM_FMT */ "Zoom %lu.%lux",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

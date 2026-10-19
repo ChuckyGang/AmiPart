@@ -57,6 +57,7 @@
 #include "partview_internal.h"
 #include "quickformat.h"
 #include "nativefmt.h"
+#include "mapview.h"
 
 
 /* ------------------------------------------------------------------ */
@@ -100,6 +101,16 @@ extern struct WBStartup     *AmiPart_WBStartup;
 #define GID_MOVE      11
 #define GID_LASTDISK  9
 #define GID_LASTLUN   10
+#define GID_ZOOMSCROLL 12
+#define GID_ZOOMOUT   13
+#define GID_ZOOMIN    14
+#define GID_ZOOMFIT   15
+#define GID_ZOOMSEL   16
+
+#ifndef NM_WHEEL_UP
+#define NM_WHEEL_UP   0x7A   /* NewMouse wheel rawkey codes */
+#define NM_WHEEL_DOWN 0x7B
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Partition colours - match AmigaPart COLORS list                     */
@@ -142,6 +153,9 @@ static const UWORD ptr_resize_src[] = {
 #define LVCOL_BOOT  6   /* boot priority               */
 #define LVCOL_COUNT 7
 
+/* Width of a GadTools listview's vertical scroller, left out of the columns. */
+#define LV_SCROLLER_W 16
+
 /* Column pixel layout - computed in build_gadgets from the actual font */
 static struct {
     UWORD x;    /* left edge of column */
@@ -182,6 +196,27 @@ static UWORD s_unmount_count;
 
 /* Current MBR (updated whenever MBR is read/written this session). */
 static struct MBRInfo *s_mbr;
+
+/* Disk map zoom: visible cylinder window (see mapview.h).  s_view_span 0 =
+   whole disk.  Kept in cylinders so it survives window resizes. */
+static ULONG s_view_lo;
+static ULONG s_view_span;
+
+/* First gadget of the zoom row (scroller, then the 4 buttons) - draw_static()
+   re-renders the row after a full map redraw. NULL while no gadgets exist. */
+static struct Gadget *s_zoom_row;
+#define ZOOM_ROW_GADGETS 5
+
+/* Text height the layout must leave room for.  The map, info lines and
+   labels are drawn with the window RastPort's font - by default the System
+   Default Text font, not the screen font the gadgets use - so size rows for
+   whichever is taller, or the map's label strip spills onto the zoom row. */
+static UWORD pv_text_h(struct Window *win)
+{
+    UWORD fh = (UWORD)win->WScreen->Font->ta_YSize;
+    if (win->RPort->TxHeight > fh) fh = (UWORD)win->RPort->TxHeight;
+    return fh;
+}
 
 
 /* Render hook - AmigaOS calls h_Entry with a0=hook, a1=msg, a2=node.
@@ -252,16 +287,23 @@ static ULONG lv_render(void)
     SetDrMd(rp, JAM1);
     base_y = b->MinY + (WORD)rp->TxBaseline;
 
+/* Text never runs past the row's right edge (b->MaxX): Text() doesn't clip
+   to the item bounds, and anything beyond lands on the listview's scroller. */
 #define LV_TEXT(col, str, len) do { \
-    Move(rp, (WORD)(b->MinX + (WORD)lv_cols[(col)].x), base_y); \
-    Text(rp, (str), (UWORD)(len)); } while(0)
+    WORD  _x = (WORD)(b->MinX + (WORD)lv_cols[(col)].x); \
+    UWORD _n = (UWORD)(len); \
+    while (_n > 0 && _x + (WORD)TextLength(rp, (str), _n) > b->MaxX + 1) _n--; \
+    Move(rp, _x, base_y); \
+    Text(rp, (str), _n); } while(0)
 
 #define LV_RIGHT(col, str, len) do { \
-    WORD _tw = (WORD)TextLength(rp, (str), (UWORD)(len)); \
-    WORD _rx = (WORD)(b->MinX + (WORD)lv_cols[(col)].x + \
-                      (WORD)lv_cols[(col)].w - _tw); \
+    WORD  _tw = (WORD)TextLength(rp, (str), (UWORD)(len)); \
+    WORD  _rx = (WORD)(b->MinX + (WORD)lv_cols[(col)].x + \
+                       (WORD)lv_cols[(col)].w - _tw); \
+    UWORD _n  = (UWORD)(len); \
+    while (_n > 0 && _rx + (WORD)TextLength(rp, (str), _n) > b->MaxX + 1) _n--; \
     Move(rp, _rx, base_y); \
-    Text(rp, (str), (UWORD)(len)); } while(0)
+    Text(rp, (str), _n); } while(0)
 
     /* Column dividers - vertical line centred in the 6px gap before each
        column from LOCYL onwards.  Drawn before text so glyphs overlay them. */
@@ -608,6 +650,269 @@ static void free_pens(struct Screen *scr)
 }
 
 /* ------------------------------------------------------------------ */
+/* Disk map zoom viewport                                              */
+/* ------------------------------------------------------------------ */
+
+/* Cylinders spanned by the whole map (cylinder 0 .. last). */
+static ULONG map_total(const struct RDBInfo *rdb)
+{
+    if (!rdb) return 1;
+    if (rdb->valid) return rdb->hi_cyl + 1;
+    return rdb->cylinders > 0 ? rdb->cylinders : 1;
+}
+
+/* Current map view for the map box at bx/bw (inner area = 1 px border),
+   clamped to this disk and map width; the clamped window is saved back. */
+static void pv_view(const struct RDBInfo *rdb, WORD bx, UWORD bw,
+                    struct MapView *v)
+{
+    MapView_Init(v, map_total(rdb), (LONG)bx + 1,
+                 bw > 2 ? (ULONG)bw - 2 : 1UL, s_view_lo, s_view_span);
+    s_view_lo   = v->lo;
+    s_view_span = v->span;
+}
+
+static void pv_view_store(const struct MapView *v)
+{
+    s_view_lo   = v->lo;
+    s_view_span = v->span;
+}
+
+/* Cylinder range of list entry sel (RDB partition or MBR slot). */
+static BOOL sel_cyl_range(const struct RDBInfo *rdb, WORD sel,
+                          ULONG *lo, ULONG *hi)
+{
+    if (!rdb || sel < 0) return FALSE;
+    if (sel < (WORD)rdb->num_parts) {
+        *lo = rdb->parts[sel].low_cyl;
+        *hi = rdb->parts[sel].high_cyl;
+        return TRUE;
+    }
+    if (s_mbr && s_mbr->valid) {
+        WORD  list_pos = (WORD)rdb->num_parts;
+        ULONG mheads   = rdb->heads   > 0 ? rdb->heads   : 1;
+        ULONG msectors = rdb->sectors > 0 ? rdb->sectors : 1;
+        UWORD mi;
+        for (mi = 0; mi < MBR_MAX_PARTS; mi++) {
+            if (!s_mbr->parts[mi].present) continue;
+            if (list_pos == sel) {
+                *lo = MBR_LBAToCyl(s_mbr->parts[mi].lba_start, mheads, msectors);
+                *hi = MBR_LBAToCyl(s_mbr->parts[mi].lba_start +
+                                   s_mbr->parts[mi].lba_size - 1,
+                                   mheads, msectors);
+                return TRUE;
+            }
+            list_pos++;
+        }
+    }
+    return FALSE;
+}
+
+/* Zoom in/out one step (2x).  The anchor that stays in place is the middle
+   of the selected partition when it is on screen, else the view centre. */
+static void zoom_step(const struct RDBInfo *rdb, WORD sel,
+                      WORD bx, UWORD bw, BOOL zoom_in)
+{
+    struct MapView v;
+    ULONG slo, shi, a;
+    pv_view(rdb, bx, bw, &v);
+    if (sel_cyl_range(rdb, sel, &slo, &shi) &&
+        MapView_Overlaps(&v, slo, shi)) {
+        a = slo + (shi - slo) / 2;
+        if (a < v.lo) a = v.lo;
+        if (a >= v.lo + v.span) a = v.lo + v.span - 1;
+    } else {
+        a = v.lo + v.span / 2;
+    }
+    MapView_Zoom(&v, zoom_in, a, MapView_X(&v, a));
+    pv_view_store(&v);
+}
+
+/* Mouse wheel: zoom around the cylinder under the pointer. */
+static void zoom_at(const struct RDBInfo *rdb, WORD bx, UWORD bw,
+                    WORD mouse_x, BOOL zoom_in)
+{
+    struct MapView v;
+    pv_view(rdb, bx, bw, &v);
+    MapView_Zoom(&v, zoom_in, MapView_Cyl(&v, mouse_x), mouse_x);
+    pv_view_store(&v);
+}
+
+static void zoom_fit(const struct RDBInfo *rdb, WORD bx, UWORD bw)
+{
+    struct MapView v;
+    pv_view(rdb, bx, bw, &v);
+    MapView_Fit(&v);
+    pv_view_store(&v);
+}
+
+/* "Selected": zoom so the selected partition fills most of the map. */
+static void zoom_to_sel(const struct RDBInfo *rdb, WORD sel, WORD bx, UWORD bw)
+{
+    struct MapView v;
+    ULONG slo, shi;
+    if (!sel_cyl_range(rdb, sel, &slo, &shi)) return;
+    pv_view(rdb, bx, bw, &v);
+    MapView_ZoomTo(&v, slo, shi);
+    pv_view_store(&v);
+}
+
+/* While zoomed, picking a partition in the list pans it into view. */
+static void pan_to_sel(const struct RDBInfo *rdb, WORD sel, WORD bx, UWORD bw)
+{
+    struct MapView v;
+    ULONG slo, shi;
+    if (!sel_cyl_range(rdb, sel, &slo, &shi)) return;
+    pv_view(rdb, bx, bw, &v);
+    if (!MapView_IsZoomed(&v)) return;
+    MapView_EnsureVisible(&v, slo, shi);
+    pv_view_store(&v);
+}
+
+/* Values last pushed into the zoom scroller.  The scroller's own events
+   update these too, so a pan the user is dragging is never echoed back. */
+static ULONG s_sc_top, s_sc_vis, s_sc_tot;
+
+/* Push the current view into the pan scroller when it changed (or always,
+   with force, after the gadget was just created). */
+static void sync_zoom_scroller(struct Window *win, struct Gadget *g,
+                               const struct RDBInfo *rdb, WORD bx, UWORD bw,
+                               BOOL force)
+{
+    struct MapView v;
+    ULONG top, vis, tot;
+    if (!g) return;
+    pv_view(rdb, bx, bw, &v);
+    MapView_ScrollerVals(&v, &top, &vis, &tot);
+    if (!force && top == s_sc_top && vis == s_sc_vis && tot == s_sc_tot)
+        return;
+    {
+        struct TagItem t[] = {
+            { GTSC_Total,   tot },
+            { GTSC_Visible, vis },
+            { GTSC_Top,     top },
+            { TAG_DONE, 0 }
+        };
+        GT_SetGadgetAttrsA(g, win, NULL, t);
+    }
+    s_sc_top = top;
+    s_sc_vis = vis;
+    s_sc_tot = tot;
+}
+
+/* The user moved the pan scroller to top. */
+static void zoom_scrolled(const struct RDBInfo *rdb, WORD bx, UWORD bw,
+                          UWORD top)
+{
+    struct MapView v;
+    pv_view(rdb, bx, bw, &v);
+    MapView_SetScrollerTop(&v, top);
+    pv_view_store(&v);
+    s_sc_top = top;
+}
+
+/* Zoom factor text in the zoom row, left of the "-" button.  Its box is
+   laid out by build_gadgets(); width 0 = no box (no gadgets yet). */
+static WORD  s_zl_x, s_zl_y;
+static UWORD s_zl_w, s_zl_h;
+
+static void draw_zoom_label(struct Window *win, const struct RDBInfo *rdb,
+                            WORD bx, UWORD bw)
+{
+    struct RastPort *rp = win->RPort;
+    struct MapView v;
+    char  buf[32];
+    UWORD len;
+    WORD  tw;
+    ULONG z10;
+
+    if (s_zl_w == 0) return;
+    SetAPen(rp, 0);
+    SetDrMd(rp, JAM2);
+    RectFill(rp, s_zl_x, s_zl_y, s_zl_x + (WORD)s_zl_w - 1,
+             s_zl_y + (WORD)s_zl_h - 1);
+    if (!rdb) return;
+
+    pv_view(rdb, bx, bw, &v);
+    z10 = MapView_ZoomX10(&v);
+    DP_SNPRINTF(buf, GS(MSG_PV_ZOOM_FMT),
+                (unsigned long)(z10 / 10), (unsigned long)(z10 % 10));
+    len = (UWORD)strlen(buf);
+    while (len > 0 && (tw = (WORD)TextLength(rp, buf, len)) > (WORD)s_zl_w)
+        len--;
+    tw = (WORD)TextLength(rp, buf, len);
+    SetAPen(rp, 1);
+    SetDrMd(rp, JAM1);
+    Move(rp, s_zl_x + ((WORD)s_zl_w - tw) / 2,
+         s_zl_y + ((WORD)s_zl_h - rp->TxHeight) / 2 + rp->TxBaseline);
+    Text(rp, buf, len);
+}
+
+/* The Cyl label strip under the map: first/last cylinder at the two ends,
+   and a centred text between them - the usage hint (center NULL) or, while
+   dragging, the drag info.  A centre text that does not fit between the
+   labels is left out, or with must_show gets the whole strip instead (the
+   labels are dropped for the duration of the drag). */
+static void draw_axis_strip(struct Window *win, const struct RDBInfo *rdb,
+                            WORD bx, WORD by, UWORD bw, UWORD bh,
+                            const char *center, BOOL must_show)
+{
+    struct RastPort *rp = win->RPort;
+    WORD  fh      = rp->TxHeight;
+    WORD  label_y = by + (WORD)bh + 2 + rp->TxBaseline;
+    char  lo_str[24], hi_str[24];
+    UWORD lolen, hilen, clen;
+    WORD  lotw, hitw, ctw, avail;
+    ULONG lo, hi;
+    struct MapView v;
+
+    /* Erase the label strip before redrawing - prevents ghost text
+       when the map is redrawn at a different position after resize. */
+    SetAPen(rp, 0);
+    SetDrMd(rp, JAM2);
+    RectFill(rp, bx, by+(WORD)bh+1, bx+(WORD)bw, by+(WORD)bh+fh+4);
+    SetAPen(rp, 1);
+    SetDrMd(rp, JAM1);
+
+    if (!center) center = GS(MSG_PV_MAP_HINT);
+    clen = (UWORD)strlen(center);
+    ctw  = (WORD)TextLength(rp, center, clen);
+
+    /* Zoomed in: the labels show the visible window instead. */
+    pv_view(rdb, bx, bw, &v);
+    if (MapView_IsZoomed(&v)) {
+        lo = v.lo;
+        hi = v.lo + v.span - 1;
+    } else {
+        lo = rdb->lo_cyl;
+        hi = rdb->valid ? rdb->hi_cyl : rdb->cylinders - 1;
+    }
+    DP_SNPRINTF(lo_str, GS(MSG_PV_CYL_FMT), (unsigned long)lo);
+    DP_SNPRINTF(hi_str, GS(MSG_PV_CYL_FMT), (unsigned long)hi);
+    lolen = (UWORD)strlen(lo_str);
+    hilen = (UWORD)strlen(hi_str);
+    lotw  = (WORD)TextLength(rp, lo_str, lolen) + 4;
+    hitw  = (WORD)TextLength(rp, hi_str, hilen);
+    avail = (WORD)bw - lotw - hitw - 8;
+
+    if (ctw <= avail || !must_show) {
+        Move(rp, bx, label_y);
+        Text(rp, lo_str, lolen);
+        Move(rp, bx + (WORD)bw - hitw, label_y);
+        Text(rp, hi_str, hilen);
+        if (ctw <= avail) {
+            Move(rp, bx + lotw + (avail - ctw) / 2, label_y);
+            Text(rp, center, clen);
+        }
+    } else {
+        WORD cx = bx + ((WORD)bw - ctw) / 2;
+        if (cx < bx) cx = bx;
+        Move(rp, cx, label_y);
+        Text(rp, center, clen);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Disk map drawing (matches AmigaPart _draw_map style)                */
 /* ------------------------------------------------------------------ */
 
@@ -620,6 +925,8 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
     LONG  fill  = (bg_pen  >= 0) ? bg_pen  : 0;
     LONG  rfill = (rdb_pen >= 0) ? rdb_pen : 2;
     WORD  i;
+
+    draw_zoom_label(win, rdb, bx, bw);
 
     /* Map inner area - leave 1px border all round */
     WORD  mx  = bx + 1;
@@ -658,10 +965,11 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
 
     {
         ULONG lo    = rdb->lo_cyl;
-        ULONG hi    = rdb->valid ? rdb->hi_cyl : rdb->cylinders - 1;
-        ULONG total = hi + 1;   /* full disk cylinder count (including RDB area) */
+        struct MapView v;   /* visible cylinder window (zoom/pan) */
 
-#define MAP_X(cyl) ((WORD)(mx + (WORD)((UQUAD)(cyl) * mw / total)))
+        pv_view(rdb, bx, bw, &v);
+
+#define MAP_X(cyl) MapView_ClipX(&v, (ULONG)(cyl))
 
         /* RDB reserved area (cylinder 0 .. lo_cyl-1) */
         if (lo > 0) {
@@ -687,6 +995,9 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
             WORD  px2 = MAP_X(pi->high_cyl + 1);
             LONG  pen;
             WORD  pw;
+
+            /* Zoomed in: partitions wholly outside the view aren't drawn. */
+            if (!MapView_Overlaps(&v, pi->low_cyl, pi->high_cyl)) continue;
 
             /* Clip to map area - a partition with high_cyl > rdb->hi_cyl
                (e.g. after a buggy geometry update) must not draw past
@@ -774,6 +1085,7 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
                     ULONG lo_cyl = MBR_LBAToCyl(mp->lba_start, mheads, msectors);
                     ULONG hi_cyl = MBR_LBAToCyl(mp->lba_start + mp->lba_size - 1,
                                                  mheads, msectors);
+                    if (!MapView_Overlaps(&v, lo_cyl, hi_cyl)) continue;
                     px1 = MAP_X(lo_cyl);
                     px2 = MAP_X(hi_cyl + 1);
                 }
@@ -831,33 +1143,14 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
         /* Selection highlight: 3-px bright frame + dark shadow frame.
            Works for both RDB and MBR selections. */
         {
-            WORD sx1 = -1, sx2 = -1;
-            WORD bsz = 3;
+            WORD  sx1 = -1, sx2 = -1;
+            WORD  bsz = 3;
+            ULONG slo, shi;
 
-            if (sel >= 0 && sel < (WORD)rdb->num_parts) {
-                struct PartInfo *sp = &rdb->parts[sel];
-                sx1 = MAP_X(sp->low_cyl);
-                sx2 = MAP_X(sp->high_cyl + 1);
-            } else if (sel >= (WORD)rdb->num_parts && s_mbr && s_mbr->valid) {
-                /* Find which MBR entry this list position corresponds to */
-                WORD list_pos = (WORD)rdb->num_parts;
-                UWORD mi;
-                ULONG mheads   = rdb->heads   > 0 ? rdb->heads   : 1;
-                ULONG msectors = rdb->sectors > 0 ? rdb->sectors : 1;
-                for (mi = 0; mi < MBR_MAX_PARTS; mi++) {
-                    if (!s_mbr->parts[mi].present) continue;
-                    if (list_pos == sel) {
-                        ULONG lo = MBR_LBAToCyl(s_mbr->parts[mi].lba_start,
-                                                 mheads, msectors);
-                        ULONG hi = MBR_LBAToCyl(s_mbr->parts[mi].lba_start +
-                                                 s_mbr->parts[mi].lba_size - 1,
-                                                 mheads, msectors);
-                        sx1 = MAP_X(lo);
-                        sx2 = MAP_X(hi + 1);
-                        break;
-                    }
-                    list_pos++;
-                }
+            if (sel_cyl_range(rdb, sel, &slo, &shi) &&
+                MapView_Overlaps(&v, slo, shi)) {
+                sx1 = MAP_X(slo);
+                sx2 = MAP_X(shi + 1);
             }
 
             if (sx1 >= 0 && sx2 > sx1) {
@@ -877,47 +1170,9 @@ static void draw_map(struct Window *win, struct RDBInfo *rdb, WORD sel,
 
 #undef MAP_X
 
-        /* Axis labels - lo/hi cylinder only; free space is shown in info area */
-        {
-            char lo_str[24], hi_str[24];
-            WORD label_y = by + (WORD)bh + 2 + fb;
-
-            DP_SNPRINTF(lo_str, GS(MSG_PV_CYL_FMT), (unsigned long)lo);
-            DP_SNPRINTF(hi_str, GS(MSG_PV_CYL_FMT), (unsigned long)hi);
-
-            /* Erase the label strip before redrawing - prevents ghost text
-               when the map is redrawn at a different position after resize. */
-            SetAPen(rp, 0);
-            SetDrMd(rp, JAM2);
-            RectFill(rp, bx, by+(WORD)bh+1, bx+(WORD)bw, by+(WORD)bh+fh+4);
-
-            SetAPen(rp, 1);
-            SetDrMd(rp, JAM1);
-            Move(rp, bx, label_y);
-            Text(rp, lo_str, strlen(lo_str));
-
-            {
-                UWORD hlen = strlen(hi_str);
-                WORD  txw  = rp->TxWidth ? (WORD)rp->TxWidth : 8;
-                WORD  htw  = (WORD)(hlen * (UWORD)txw);
-                Move(rp, bx+(WORD)bw-htw, label_y);
-                Text(rp, hi_str, hlen);
-
-                /* Centred usage hint - only if it fits between the Cyl labels */
-                {
-                    const char *hint = GS(MSG_PV_MAP_HINT);
-                    UWORD hintlen = strlen(hint);
-                    WORD  hinttw  = (WORD)TextLength(rp, hint, hintlen);
-                    WORD  lo_end  = (WORD)TextLength(rp, lo_str, (UWORD)strlen(lo_str)) + 4;
-                    WORD  avail   = (WORD)bw - lo_end - htw - 8;
-                    if (hinttw <= avail) {
-                        WORD cx = bx + lo_end + (avail - hinttw) / 2;
-                        Move(rp, cx, label_y);
-                        Text(rp, hint, hintlen);
-                    }
-                }
-            }
-        }
+        /* Axis labels - lo/hi cylinder + usage hint; free space is shown
+           in the info area */
+        draw_axis_strip(win, rdb, bx, by, bw, bh, NULL, FALSE);
     }
 }
 
@@ -930,13 +1185,7 @@ static void draw_drag_info(struct Window *win, const struct RDBInfo *rdb,
                             WORD drag_part,
                             WORD bx, WORD by, UWORD bw, UWORD bh)
 {
-    struct RastPort *rp = win->RPort;
-    WORD  fb  = rp->TxBaseline;
-    WORD  fh  = rp->TxHeight;
-    WORD  txw = rp->TxWidth ? (WORD)rp->TxWidth : 8;
-    WORD  label_y = by + (WORD)bh + 2 + fb;
     char  info[64];
-    UWORD ilen;
     const struct PartInfo *pi = &rdb->parts[drag_part];
     ULONG cyls  = pi->high_cyl >= pi->low_cyl
                   ? pi->high_cyl - pi->low_cyl + 1 : 0;
@@ -953,23 +1202,8 @@ static void draw_drag_info(struct Window *win, const struct RDBInfo *rdb,
             (unsigned long)pi->high_cyl,
             sz);
 
-    /* Erase axis label strip */
-    SetAPen(rp, 0);
-    SetDrMd(rp, JAM2);
-    RectFill(rp, bx, by+(WORD)bh+1,
-             bx+(WORD)bw, by+(WORD)bh+fh+4);
-
-    /* Draw centred info string */
-    ilen = strlen(info);
-    {
-        WORD  iw2 = (WORD)(ilen * (UWORD)txw);
-        WORD  cx  = bx + ((WORD)bw - iw2) / 2;
-        if (cx < bx) cx = bx;
-        SetAPen(rp, 1);
-        SetDrMd(rp, JAM1);
-        Move(rp, cx, label_y);
-        Text(rp, info, ilen);
-    }
+    /* Between the Cyl labels, in place of the usage hint */
+    draw_axis_strip(win, rdb, bx, by, bw, bh, info, TRUE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -982,25 +1216,21 @@ static void draw_new_part_overlay(struct Window *win,
                                    WORD bx, WORD by, UWORD bw, UWORD bh)
 {
     struct RastPort *rp  = win->RPort;
-    WORD  mx    = bx + 1;
-    UWORD mw    = bw - 2;
     WORD  my    = by + 1;
     UWORD mh    = bh - 2;
-    ULONG total = rdb->hi_cyl + 1;
+    struct MapView v;
     WORD  px1, px2, pw;
     char  sz[16], info[64];
-    UWORD ilen;
     WORD  fb  = rp->TxBaseline;
     WORD  fh  = rp->TxHeight;
     WORD  txw = rp->TxWidth ? (WORD)rp->TxWidth : 8;
-    WORD  label_y = by + (WORD)bh + 2 + fb;
     ULONG cyls, bpc;
     UQUAD bytes;
     LONG  pen;
 
-    if (total == 0) return;
-    px1 = (WORD)(mx + (WORD)((UQUAD)lo       * mw / total));
-    px2 = (WORD)(mx + (WORD)((UQUAD)(hi + 1) * mw / total));
+    pv_view(rdb, bx, bw, &v);
+    px1 = MapView_ClipX(&v, lo);
+    px2 = MapView_ClipX(&v, hi + 1);
     if (px2 < px1 + 2) px2 = px1 + 2;
     pw = px2 - px1;
 
@@ -1040,22 +1270,10 @@ static void draw_new_part_overlay(struct Window *win,
         }
     }
 
-    /* Info strip below map */
+    /* Info strip below map, between the Cyl labels */
     snprintf(info, sizeof(info), GS(MSG_PV_NEW_INFO_FMT),
             (unsigned long)lo, (unsigned long)hi, sz);
-    SetAPen(rp, 0);
-    SetDrMd(rp, JAM2);
-    RectFill(rp, bx, by+(WORD)bh+1, bx+(WORD)bw, by+(WORD)bh+fh+4);
-    ilen = strlen(info);
-    {
-        WORD iw2 = (WORD)(ilen * (UWORD)txw);
-        WORD cx  = bx + ((WORD)bw - iw2) / 2;
-        if (cx < bx) cx = bx;
-        SetAPen(rp, 1);
-        SetDrMd(rp, JAM1);
-        Move(rp, cx, label_y);
-        Text(rp, info, ilen);
-    }
+    draw_axis_strip(win, rdb, bx, by, bw, bh, info, TRUE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1235,6 +1453,7 @@ static void draw_static(struct Window *win, const char *devname, ULONG unit,
     if (lastdisk_gad) RefreshGList(lastdisk_gad, win, NULL, lastlun_gad ? 2 : 1);
     draw_map (win, rdb, sel, bx, by, bw, bh);
     draw_col_header(win, hx, hy, hw);
+    if (s_zoom_row) RefreshGList(s_zoom_row, win, NULL, ZOOM_ROW_GADGETS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1427,13 +1646,12 @@ static void find_free_range(const struct RDBInfo *rdb, ULONG *lo, ULONG *hi)
 /* ------------------------------------------------------------------ */
 
 static WORD hit_test_partition(const struct RDBInfo *rdb,
-                                WORD mx, UWORD mw, ULONG total,
-                                WORD mouse_x)
+                                const struct MapView *v, WORD mouse_x)
 {
     UWORD i;
     for (i = 0; i < rdb->num_parts; i++) {
-        WORD lx = (WORD)(mx + (WORD)((UQUAD)rdb->parts[i].low_cyl      * mw / total));
-        WORD rx = (WORD)(mx + (WORD)((UQUAD)(rdb->parts[i].high_cyl+1) * mw / total));
+        LONG lx = MapView_X(v, rdb->parts[i].low_cyl);
+        LONG rx = MapView_X(v, rdb->parts[i].high_cyl + 1);
         if (mouse_x >= lx && mouse_x < rx) return (WORD)i;
     }
     return -1;
@@ -1442,8 +1660,7 @@ static WORD hit_test_partition(const struct RDBInfo *rdb,
 /* Hit-test: which MBR partition bar contains map x-coordinate.
    Returns listview index (rdb->num_parts + ordinal-of-present-slot) or -1. */
 static WORD hit_test_mbr_partition(const struct RDBInfo *rdb,
-                                    WORD mx, UWORD mw, ULONG total,
-                                    WORD mouse_x)
+                                    const struct MapView *v, WORD mouse_x)
 {
     UWORD i, n;
     if (!s_mbr || !s_mbr->valid || !rdb || rdb->heads == 0 || rdb->sectors == 0)
@@ -1457,8 +1674,8 @@ static WORD hit_test_mbr_partition(const struct RDBInfo *rdb,
             ULONG hi = MBR_LBAToCyl(s_mbr->parts[i].lba_start +
                                      s_mbr->parts[i].lba_size - 1,
                                      rdb->heads, rdb->sectors);
-            WORD  lx = (WORD)(mx + (WORD)((UQUAD)lo       * mw / total));
-            WORD  rx = (WORD)(mx + (WORD)((UQUAD)(hi + 1) * mw / total));
+            LONG  lx = MapView_X(v, lo);
+            LONG  rx = MapView_X(v, hi + 1);
             if (mouse_x >= lx && mouse_x < rx) return (WORD)n;
         }
         n++;
@@ -1470,25 +1687,52 @@ static WORD hit_test_mbr_partition(const struct RDBInfo *rdb,
 /*                                                                     */
 /* Returns partition index and sets *edge_out (0=left, 1=right),      */
 /* or -1 if no edge within tolerance.                                  */
-/* mx = map inner left, mw = map inner width, total = hi_cyl+1        */
 /* ------------------------------------------------------------------ */
 
 #define DRAG_TOL 5   /* pixel tolerance for edge hit */
 
 static WORD hit_test_edge(const struct RDBInfo *rdb,
-                           WORD mx, UWORD mw, ULONG total,
+                           const struct MapView *v,
                            WORD mouse_x, WORD *edge_out)
 {
     UWORD i;
     for (i = 0; i < rdb->num_parts; i++) {
-        WORD lx = (WORD)(mx + (WORD)((UQUAD)rdb->parts[i].low_cyl  * mw / total));
-        WORD rx = (WORD)(mx + (WORD)((UQUAD)(rdb->parts[i].high_cyl+1) * mw / total));
-        WORD dl = mouse_x - lx; if (dl < 0) dl = -dl;
-        WORD dr = mouse_x - rx; if (dr < 0) dr = -dr;
+        LONG lx = MapView_X(v, rdb->parts[i].low_cyl);
+        LONG rx = MapView_X(v, rdb->parts[i].high_cyl + 1);
+        LONG dl = mouse_x - lx; if (dl < 0) dl = -dl;
+        LONG dr = mouse_x - rx; if (dr < 0) dr = -dr;
         if (dl <= DRAG_TOL) { *edge_out = 0; return (WORD)i; }
         if (dr <= DRAG_TOL) { *edge_out = 1; return (WORD)i; }
     }
     return -1;
+}
+
+/* Where in partition blk's bar the pointer is: MAPZONE_RESIZE near the right
+   edge, MAPZONE_LEFT near the left edge, MAPZONE_MOVE in the middle.  The
+   edge zone is max(DRAG_TOL, visible width / 8) so wide partitions get a
+   generous resize handle - measured on the visible part only, so a zoomed-in
+   partition whose edge is off-screen doesn't turn the whole view into a
+   resize zone for an edge the user can't see. */
+#define MAPZONE_MOVE   0
+#define MAPZONE_RESIZE 1
+#define MAPZONE_LEFT   2
+
+static int map_click_zone(const struct RDBInfo *rdb, const struct MapView *v,
+                          WORD blk, WORD mouse_x)
+{
+    LONG lx_p    = MapView_X(v, rdb->parts[blk].low_cyl);
+    LONG rx_p    = MapView_X(v, rdb->parts[blk].high_cyl + 1);
+    LONG vis_l   = lx_p < v->mx ? v->mx : lx_p;
+    LONG vis_r   = rx_p > v->mx + (LONG)v->mw ? v->mx + (LONG)v->mw : rx_p;
+    LONG d_left  = (LONG)mouse_x - lx_p;
+    LONG d_right = (rx_p - 1) - (LONG)mouse_x;
+    LONG ezone   = (vis_r - vis_l) / 8;
+    if (d_left  < 0) d_left  = 0;
+    if (d_right < 0) d_right = 0;
+    if (ezone < DRAG_TOL) ezone = DRAG_TOL;
+    if (d_right <= ezone) return MAPZONE_RESIZE;
+    if (d_left  <= ezone) return MAPZONE_LEFT;
+    return MAPZONE_MOVE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1517,10 +1761,11 @@ static BOOL build_gadgets(APTR vi,
                            struct Gadget **out_lv_gad,
                            struct Gadget **out_lastdisk_gad,
                            struct Gadget **out_lastlun_gad,
+                           struct Gadget **out_zoom_gad,
                            struct PartLayout *lay)
 {
     struct Gadget  *gctx = NULL, *glist = NULL, *lv = NULL, *prev;
-    struct Gadget  *ldisk = NULL, *llun = NULL;
+    struct Gadget  *ldisk = NULL, *llun = NULL, *zsc = NULL;
     struct NewGadget ng;
     struct TagItem   bt[] = { { TAG_DONE, 0 } };
     UWORD inner_w = win_w - bor_l - bor_r;
@@ -1540,6 +1785,13 @@ static BOOL build_gadgets(APTR vi,
     UWORD cbw_disk = (UWORD)(font_h * 2 + 82);   /* checkbox + label widths, */
     UWORD cbw_lun  = (UWORD)(font_h * 2 + 82);   /* measured below when possible */
     UWORD btn_rows = 1;
+    /* Zoom row under the map: scroller + "-" "+" "Fit" "Selected" buttons */
+    static const UWORD zoom_gids[4] = { GID_ZOOMOUT, GID_ZOOMIN,
+                                        GID_ZOOMFIT, GID_ZOOMSEL };
+    const char *zoom_lbl[4];
+    UWORD zbw[4];
+    UWORD zlw = (UWORD)(font_h * 7);   /* zoom factor label box width */
+    WORD  zoom_y;
     BOOL  row_fit = FALSE;
     UWORD row_slack = 0, row_x = 0;
     static const LONG btn_ids[8] = { MSG_PV_BTN_INITRDB, MSG_PV_BTN_ADD,
@@ -1555,9 +1807,22 @@ static BOOL build_gadgets(APTR vi,
     lay->by = (WORD)(bor_t + pad + info_h + pad);
     lay->bw = inner_w - pad * 2;
     lay->bh = map_h;
+    /* 2 px below the Cyl label strip, which draw_map() erases up to and
+       including its last row. */
+    zoom_y  = (WORD)(lay->by + map_h + lbl_h + 2);
     lay->hx = (WORD)(bor_l + pad);
-    lay->hy = (WORD)(bor_t + pad + info_h + pad + map_h + lbl_h + pad);
+    lay->hy = (WORD)(zoom_y + btn_h + pad);
     lay->hw = inner_w - pad * 2;
+
+    zoom_lbl[0] = "-";
+    zoom_lbl[1] = "+";
+    zoom_lbl[2] = GS(MSG_PV_BTN_ZOOMFIT);
+    zoom_lbl[3] = GS(MSG_PV_BTN_ZOOMSEL);
+    {
+        UWORD k;
+        for (k = 0; k < 4; k++)
+            zbw[k] = (UWORD)(font_h * (k < 2 ? 2 : 5));   /* unmeasured fallback */
+    }
 
     lv_top = (UWORD)(lay->hy + (WORD)hdr_h);
     lv_h   = (btn_y > lv_top + pad + row_h * 2)
@@ -1599,7 +1864,10 @@ static BOOL build_gadgets(APTR vi,
                additionally truncates names that still don't fit. */
             drive_min = MAXW("DH10    ", 8, "Drive", 5);
             avail = (UWORD)(inner_w - pad * 2);     /* listview gadget width   */
-            avail = (avail > 8) ? (UWORD)(avail - 8) : avail; /* frame margin  */
+            /* minus frame margin and the listview's own vertical scroller
+               (16 px in GadTools) - the Boot column used to end under it */
+            avail = (avail > 8 + LV_SCROLLER_W)
+                    ? (UWORD)(avail - 8 - LV_SCROLLER_W) : avail;
             fixed = (UWORD)(cx + markw + locylw + hicylw + fsw + sizew + bootw
                             + gap * 6 + 8);
             drivew = (avail > (UWORD)(fixed + drive_min))
@@ -1632,6 +1900,16 @@ static BOOL build_gadgets(APTR vi,
                                     + tf->tf_XSize * 2 + 6);
                 }
                 have_bw = TRUE;
+                for (k = 0; k < 4; k++)
+                    zbw[k] = (UWORD)(TextLength(&rp, zoom_lbl[k],
+                                                (ULONG)strlen(zoom_lbl[k]))
+                                     + tf->tf_XSize * 2 + 6);
+                {   /* widest likely zoom text, e.g. "Zoom 9999.9x" */
+                    char zs[32];
+                    DP_SNPRINTF(zs, GS(MSG_PV_ZOOM_FMT), 9999UL, 9UL);
+                    zlw = (UWORD)(TextLength(&rp, zs, (ULONG)strlen(zs))
+                                  + tf->tf_XSize);
+                }
                 /* CHECKBOX_KIND is a fixed 26-px image with the label to its
                    right: box + gap + text + margin. */
                 {
@@ -1754,12 +2032,70 @@ static BOOL build_gadgets(APTR vi,
         ng.ng_Flags      = PLACETEXT_RIGHT;
         llun = CreateGadgetA(CHECKBOX_KIND, prev, &ng, cbt);
         if (!llun) { FreeGadgets(glist); return FALSE; }
+        prev = llun;
+    }
+
+    /* Zoom row: buttons right-aligned, the pan scroller fills the rest.
+       sync_zoom_scroller() sets the real Top/Total/Visible after AddGList. */
+    {
+        struct TagItem st[] = {
+            { GTSC_Top,     0 },
+            { GTSC_Total,   1 },
+            { GTSC_Visible, 1 },
+            { GTSC_Arrows,  (ULONG)(font_h + 6) },
+            { PGA_Freedom,  LORIENT_HORIZ },
+            { GA_RelVerify, TRUE },
+            { GA_Immediate, TRUE },
+            { TAG_DONE, 0 }
+        };
+        WORD  left  = (WORD)(bor_l + pad);
+        WORD  x     = (WORD)(bor_l + inner_w - pad);
+        WORD  sc_w;
+        UWORD k;
+
+        ng.ng_TopEdge    = zoom_y;
+        ng.ng_Height     = btn_h;
+        ng.ng_Flags      = 0;
+        for (k = 0; k < 4; k++) x -= (WORD)(zbw[k] + pad);
+        x -= (WORD)(zlw + pad);                   /* zoom factor label */
+        if (x - left < 40) {                      /* narrow: drop the label */
+            x += (WORD)(zlw + pad);
+            zlw = 0;
+        }
+        sc_w = (WORD)(x - left);
+        if (sc_w < 40) sc_w = 40;
+
+        ng.ng_LeftEdge   = left;
+        ng.ng_Width      = (UWORD)sc_w;
+        ng.ng_GadgetText = NULL;
+        ng.ng_GadgetID   = GID_ZOOMSCROLL;
+        zsc = CreateGadgetA(SCROLLER_KIND, prev, &ng, st);
+        if (!zsc) { FreeGadgets(glist); return FALSE; }
+        prev = zsc;
+
+        /* Label box between scroller and buttons, drawn by draw_zoom_label() */
+        s_zl_x = (WORD)(left + sc_w + pad);
+        s_zl_y = zoom_y;
+        s_zl_w = zlw;
+        s_zl_h = btn_h;
+
+        x = (WORD)(s_zl_x + (zlw ? zlw + pad : 0));
+        for (k = 0; k < 4; k++) {
+            ng.ng_LeftEdge   = x;
+            ng.ng_Width      = zbw[k];
+            ng.ng_GadgetText = (UBYTE *)zoom_lbl[k];
+            ng.ng_GadgetID   = zoom_gids[k];
+            prev = CreateGadgetA(BUTTON_KIND, prev, &ng, bt);
+            if (!prev) { FreeGadgets(glist); return FALSE; }
+            x += (WORD)(zbw[k] + pad);
+        }
     }
 
     *out_glist        = glist;
     *out_lv_gad       = lv;
     *out_lastdisk_gad = ldisk;
     *out_lastlun_gad  = llun;
+    *out_zoom_gad     = zsc;
     return TRUE;
 }
 
@@ -2133,6 +2469,7 @@ BOOL partview_run(const char *devname, ULONG unit)
     struct Gadget    *lv_gad        = NULL;
     struct Gadget    *lastdisk_gad  = NULL;
     struct Gadget    *lastlun_gad   = NULL;
+    struct Gadget    *zoom_gad      = NULL;   /* map pan scroller */
     struct Window    *win      = NULL;
     struct Menu      *menu     = NULL;
     WORD              sel      = -1;
@@ -2144,6 +2481,8 @@ BOOL partview_run(const char *devname, ULONG unit)
 
     s_unmount_count = 0;     /* no deletes pending unmount yet this session */
     s_mbr = NULL;            /* no MBR loaded yet */
+    s_view_lo = 0;           /* every disk opens showing the whole map */
+    s_view_span = 0;
     /* g_part_sel is a static shared across partview_run() sessions (once
        per device/unit opened) - reset unconditionally, before any
        early-return path, so a selection from a previous disk never shows
@@ -2266,7 +2605,10 @@ BOOL partview_run(const char *devname, ULONG unit)
             WFLG_SIZEBBOTTOM expands BorderBottom beyond scr->WBorBottom, so
             we cannot compute correct gadget positions until after open. ---- */
     {
-        UWORD font_h  = scr->Font->ta_YSize;
+        UWORD font_h  = (GfxBase->DefaultFont &&
+                         GfxBase->DefaultFont->tf_YSize > scr->Font->ta_YSize)
+                        ? GfxBase->DefaultFont->tf_YSize
+                        : scr->Font->ta_YSize;   /* see pv_text_h() */
         UWORD bor_l   = (UWORD)scr->WBorLeft;
         UWORD bor_t   = (UWORD)scr->WBorTop + font_h + 1;
         UWORD bor_r   = (UWORD)scr->WBorRight;
@@ -2283,6 +2625,7 @@ BOOL partview_run(const char *devname, ULONG unit)
            rows; underestimating would clip the buttons. */
         UWORD bor_b_est = (UWORD)scr->WBorBottom + font_h + 4;
         UWORD fixed_est = bor_t + pad + info_h + pad + map_h + lbl_h
+                        + 2 + btn_h                    /* zoom row */
                         + pad + hdr_h + pad + btn_h + pad + bor_b_est;
         UWORD win_h   = fixed_est + row_h * 8;
         UWORD min_w   = bor_l + bor_r + pad * 2 + 7 * (40 + pad) - pad;
@@ -2344,10 +2687,14 @@ BOOL partview_run(const char *devname, ULONG unit)
                 { WA_MinHeight, min_h },
                 { WA_MaxWidth,  (ULONG)scr->Width  },
                 { WA_MaxHeight, (ULONG)scr->Height },
+                /* INTUITICKS: auto-repeat of the zoom scroller's arrows.
+                   VANILLAKEY: +/-/0 zoom keys.  RAWKEY: mouse wheel. */
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                 IDCMP_GADGETDOWN  | IDCMP_REFRESHWINDOW |
                                 IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE |
-                                IDCMP_NEWSIZE | IDCMP_MENUPICK },
+                                IDCMP_NEWSIZE | IDCMP_MENUPICK |
+                                IDCMP_INTUITICKS | IDCMP_VANILLAKEY |
+                                IDCMP_RAWKEY },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
                                 WFLG_CLOSEGADGET | WFLG_ACTIVATE |
                                 PV_REFRESH_FLAG | WFLG_REPORTMOUSE |
@@ -2365,14 +2712,15 @@ BOOL partview_run(const char *devname, ULONG unit)
     /* ---- Build gadgets from the window's actual border sizes ---- */
     {
         struct PartLayout lay;
-        UWORD fh = (UWORD)win->WScreen->Font->ta_YSize;
+        UWORD fh = pv_text_h(win);
 
         if (!build_gadgets(vi,
                            (UWORD)win->Width,       (UWORD)win->Height,
                            (UWORD)win->BorderLeft,  (UWORD)win->BorderTop,
                            (UWORD)win->BorderRight, (UWORD)win->BorderBottom,
                            fh, win->WScreen->Font, rdb->flags,
-                           &glist, &lv_gad, &lastdisk_gad, &lastlun_gad, &lay))
+                           &glist, &lv_gad, &lastdisk_gad, &lastlun_gad,
+                           &zoom_gad, &lay))
             goto cleanup;
 
         ix = lay.ix; iy = lay.iy; iw = lay.iw;
@@ -2381,6 +2729,8 @@ BOOL partview_run(const char *devname, ULONG unit)
 
         AddGList(win, glist, (UWORD)-1, -1, NULL);
         RefreshGList(glist, win, NULL, -1);
+        s_zoom_row = zoom_gad;
+        sync_zoom_scroller(win, zoom_gad, rdb, bx, bw, TRUE);
 
         /* Now that we know the real border sizes, set precise size limits.
            The estimate used for WA_MinHeight at open time may have been off
@@ -2395,6 +2745,7 @@ BOOL partview_run(const char *devname, ULONG unit)
             UWORD row_h2   = fh + 2;
             UWORD fixed2   = (UWORD)win->BorderTop
                            + pad2 + info_h2 + pad2 + map_h2 + lbl_h2
+                           + 2 + btn_h2                 /* zoom row */
                            + pad2 + hdr_h2  + pad2 + btn_h2
                            + pad2 + (UWORD)win->BorderBottom;
             WORD  min_h2   = (WORD)(fixed2 + row_h2 * 2);
@@ -2716,9 +3067,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                         if (rdb && rdb->valid &&
                             mouse_y >= by && mouse_y <= by + (WORD)bh)
                         {
-                            WORD  mx2   = bx + 1;
-                            UWORD mw2   = bw - 2;
-                            ULONG total = rdb->hi_cyl + 1;
+                            struct MapView v2;
 
                             /* Decide intent. Priority:
                              *   click inside partition near right edge -> resize
@@ -2726,33 +3075,26 @@ BOOL partview_run(const char *devname, ULONG unit)
                              *   click inside partition middle           -> move (or double-click -> edit)
                              *   click outside any partition near a right edge -> resize that partition
                              *   click in free space                     -> new-partition drag
-                             * The inside-partition check uses an edge zone of max(DRAG_TOL, width/8)
-                             * so wide partitions get a generously sized resize handle. */
-                            WORD blk_in     = hit_test_partition(rdb, mx2, mw2, total, mouse_x);
+                             * The inside-partition edge zones come from map_click_zone(). */
+                            WORD blk_in;
                             WORD resize_part = -1;
                             WORD left_dlg_part = -1;
                             WORD move_blk   = -1;
                             WORD mbr_blk    = -1;
 
+                            pv_view(rdb, bx, bw, &v2);
+                            blk_in = hit_test_partition(rdb, &v2, mouse_x);
                             if (blk_in >= 0) {
-                                WORD lx_p = (WORD)(mx2 + (WORD)((UQUAD)rdb->parts[blk_in].low_cyl       * mw2 / total));
-                                WORD rx_p = (WORD)(mx2 + (WORD)((UQUAD)(rdb->parts[blk_in].high_cyl + 1) * mw2 / total));
-                                WORD d_left  = (WORD)(mouse_x - lx_p);
-                                WORD d_right = (WORD)((rx_p - 1) - mouse_x);
-                                WORD ezone   = (WORD)((rx_p - lx_p) / 8);
-                                if (d_left  < 0) d_left  = 0;
-                                if (d_right < 0) d_right = 0;
-                                if (ezone < DRAG_TOL) ezone = DRAG_TOL;
-                                if (d_right <= ezone)      resize_part   = blk_in;
-                                else if (d_left  <= ezone) left_dlg_part = blk_in;
-                                else                       move_blk      = blk_in;
+                                int zone = map_click_zone(rdb, &v2, blk_in, mouse_x);
+                                if (zone == MAPZONE_RESIZE)    resize_part   = blk_in;
+                                else if (zone == MAPZONE_LEFT) left_dlg_part = blk_in;
+                                else                           move_blk      = blk_in;
                             } else {
                                 /* Outside any RDB partition - check RDB edge then MBR bar */
                                 WORD ee = 0;
-                                WORD ep = hit_test_edge(rdb, mx2, mw2, total, mouse_x, &ee);
+                                WORD ep = hit_test_edge(rdb, &v2, mouse_x, &ee);
                                 if (ep >= 0 && ee == 1) resize_part = ep;
-                                else mbr_blk = hit_test_mbr_partition(rdb, mx2, mw2,
-                                                                       total, mouse_x);
+                                else mbr_blk = hit_test_mbr_partition(rdb, &v2, mouse_x);
                             }
 
                             if (resize_part >= 0) {
@@ -2892,12 +3234,8 @@ BOOL partview_run(const char *devname, ULONG unit)
                                        rdb->heads > 0 && rdb->sectors > 0) {
                                 /* Empty space (not inside any RDB or MBR bar) -
                                    start new-partition drag */
-                                LONG  dx = (LONG)(mouse_x - (WORD)mx2);
-                                ULONG start_cyl;
+                                ULONG start_cyl = MapView_Cyl(&v2, mouse_x);
                                 UWORD kk;
-                                if (dx < 0) dx = 0;
-                                if (dx >= (LONG)mw2) dx = (LONG)(mw2 - 1);
-                                start_cyl = (ULONG)((UQUAD)(ULONG)dx * total / (ULONG)mw2);
                                 if (start_cyl < rdb->lo_cyl) start_cyl = rdb->lo_cyl;
                                 if (start_cyl > rdb->hi_cyl) start_cyl = rdb->hi_cyl;
                                 /* Find free gap containing start_cyl */
@@ -2960,13 +3298,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                so a no-op drag never triggers the destructive
                                shrink/move confirmation. */
                             {
-                                WORD  mx2   = bx + 1;
-                                UWORD mw2   = (UWORD)bw - 2;
-                                ULONG total = rdb->hi_cyl + 1;
-                                WORD  lo_px_orig = (WORD)(mx2 + (WORD)((UQUAD)drag_orig_lo * mw2 / total));
-                                WORD  hi_px_orig = (WORD)(mx2 + (WORD)((UQUAD)(drag_orig_hi + 1) * mw2 / total));
-                                WORD  lo_px_new  = (WORD)(mx2 + (WORD)((UQUAD)rdb->parts[confirmed_part].low_cyl * mw2 / total));
-                                WORD  hi_px_new  = (WORD)(mx2 + (WORD)((UQUAD)(rdb->parts[confirmed_part].high_cyl + 1) * mw2 / total));
+                                struct MapView v2;
+                                LONG  lo_px_orig, hi_px_orig, lo_px_new, hi_px_new;
+                                pv_view(rdb, bx, bw, &v2);
+                                lo_px_orig = MapView_X(&v2, drag_orig_lo);
+                                hi_px_orig = MapView_X(&v2, drag_orig_hi + 1);
+                                lo_px_new  = MapView_X(&v2, rdb->parts[confirmed_part].low_cyl);
+                                hi_px_new  = MapView_X(&v2, rdb->parts[confirmed_part].high_cyl + 1);
 
                                 visually_changed = (lo_px_orig != lo_px_new) ||
                                                    (hi_px_orig != hi_px_new);
@@ -3063,6 +3401,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                             draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
                                         ix, iy, iw, bx, by, bw, bh,
                                         hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                            /* A drag ends in requesters/dialogs over this window; repaint
+                               every gadget (list frame, button row, scroller arrows) too. */
+                            refresh_all_gadgets(win, glist);
                         } else if (drag_new) {
                             drag_new = FALSE;
                             /* Open Add Partition dialog with dragged range */
@@ -3103,6 +3444,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                             draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
                                         ix, iy, iw, bx, by, bw, bh,
                                         hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                            /* A drag ends in requesters/dialogs over this window; repaint
+                               every gadget (list frame, button row, scroller arrows) too. */
+                            refresh_all_gadgets(win, glist);
                         } else if (drag_move_part >= 0) {
                             WORD confirmed_move = drag_move_part;
                             ULONG dragged_lo    = rdb->parts[confirmed_move].low_cyl;
@@ -3125,14 +3469,20 @@ BOOL partview_run(const char *devname, ULONG unit)
                             draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
                                         ix, iy, iw, bx, by, bw, bh,
                                         hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                            /* A drag ends in requesters/dialogs over this window; repaint
+                               every gadget (list frame, button row, scroller arrows) too. */
+                            refresh_all_gadgets(win, glist);
                         }
                     }
                     break;
 
                 case IDCMP_MOUSEMOVE:
-                    if (drag_part >= 0 && rdb && rdb->valid) {
-                        UWORD mw2   = bw - 2;
-                        ULONG total = rdb->hi_cyl + 1;
+                    if (zoom_gad && gad == zoom_gad) {
+                        /* Pan scroller knob being dragged (Code = new top) */
+                        zoom_scrolled(rdb, bx, bw, code);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                    } else if (drag_part >= 0 && rdb && rdb->valid) {
+                        struct MapView v2;
                         LONG  dpx   = (LONG)(mouse_x - drag_anchor_x);
                         LONG  dcyl;
                         ULONG new_cyl;
@@ -3143,11 +3493,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                            the exact starting pixel could land on a different
                            cylinder than drag_orig_hi and falsely report a change.
                            A delta from the anchor guarantees dpx==0 -> dcyl==0. */
-                        if (mw2 > 0)
-                            dcyl = (LONG)((UQUAD)(ULONG)(dpx < 0 ? -dpx : dpx)
-                                          * total / (ULONG)mw2);
-                        else
-                            dcyl = 0;
+                        pv_view(rdb, bx, bw, &v2);
+                        dcyl = (LONG)MapView_DeltaCyl(&v2,
+                                                      (ULONG)(dpx < 0 ? -dpx : dpx));
                         if (dpx < 0) dcyl = -dcyl;
 
                         if (dcyl < 0 && (ULONG)(-dcyl) > drag_anchor_cyl)
@@ -3165,18 +3513,15 @@ BOOL partview_run(const char *devname, ULONG unit)
                         draw_map(win, rdb, sel, bx, by, bw, bh);
                         draw_drag_info(win, rdb, drag_part, bx, by, bw, bh);
                     } else if (drag_move_part >= 0 && rdb && rdb->valid) {
-                        UWORD mw2   = bw - 2;
-                        ULONG total = rdb->hi_cyl + 1;
+                        struct MapView v2;
                         LONG  dpx   = (LONG)(mouse_x - drag_move_anchor_x);
                         LONG  dcyl;
                         ULONG new_lo;
 
                         /* Convert pixel delta to cylinder delta */
-                        if (mw2 > 0)
-                            dcyl = (LONG)((UQUAD)(ULONG)(dpx < 0 ? -dpx : dpx)
-                                          * total / (ULONG)mw2);
-                        else
-                            dcyl = 0;
+                        pv_view(rdb, bx, bw, &v2);
+                        dcyl = (LONG)MapView_DeltaCyl(&v2,
+                                                      (ULONG)(dpx < 0 ? -dpx : dpx));
                         if (dpx < 0) dcyl = -dcyl;
 
                         /* Compute and clamp new lo */
@@ -3194,15 +3539,11 @@ BOOL partview_run(const char *devname, ULONG unit)
                         draw_map(win, rdb, sel, bx, by, bw, bh);
                         draw_drag_info(win, rdb, drag_move_part, bx, by, bw, bh);
                     } else if (drag_new && rdb && rdb->valid) {
-                        WORD  mx2   = bx + 1;
-                        UWORD mw2   = bw - 2;
-                        ULONG total = rdb->hi_cyl + 1;
-                        LONG  dx    = (LONG)(mouse_x - (WORD)mx2);
+                        struct MapView v2;
                         ULONG cyl;
 
-                        if (dx < 0)          dx = 0;
-                        if (dx >= (LONG)mw2) dx = (LONG)(mw2 - 1);
-                        cyl = (ULONG)((UQUAD)(ULONG)dx * total / (ULONG)mw2);
+                        pv_view(rdb, bx, bw, &v2);
+                        cyl = MapView_Cyl(&v2, mouse_x);
                         if (cyl < drag_new_min) cyl = drag_new_min;
                         if (cyl > drag_new_max) cyl = drag_new_max;
 
@@ -3222,21 +3563,17 @@ BOOL partview_run(const char *devname, ULONG unit)
                                 mouse_x >= bx && mouse_x < bx + (WORD)bw &&
                                 mouse_y >= by && mouse_y < by + (WORD)bh)
                             {
-                                WORD  mx2   = bx + 1;
-                                UWORD mw2   = bw - 2;
-                                ULONG total = rdb->hi_cyl + 1;
-                                WORD  blk_in = hit_test_partition(rdb, mx2, mw2, total, mouse_x);
+                                struct MapView v2;
+                                WORD  blk_in;
+                                pv_view(rdb, bx, bw, &v2);
+                                blk_in = hit_test_partition(rdb, &v2, mouse_x);
                                 if (blk_in >= 0) {
-                                    WORD lx_p = (WORD)(mx2 + (WORD)((UQUAD)rdb->parts[blk_in].low_cyl       * mw2 / total));
-                                    WORD rx_p = (WORD)(mx2 + (WORD)((UQUAD)(rdb->parts[blk_in].high_cyl + 1) * mw2 / total));
-                                    WORD d_right = (WORD)((rx_p - 1) - mouse_x);
-                                    WORD ezone   = (WORD)((rx_p - lx_p) / 8);
-                                    if (d_right < 0) d_right = 0;
-                                    if (ezone < DRAG_TOL) ezone = DRAG_TOL;
-                                    if (d_right <= ezone) want_resize = TRUE;
+                                    if (map_click_zone(rdb, &v2, blk_in, mouse_x)
+                                            == MAPZONE_RESIZE)
+                                        want_resize = TRUE;
                                 } else {
                                     WORD ee = 0;
-                                    WORD ep = hit_test_edge(rdb, mx2, mw2, total, mouse_x, &ee);
+                                    WORD ep = hit_test_edge(rdb, &v2, mouse_x, &ee);
                                     if (ep >= 0 && ee == 1) want_resize = TRUE;
                                 }
                             }
@@ -3257,6 +3594,35 @@ BOOL partview_run(const char *devname, ULONG unit)
                 case IDCMP_GADGETDOWN:
                     if (gad->GadgetID == GID_PARTLIST) {
                         sel = (WORD)code;
+                        pan_to_sel(rdb, sel, bx, bw);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                    } else if (gad->GadgetID == GID_ZOOMSCROLL) {
+                        zoom_scrolled(rdb, bx, bw, code);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                    }
+                    break;
+
+                /* Zoom keys: + (or =) in, - out, 0 whole disk */
+                case IDCMP_VANILLAKEY:
+                    if (drag_part >= 0 || drag_move_part >= 0 || drag_new)
+                        break;
+                    if (code == '+' || code == '=' || code == '-') {
+                        zoom_step(rdb, sel, bx, bw, (BOOL)(code != '-'));
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                    } else if (code == '0') {
+                        zoom_fit(rdb, bx, bw);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                    }
+                    break;
+
+                /* Mouse wheel over the map: zoom around the pointer */
+                case IDCMP_RAWKEY:
+                    if ((code == NM_WHEEL_UP || code == NM_WHEEL_DOWN) &&
+                        !(drag_part >= 0 || drag_move_part >= 0 || drag_new) &&
+                        mouse_x >= bx && mouse_x <= bx + (WORD)bw &&
+                        mouse_y >= by && mouse_y <= by + (WORD)bh) {
+                        zoom_at(rdb, bx, bw, mouse_x,
+                                (BOOL)(code == NM_WHEEL_UP));
                         draw_map(win, rdb, sel, bx, by, bw, bh);
                     }
                     break;
@@ -3275,6 +3641,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                            use the lightweight redraw instead of re-deriving
                            every row's display string via refresh_listview(). */
                         mark_listview_selection(win, lv_gad, sel);
+                        pan_to_sel(rdb, sel, bx, bw);
                         draw_map(win, rdb, sel, bx, by, bw, bh);
                         /* double-click -> open Edit dialog. See
                            quick_double_click() above for why this doesn't
@@ -3320,6 +3687,28 @@ BOOL partview_run(const char *devname, ULONG unit)
                             dbl_list_sec = ev_sec;
                             dbl_list_mic = ev_mic;
                         }
+                        break;
+
+                    case GID_ZOOMSCROLL:
+                        zoom_scrolled(rdb, bx, bw, code);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                        break;
+
+                    case GID_ZOOMOUT:
+                    case GID_ZOOMIN:
+                        zoom_step(rdb, sel, bx, bw,
+                                  (BOOL)(gad->GadgetID == GID_ZOOMIN));
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                        break;
+
+                    case GID_ZOOMFIT:
+                        zoom_fit(rdb, bx, bw);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
+                        break;
+
+                    case GID_ZOOMSEL:
+                        zoom_to_sel(rdb, sel, bx, bw);
+                        draw_map(win, rdb, sel, bx, by, bw, bh);
                         break;
 
                     case GID_LASTDISK:
@@ -3884,8 +4273,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                 case IDCMP_NEWSIZE: {
                     struct Gadget    *new_glist = NULL, *new_lv = NULL;
                     struct Gadget    *new_ldisk = NULL, *new_llun = NULL;
+                    struct Gadget    *new_zoom = NULL;
                     struct PartLayout new_lay;
-                    UWORD fh = (UWORD)win->WScreen->Font->ta_YSize;
+                    UWORD fh = pv_text_h(win);
 
                     /* Cancel any in-progress drag - restore partition to pre-drag state */
                     if (drag_part >= 0) {
@@ -3900,7 +4290,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                     RemoveGList(win, glist, -1);
                     FreeGadgets(glist);
                     glist = NULL; lv_gad = NULL;
-                    lastdisk_gad = NULL; lastlun_gad = NULL;
+                    lastdisk_gad = NULL; lastlun_gad = NULL; zoom_gad = NULL;
+                    s_zoom_row = NULL;
+                    s_zl_w = 0;
 
                     /* Erase the window interior so stale gadget imagery
                        (buttons that moved, old Cyl labels, etc.) is gone
@@ -3915,11 +4307,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                       (UWORD)win->BorderLeft,  (UWORD)win->BorderTop,
                                       (UWORD)win->BorderRight, (UWORD)win->BorderBottom,
                                       fh, win->WScreen->Font, rdb->flags,
-                                      &new_glist, &new_lv, &new_ldisk, &new_llun, &new_lay)) {
+                                      &new_glist, &new_lv, &new_ldisk, &new_llun,
+                                      &new_zoom, &new_lay)) {
                         glist  = new_glist;
                         lv_gad = new_lv;
                         lastdisk_gad = new_ldisk;
                         lastlun_gad  = new_llun;
+                        zoom_gad     = new_zoom;
                         ix = new_lay.ix; iy = new_lay.iy; iw = new_lay.iw;
                         bx = new_lay.bx; by = new_lay.by;
                         bw = new_lay.bw; bh = new_lay.bh;
@@ -3928,6 +4322,8 @@ BOOL partview_run(const char *devname, ULONG unit)
                         AddGList(win, glist, (UWORD)-1, -1, NULL);
                         RefreshGList(glist, win, NULL, -1);
                         GT_RefreshWindow(win, NULL);
+                        s_zoom_row = zoom_gad;
+                        sync_zoom_scroller(win, zoom_gad, rdb, bx, bw, TRUE);
 
                         /* Scroll the selected row back into view. Note:
                            GTLV_Selected is NOT set here - lv_render()'s
@@ -3965,6 +4361,8 @@ BOOL partview_run(const char *devname, ULONG unit)
                     break;
                 }
             }
+            /* Keep the pan scroller in step with zoom/pan and disk changes. */
+            sync_zoom_scroller(win, zoom_gad, rdb, bx, bw, FALSE);
             /* Flag/clear pending writes in the titlebar when the state changes. */
             if (dirty != last_dirty) {
                 set_title_dirty(win, devname, unit, dirty);
@@ -3974,6 +4372,8 @@ BOOL partview_run(const char *devname, ULONG unit)
     }
 
 cleanup:
+    s_zoom_row = NULL;
+    s_zl_w = 0;
     RDB_SetWriteProgressHook(NULL, NULL);
     if (win) {
         if (ptr_custom) ClearPointer(win);

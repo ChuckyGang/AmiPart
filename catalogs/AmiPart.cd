@@ -4546,3 +4546,15 @@ MSG_DEV_FLAG_LASTDISK
 MSG_DEV_FLAG_LASTLUN
   [LAST LUN]
 ;
+;==========================================================================
+; Partition map zoom row
+;==========================================================================
+MSG_PV_BTN_ZOOMFIT
+Fit
+;
+MSG_PV_BTN_ZOOMSEL
+Selected
+;
+MSG_PV_ZOOM_FMT
+Zoom %lu.%lux
+;
