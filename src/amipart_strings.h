@@ -1467,8 +1467,13 @@
 #define MSG_CLI_COPYDISK_GROW_FAIL_FMT 1461
 #define MSG_QF_MOUNTED_OTHER_FMT     1462
 #define MSG_QF_NAME_TAKEN_FMT        1463
+#define MSG_RDBFAIL_VERIFY_FMT       1464
+#define MSG_RDBFAIL_IO_FMT           1465
+#define MSG_RDBFAIL_OVERFLOW_FMT     1466
+#define MSG_RDBFAIL_REFUSED_FMT      1467
+#define MSG_RDBFAIL_VERIFY_READ_FMT  1468
 
-#define MSG_COUNT 1464
+#define MSG_COUNT 1469
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2944,5 +2949,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1461 MSG_CLI_COPYDISK_GROW_FAIL_FMT */ "Could not write the extended RDB (err %d); the copy itself is complete.\n",
     /* 1462 MSG_QF_MOUNTED_OTHER_FMT */ "%s: is mounted, but not from %s unit %lu - cannot take it offline",
     /* 1463 MSG_QF_NAME_TAKEN_FMT */ "device name %s: is still in use - reboot to use the new size",
+    /* 1464 MSG_RDBFAIL_VERIFY_FMT */ "ERROR: read-back verify failed at block %lu offset %lu: wrote %02X%02X%02X%02X, read %02X%02X%02X%02X.\n",
+    /* 1465 MSG_RDBFAIL_IO_FMT */ "ERROR: device error %ld writing block %lu.\n",
+    /* 1466 MSG_RDBFAIL_OVERFLOW_FMT */ "ERROR: metadata overflow: need %lu blocks, only %lu available.\n",
+    /* 1467 MSG_RDBFAIL_REFUSED_FMT */ "ERROR: write refused: %s\n",
+    /* 1468 MSG_RDBFAIL_VERIFY_READ_FMT */ "ERROR: device error %ld reading back block %lu after the write.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

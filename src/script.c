@@ -449,8 +449,15 @@ static BOOL sc_read_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
 static BOOL sc_write_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
 {
     BOOL ok = RDB_Write(bd, rdb);
-    if (!ok && bd->last_write_refused_trunc)
-        sc_puts(GS(MSG_CLI_TRUNC_REFUSED));
+    if (!ok) {
+        if (bd->last_write_refused_trunc)
+            sc_puts(GS(MSG_CLI_TRUNC_REFUSED));
+        else {
+            static char why[256];
+            RDB_WriteFailText(bd, rdb, why, sizeof(why));
+            if (why[0]) sc_puts(why);
+        }
+    }
     return ok;
 }
 

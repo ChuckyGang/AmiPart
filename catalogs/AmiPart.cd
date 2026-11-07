@@ -4519,3 +4519,21 @@ MSG_QF_MOUNTED_OTHER_FMT
 MSG_QF_NAME_TAKEN_FMT
 device name %s: is still in use - reboot to use the new size
 ;
+;==========================================================================
+; RDB write failure reasons (CLI + script, printed before "FAILED.")
+;==========================================================================
+MSG_RDBFAIL_VERIFY_FMT
+ERROR: read-back verify failed at block %lu offset %lu: wrote %02X%02X%02X%02X, read %02X%02X%02X%02X.\n
+;
+MSG_RDBFAIL_IO_FMT
+ERROR: device error %ld writing block %lu.\n
+;
+MSG_RDBFAIL_OVERFLOW_FMT
+ERROR: metadata overflow: need %lu blocks, only %lu available.\n
+;
+MSG_RDBFAIL_REFUSED_FMT
+ERROR: write refused: %s\n
+;
+MSG_RDBFAIL_VERIFY_READ_FMT
+ERROR: device error %ld reading back block %lu after the write.\n
+;

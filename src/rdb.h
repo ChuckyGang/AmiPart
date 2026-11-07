@@ -66,10 +66,11 @@ struct BlockDev {
     char             devname[64];
     ULONG            unit;
     BYTE             last_io_err;         /* io_Error from last WriteBlock call  */
-    ULONG            last_verify_block;   /* block number that failed verify     */
+    ULONG            last_verify_block;   /* block that failed to write or verify*/
     ULONG            last_verify_off;     /* byte offset of first mismatch       */
     UBYTE            last_wrote[4];       /* bytes at mismatch offset, written   */
     UBYTE            last_read[4];        /* bytes at mismatch offset, on disk   */
+    UBYTE            last_verify_fail;    /* RDB_Write read-back: 0 none, 1 read failed, 2 mismatch */
     char             disk_brand[36];      /* vendor+product from SCSI INQUIRY    */
     ULONG            last_overflow_need;  /* blocks needed  (set on overflow)    */
     ULONG            last_overflow_avail; /* blocks available (set on overflow)  */
@@ -257,6 +258,13 @@ struct RDBInfo {
 #define RDB_TRUNC_SANITY  5   /* pointer to block 0 / the RDSK block */
 /* Localized one-line description of an RDB_TRUNC_* reason. */
 const char *RDB_TruncReasonStr(UBYTE reason);
+/* Localized explanation of the last RDB_Write FALSE (verify mismatch with the
+   bytes written/read, device error + block, overflow, refusal reason), ending
+   in a newline.  Used by the CLI and the script engine; the GUI builds its own
+   requesters from the same BlockDev fields.  out[0] = 0 when nothing is known
+   (e.g. the truncated-chain refusal, which callers report themselves). */
+void RDB_WriteFailText(const struct BlockDev *bd, const struct RDBInfo *rdb,
+                       char *out, ULONG outsz);
 /* Highest block used by RDB metadata known in memory (RDSK, PART, FSHD, LSEG,
    BADB) - a floor for rdb_HighRDSKBlock, which some tools leave at 0. */
 ULONG RDB_LastMetaBlock(const struct RDBInfo *rdb);

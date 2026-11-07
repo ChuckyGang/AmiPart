@@ -3796,7 +3796,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                                 EasyRequest(win, &es, NULL);
                             }
                         } else if (!write_ok) {
-                            if (bd && bd->last_io_err == 1)
+                            if (bd && bd->last_verify_fail == 2)
                                 DP_SNPRINTF(wfmt, GS(MSG_PV_VERIFY_FAIL_FMT),
                                     (unsigned long)bd->last_verify_block,
                                     (unsigned long)bd->last_verify_off,

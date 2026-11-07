@@ -1099,6 +1099,69 @@ static BOOL chain_seen(ULONG *seen, UWORD *count, ULONG blk)
     return FALSE;
 }
 
+void RDB_WriteFailText(const struct BlockDev *bd, const struct RDBInfo *rdb,
+                       char *out, ULONG outsz)
+{
+    char why[160];
+
+    if (outsz == 0) return;
+    out[0] = '\0';
+    if (!bd || bd->last_write_refused_trunc) return;
+
+    if (bd->last_verify_fail == 2) {
+        /* read-back mismatch: every block write itself succeeded */
+        snprintf(out, outsz, GS(MSG_RDBFAIL_VERIFY_FMT),
+                 (unsigned long)bd->last_verify_block,
+                 (unsigned long)bd->last_verify_off,
+                 bd->last_wrote[0], bd->last_wrote[1],
+                 bd->last_wrote[2], bd->last_wrote[3],
+                 bd->last_read[0],  bd->last_read[1],
+                 bd->last_read[2],  bd->last_read[3]);
+        return;
+    }
+    if (bd->last_verify_fail == 1) {
+        snprintf(out, outsz, GS(MSG_RDBFAIL_VERIFY_READ_FMT),
+                 (long)bd->last_io_err, (unsigned long)bd->last_verify_block);
+        return;
+    }
+    if (bd->last_io_err != 0) {
+        snprintf(out, outsz, GS(MSG_RDBFAIL_IO_FMT),
+                 (long)bd->last_io_err, (unsigned long)bd->last_verify_block);
+        return;
+    }
+    switch (bd->last_write_fail) {
+    case RDBW_OVERFLOW:
+        snprintf(out, outsz, GS(MSG_RDBFAIL_OVERFLOW_FMT),
+                 (unsigned long)bd->last_overflow_need,
+                 (unsigned long)bd->last_overflow_avail);
+        return;
+    case RDBW_INVALID: strncpy(why, GS(MSG_RDBW_INVALID), sizeof(why)-1); break;
+    case RDBW_COUNTS:  strncpy(why, GS(MSG_RDBW_COUNTS),  sizeof(why)-1); break;
+    case RDBW_NOMEM:   strncpy(why, GS(MSG_RDBW_NOMEM),   sizeof(why)-1); break;
+    case RDBW_RANGE:
+        if (rdb && bd->last_write_fail_part < rdb->num_parts) {
+            const struct PartInfo *rp = &rdb->parts[bd->last_write_fail_part];
+            snprintf(why, sizeof(why), GS(MSG_RDBW_RANGE_FMT), rp->drive_name,
+                     (unsigned long)rp->low_cyl, (unsigned long)rp->high_cyl,
+                     (unsigned long)rdb->lo_cyl, (unsigned long)rdb->hi_cyl);
+        } else
+            strncpy(why, GS(MSG_RDBW_UNKNOWN), sizeof(why)-1);
+        break;
+    case RDBW_OVERLAP:
+        if (rdb && bd->last_write_fail_part < rdb->num_parts &&
+            bd->last_write_fail_part2 < rdb->num_parts)
+            snprintf(why, sizeof(why), GS(MSG_RDBW_OVERLAP_FMT),
+                     rdb->parts[bd->last_write_fail_part].drive_name,
+                     rdb->parts[bd->last_write_fail_part2].drive_name);
+        else
+            strncpy(why, GS(MSG_RDBW_UNKNOWN), sizeof(why)-1);
+        break;
+    default:           strncpy(why, GS(MSG_RDBW_UNKNOWN), sizeof(why)-1); break;
+    }
+    why[sizeof(why)-1] = '\0';
+    snprintf(out, outsz, GS(MSG_RDBFAIL_REFUSED_FMT), why);
+}
+
 const char *RDB_TruncReasonStr(UBYTE reason)
 {
     switch (reason) {
@@ -1901,6 +1964,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
         bd->last_overflow_need    = 0;
         bd->last_overflow_avail   = 0;
         bd->last_io_err           = 0;   /* stale value must not mask a refusal */
+        bd->last_verify_fail      = 0;
     }
     if (!bd) return FALSE;
     if (!rdb || !rdb->valid) { bd->last_write_fail = RDBW_INVALID; return FALSE; }
@@ -2198,6 +2262,8 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
             ULONG blknum = rdb->rdb_block_lo + slot;
             if (!BlockDev_WriteBlock(bd, blknum,
                                      big_buf + slot * bd->block_size)) {
+                bd->last_verify_block = blknum;   /* for the failure report */
+                bd->last_verify_off   = 0;
                 FreeVec(big_buf);
                 return FALSE;
             }
@@ -2219,6 +2285,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
                 const UBYTE *w = big_buf + b * bd->block_size;
                 if (!BlockDev_ReadBlock(bd, blknum, vbuf)) {
                     bd->last_io_err       = 1;
+                    bd->last_verify_fail  = 1;
                     bd->last_verify_block = blknum;
                     bd->last_verify_off   = 0;
                     FreeVec(vbuf); FreeVec(big_buf);
@@ -2227,6 +2294,7 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
                 if (memcmp(w, vbuf, bd->block_size) != 0) {
                     ULONG j;
                     bd->last_io_err       = 1;
+                    bd->last_verify_fail  = 2;
                     bd->last_verify_block = blknum;
                     bd->last_verify_off   = 0;
                     for (j = 0; j < bd->block_size; j++) {

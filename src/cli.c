@@ -525,13 +525,22 @@ static BOOL cli_read_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
     return ok;
 }
 
-/* RDB_Write + a specific message when it refused because of a truncated
-   chain (every caller prints its own generic FAILED line as well). */
+/* RDB_Write + the reason when it failed: truncated-chain refusal, or the
+   verify mismatch / device error / overflow / refusal text that the GUI
+   shows in its requester (every caller prints its own generic FAILED line
+   as well). */
 static BOOL cli_write_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
 {
     BOOL ok = RDB_Write(bd, rdb);
-    if (!ok && bd->last_write_refused_trunc)
-        cli_puts(GS(MSG_CLI_TRUNC_REFUSED));
+    if (!ok) {
+        if (bd->last_write_refused_trunc)
+            cli_puts(GS(MSG_CLI_TRUNC_REFUSED));
+        else {
+            static char why[256];
+            RDB_WriteFailText(bd, rdb, why, sizeof(why));
+            if (why[0]) cli_puts(why);
+        }
+    }
     return ok;
 }
 
