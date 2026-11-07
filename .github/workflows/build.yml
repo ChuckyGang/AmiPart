@@ -58,7 +58,10 @@ jobs:
       - name: Build autoboot ADF
         run: |
           BARTMAN="$PWD/bartman/extension/bin/linux"
-          pip install amitools machine68k==0.3.0 -q
+          # amitools 0.9.0 (2026-11-05) moved vamos behind the [vamos] extra and
+          # needs machine68k >= 0.5 + greenlet; stay on the last release that
+          # works with the pinned machine68k until the new stack is validated.
+          pip install amitools==0.8.1 machine68k==0.3.0 -q
           make adf TOOLCHAIN=bartman BARTMAN="$BARTMAN"
 
       - name: Upload binary + icon
@@ -133,7 +136,10 @@ jobs:
 
       - name: Native fuzz (grow/shrink matrix, FFS/SFS/PFS3)
         run: |
-          pip install amitools machine68k==0.3.0 -q
+          # amitools 0.9.0 (2026-11-05) moved vamos behind the [vamos] extra and
+          # needs machine68k >= 0.5 + greenlet; stay on the last release that
+          # works with the pinned machine68k until the new stack is validated.
+          pip install amitools==0.8.1 machine68k==0.3.0 -q
           cd test && AMIPART_HOST=1 python3 testloop.py 6 20260828
 
       # Same GROW/SHRINK on the same images with the m68k binary (vamos) and
