@@ -80,6 +80,7 @@ struct BlockDev {
     UBYTE            rd_pref;             /* read path that worked last: 0 none, 1 HD_SCSICMD, 2 TD_READ64, 3 CMD_READ */
     UBYTE            nsd_read64;          /* driver advertises NSCMD_TD_READ64  (0xC000): use it instead of TD_READ64  */
     UBYTE            nsd_write64;         /* driver advertises NSCMD_TD_WRITE64 (0xC001): use it instead of TD_WRITE64 */
+    UBYTE            wr_legacy;           /* 64-bit write failed and CMD_WRITE then worked: go straight to CMD_WRITE below 4 GB */
     UQUAD            td_total_bytes;      /* capacity from TD_GETGEOMETRY        */
     ULONG            rc_total_blocks;     /* READ CAPACITY(10) total blocks (0=unavail) */
     ULONG            rc_block_size;       /* READ CAPACITY(10) bytes per block   */

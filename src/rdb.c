@@ -296,18 +296,6 @@ static UWORD wr64_cmd(const struct BlockDev *bd)
     return bd->nsd_write64 ? NSCMD_TD_WRITE64 : TD_WRITE64;
 }
 
-/* TRUE when err means "driver does not implement that command" rather
-   than "the transfer failed".  The exec convention is IOERR_NOCMD (-3);
-   warpATA.device uses TDERR_NotSpecified (20) for the same thing.  A
-   driver that reports a *real* failure as 20 merely gets one retry of the
-   same data at the same offset through the 32-bit command, which is
-   harmless; real media errors (TDERR_WriteProt, TDERR_BadSecPreamble,
-   ...) are never retried. */
-static BOOL cmd_unsupported(BYTE err)
-{
-    return err == IOERR_NOCMD || err == TDERR_NotSpecified;
-}
-
 #ifdef AMIPART_HOST
 /* 64-bit positioned file I/O, provided by host/amiga_shim.c */
 LONG  HostFilePRead(BPTR fh, void *buf, ULONG len, UQUAD off);
@@ -739,6 +727,20 @@ BOOL BlockDev_ReadBlock(struct BlockDev *bd, ULONG blocknum, void *buf)
 /* BlockDev_WriteBlock                                                 */
 /* ------------------------------------------------------------------ */
 
+/* CMD_WRITE single-block write: 32-bit byte offsets only (caller checks).
+   Returns the io_Error. */
+static BYTE wr_cmdwrite(struct BlockDev *bd, UQUAD byte_off, const void *buf)
+{
+    bd->iotd.iotd_Req.io_Command = CMD_WRITE;
+    bd->iotd.iotd_Req.io_Length  = bd->block_size;
+    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+    bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
+    bd->iotd.iotd_Req.io_Actual  = 0;
+    bd->iotd.iotd_Count          = 0;
+    bd->iotd.iotd_Req.io_Flags   = 0;
+    return (BYTE)DoIO((struct IORequest *)&bd->iotd);
+}
+
 BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
 {
     BYTE err;
@@ -775,6 +777,17 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
        HD_SCSICMD WRITE must not be used (4-byte DMA shift on A3000 SD
        adapters).  CMD_UPDATE removed: TD_WRITE64 already commits the data
        directly, so CMD_UPDATE is redundant and hangs on active partitions. */
+    /* Once CMD_WRITE has rescued a failed 64-bit write on this device, use
+       it directly for every later block below 4 GB (wr_legacy): the 64-bit
+       path would fail again on each block, and some drivers take a long
+       error-recovery detour (bus reset, retries) before reporting it. */
+    if (bd->wr_legacy && (ULONG)(byte_off >> 32) == 0) {
+        err = wr_cmdwrite(bd, byte_off, buf);
+        if (err == 0) return TRUE;
+        bd->last_io_err = err;
+        return FALSE;
+    }
+
     bd->iotd.iotd_Req.io_Command = wr64_cmd(bd);
     bd->iotd.iotd_Req.io_Length  = bd->block_size;
     bd->iotd.iotd_Req.io_Data    = (APTR)buf;
@@ -785,32 +798,29 @@ BOOL BlockDev_WriteBlock(struct BlockDev *bd, ULONG blocknum, const void *buf)
     err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
     if (err == 0) return TRUE;
 
-    /* Fallback: CMD_WRITE (32-bit byte offset) for drivers that don't
-       implement the 64-bit write and reject it - with IOERR_NOCMD (-3) on
-       the old Commodore gayle scsi.device on A600/A1200 (KS 3.0/3.1), which
-       predates the TD64/NSD commands, or with TDERR_NotSpecified (20) on
-       warpATA.device (see cmd_unsupported).  (The read path already falls
-       back to CMD_READ for the same drivers; the write path was missing this.)
-
-       Gated on those two "not implemented" codes only, so a genuine 64-bit
-       write failure is never silently retried through a different path
-       (other than one harmless same-data retry on a driver that misuses
-       TDERR_NotSpecified for a real error).  The UAE/Amiberry
-       "CMD_WRITE hangs on cached FS blocks" hazard only affects live, mounted
-       partitions; AmiPart writes run with the partition inhibited/unmounted,
-       and UAE supports TD_WRITE64 so it never reaches this fallback anyway.
-       These pre-NSD drivers address at most 4 GB, so the 32-bit offset is
-       sufficient - refuse rather than wrap if a >4 GB block is ever asked. */
-    if (cmd_unsupported(err) && (ULONG)(byte_off >> 32) == 0) {
-        bd->iotd.iotd_Req.io_Command = CMD_WRITE;
-        bd->iotd.iotd_Req.io_Length  = bd->block_size;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = (ULONG)(byte_off & 0xFFFFFFFFUL);
-        bd->iotd.iotd_Count          = 0;
-        bd->iotd.iotd_Req.io_Actual  = 0;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-        if (err == 0) return TRUE;
+    /* Fallback: CMD_WRITE (32-bit byte offset), the path HDToolBox and
+       every filesystem use, for drivers whose 64-bit write does not work:
+       - rejected as not implemented: IOERR_NOCMD (-3) on the old Commodore
+         gayle scsi.device on A600/A1200 (KS 3.0/3.1), TDERR_NotSpecified
+         (20) on warpATA.device;
+       - accepted but failing: a SCSI driver on an A4000 answered TD_WRITE64
+         with HFERR_BadStatus (45) or -1 on every block while CMD_WRITE to
+         the same drive worked (and HDToolBox could partition it).
+       So retry on ANY error, once, with the same data at the same offset.
+       The retry is harmless by construction: same block, same bytes, and
+       RDB_Write verifies every block afterwards.  A real media error
+       (TDERR_WriteProt, bad block) simply fails a second time and the
+       CMD_WRITE error is the one reported.
+       The UAE/Amiberry "CMD_WRITE hangs on cached FS blocks" hazard only
+       affects live, mounted partitions; AmiPart writes run with the
+       partition inhibited/unmounted, and UAE supports TD_WRITE64 so it
+       never reaches this fallback anyway.
+       CMD_WRITE addresses at most 4 GB: refuse rather than wrap the
+       offset if a block beyond that ever fails on the 64-bit path. */
+    if ((ULONG)(byte_off >> 32) == 0) {
+        BYTE err32 = wr_cmdwrite(bd, byte_off, buf);
+        if (err32 == 0) { bd->wr_legacy = 1; return TRUE; }
+        err = err32;
     }
 
     bd->last_io_err = err;
@@ -828,6 +838,9 @@ static BOOL td64_multi(struct BlockDev *bd, UWORD cmd64, UWORD cmd32,
     ULONG length   = count * bd->block_size;
     BYTE  err;
 
+    if (bd->wr_legacy && cmd32 == CMD_WRITE && (ULONG)(byte_off >> 32) == 0)
+        goto legacy;                      /* see BlockDev_WriteBlock */
+
     bd->iotd.iotd_Req.io_Command = cmd64;
     bd->iotd.iotd_Req.io_Length  = length;
     bd->iotd.iotd_Req.io_Data    = (APTR)buf;
@@ -838,19 +851,22 @@ static BOOL td64_multi(struct BlockDev *bd, UWORD cmd64, UWORD cmd32,
     err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
     if (err == 0) return TRUE;
 
-    /* pre-TD64 driver (old gayle scsi.device, or warpATA answering with
-       TDERR_NotSpecified - see cmd_unsupported): 32-bit offsets only */
-    if (cmd_unsupported(err) && (ULONG)(byte_off >> 32) == 0) {
-        bd->iotd.iotd_Req.io_Command = cmd32;
-        bd->iotd.iotd_Req.io_Length  = length;
-        bd->iotd.iotd_Req.io_Data    = (APTR)buf;
-        bd->iotd.iotd_Req.io_Offset  = (ULONG)byte_off;
-        bd->iotd.iotd_Req.io_Actual  = 0;
-        bd->iotd.iotd_Count          = 0;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        return DoIO((struct IORequest *)&bd->iotd) == 0;
-    }
-    return FALSE;
+    /* 32-bit fallback on any error, same rule as BlockDev_WriteBlock:
+       pre-TD64 drivers (old gayle scsi.device, warpATA) reject the 64-bit
+       command, and at least one SCSI driver accepts it and fails every
+       transfer while the 32-bit command works.  32-bit offsets only. */
+    if ((ULONG)(byte_off >> 32) != 0) return FALSE;
+legacy:
+    bd->iotd.iotd_Req.io_Command = cmd32;
+    bd->iotd.iotd_Req.io_Length  = length;
+    bd->iotd.iotd_Req.io_Data    = (APTR)buf;
+    bd->iotd.iotd_Req.io_Offset  = (ULONG)byte_off;
+    bd->iotd.iotd_Req.io_Actual  = 0;
+    bd->iotd.iotd_Count          = 0;
+    bd->iotd.iotd_Req.io_Flags   = 0;
+    if (DoIO((struct IORequest *)&bd->iotd) != 0) return FALSE;
+    if (cmd32 == CMD_WRITE) bd->wr_legacy = 1;
+    return TRUE;
 }
 
 BOOL BlockDev_ReadBlocks(struct BlockDev *bd, ULONG start, ULONG count, void *buf)
