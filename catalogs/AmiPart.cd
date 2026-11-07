@@ -4537,3 +4537,12 @@ ERROR: write refused: %s\n
 MSG_RDBFAIL_VERIFY_READ_FMT
 ERROR: device error %ld reading back block %lu after the write.\n
 ;
+;==========================================================================
+; Unit list: RDB flag markers appended to the unit line (GUI selector + UNITS)
+;==========================================================================
+MSG_DEV_FLAG_LASTDISK
+  [LAST DISK]
+;
+MSG_DEV_FLAG_LASTLUN
+  [LAST LUN]
+;

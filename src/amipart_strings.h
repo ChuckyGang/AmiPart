@@ -1472,8 +1472,10 @@
 #define MSG_RDBFAIL_OVERFLOW_FMT     1466
 #define MSG_RDBFAIL_REFUSED_FMT      1467
 #define MSG_RDBFAIL_VERIFY_READ_FMT  1468
+#define MSG_DEV_FLAG_LASTDISK        1469
+#define MSG_DEV_FLAG_LASTLUN         1470
 
-#define MSG_COUNT 1469
+#define MSG_COUNT 1471
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2954,5 +2956,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1466 MSG_RDBFAIL_OVERFLOW_FMT */ "ERROR: metadata overflow: need %lu blocks, only %lu available.\n",
     /* 1467 MSG_RDBFAIL_REFUSED_FMT */ "ERROR: write refused: %s\n",
     /* 1468 MSG_RDBFAIL_VERIFY_READ_FMT */ "ERROR: device error %ld reading back block %lu after the write.\n",
+    /* 1469 MSG_DEV_FLAG_LASTDISK */ "  [LAST DISK]",
+    /* 1470 MSG_DEV_FLAG_LASTLUN */ "  [LAST LUN]",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

@@ -492,6 +492,22 @@ void Devices_GetUnitsForName(const char *devname, struct UnitList *ul,
             DP_SNPRINTF(ue->display, GS(MSG_DEV_UNIT_FMT), (unsigned long)unit);
         }
 
+        /* RDBFF_LAST / RDBFF_LASTLUN stop the OS from scanning any further
+           unit / LUN at boot.  A stray flag on a low unit silently unmounts
+           every disk after it, so show it in the list instead of making the
+           user open each disk to find it. */
+        if (rdb->valid && (rdb->flags & (RDBFF_LAST | RDBFF_LASTLUN))) {
+            size_t len = strlen(ue->display);
+            if (rdb->flags & RDBFF_LAST)
+                strncpy(ue->display + len, GS(MSG_DEV_FLAG_LASTDISK),
+                        sizeof(ue->display) - len - 1);
+            len = strlen(ue->display);
+            if (rdb->flags & RDBFF_LASTLUN)
+                strncpy(ue->display + len, GS(MSG_DEV_FLAG_LASTLUN),
+                        sizeof(ue->display) - len - 1);
+            ue->display[sizeof(ue->display) - 1] = '\0';
+        }
+
         {
             BOOL keep_going = TRUE;
             if (cb) keep_going = cb(cb_data, unit, PROBE_FOUND, ue->display);

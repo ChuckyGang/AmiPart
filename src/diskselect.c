@@ -828,7 +828,7 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
         UWORD bor_t   = (UWORD)scr->WBorTop + font_h + 1;
         UWORD bor_r   = (UWORD)scr->WBorRight;
         UWORD bor_b   = (UWORD)scr->WBorBottom;
-        UWORD win_w   = GUI_FitW(scr, 520);
+        UWORD win_w   = GUI_FitW(scr, 580);  /* room for the [LAST DISK] marker */
         UWORD inner_w = win_w - bor_l - bor_r;
         UWORD pad     = 4;
         UWORD btn_h   = font_h + 6;
