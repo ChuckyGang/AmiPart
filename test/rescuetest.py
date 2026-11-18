@@ -208,6 +208,26 @@ def main():
     check("wiped: DEEP", want, amipart("rs_b.hdf", "RESCUE DEEP"), False)
     repair("wiped", "rs_b.hdf", want, False)
 
+    # --- script engine: RESCUE + WRITE must equal the CLI's RESCUE WRITE
+    sh("cp rs_b.hdf rs_w.hdf"); sh("cp rs_b.hdf rs_m.hdf")
+    amipart("rs_w.hdf", "RESCUE WRITE FORCE")
+    with open(os.path.join(HERE, "rs_rescue.script"), "w") as f:
+        f.write("OPEN FILE rs_m.hdf\nRESCUE\nWRITE\nCLOSE\n")
+    out = sh(f"{HOSTBIN} SCRIPT rs_rescue.script FORCE")
+    if read_from("rs_m.hdf", 0) == read_from("rs_w.hdf", 0) and len(layout("rs_m.hdf")) == 4:
+        print("PASS  script: RESCUE + WRITE equals CLI RESCUE WRITE")
+    else:
+        bad(f"script: image differs from the CLI's\n{out}")
+    sh("cp rs_b.hdf rs_m.hdf")
+    with open(os.path.join(HERE, "rs_rescue.script"), "w") as f:
+        f.write("OPEN FILE rs_m.hdf\nRESCUE REPORT\nRESCUE\nCLOSE\n")
+    sh(f"{HOSTBIN} SCRIPT rs_rescue.script FORCE", check=False)
+    if read_from("rs_m.hdf", 0) == read_from("rs_b.hdf", 0):
+        print("PASS  script: RESCUE without WRITE leaves the disk alone")
+    else:
+        bad("script: RESCUE wrote without WRITE")
+    sh("rm -f rs_rescue.script")
+
     # --- m68k parity --------------------------------------------------
     if have("vamos") and os.path.exists(M68K):
         r = subprocess.run(["vamos", "-q", "-O", "locale.library=mode:off", M68K,

@@ -735,6 +735,24 @@ SHRINKINFO <drive>
     SHRINKINFO DH1
     CLOSE
 
+RESCUE [DEEP] [REPORT]
+  Scan the open disk for lost partitions - the script form of the CLI
+  RESCUE command (see there for what is found and what cannot be
+  recovered).  The scan only reads.  What it finds is merged into the
+  in-memory RDB, exactly like ADDPART/ADDFS would do it: a new RDB when
+  the disk has none, otherwise only the entries the existing one lacks.
+  Nothing reaches the disk before WRITE, so it also runs in DRYRUN mode.
+  REPORT prints the findings without merging anything.  DEEP reads every
+  block instead of skipping the inside of identified partitions.
+  Ctrl+C cancels the scan and stops the script - a cancelled scan is
+  never merged.
+
+    OPEN scsi.device 0
+    RESCUE
+    INFO
+    WRITE
+    CLOSE
+
 ZEROPART NAME=<drive>
   Overwrite every block of the named partition with zeros.  Writes directly
   to disk using the open device — no WRITE needed, and the RDB is not

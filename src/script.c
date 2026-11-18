@@ -25,6 +25,7 @@
  *   BACKUPEXT FILE=<path>       ; save all RDB blocks (ERDB format)
  *   RESTOREEXT FILE=<path>      ; restore all RDB blocks from an ERDB file
  *   ADDFS TYPE=<t> [VERSION=<hex>] [FILE=<path>] [STACKSIZE=<n>]
+ *   RESCUE [DEEP] [REPORT]      ; scan for lost partitions, merge into memory
  *   WRITE
  *   INFO
  *   CLOSE
@@ -55,6 +56,7 @@
 #include "pfsresize.h"
 #include "shrinkinfo.h"
 #include "partclone.h"
+#include "rescue.h"
 #include "script.h"
 
 extern struct ExecBase   *SysBase;
@@ -2287,6 +2289,74 @@ static LONG do_partin(ULONG ln, char **tok, UWORD ntok)
 }
 
 /* ------------------------------------------------------------------ */
+/* RESCUE [DEEP] [REPORT] - scan for lost partitions (rescue.c)       */
+/*   The scan itself only reads.  Unless REPORT is given, what it     */
+/*   finds is merged into the in-memory RDB (a fresh one when the     */
+/*   disk has none) exactly like ADDPART/ADDFS would: nothing reaches */
+/*   the disk before WRITE.  No dryrun gate needed for that reason.   */
+/* ------------------------------------------------------------------ */
+
+static BOOL script_prog_cb(void *ud, ULONG cur, ULONG total);
+static ULONG s_prog_pct;
+static ULONG s_prog_blocks;
+
+static LONG do_rescue(ULONG ln, char **tok, UWORD ntok)
+{
+    struct RescueResult *res;
+    char   err[96];
+    BOOL   deep = FALSE, report = FALSE;
+    UWORD  i;
+    LONG   rc = RETURN_OK;
+
+    if (!s_st->bd)
+        { sc_err(ln, GS(MSG_SCR_NO_DEV_OPEN)); return RETURN_ERROR; }
+    for (i = 1; i < ntok; i++) {
+        if      (ci_eq(tok[i], "DEEP"))   deep = TRUE;
+        else if (ci_eq(tok[i], "REPORT")) report = TRUE;
+        else { sc_err(ln, GS(MSG_SCR_RESCUE_USAGE)); return RETURN_ERROR; }
+    }
+
+    res = (struct RescueResult *)AllocVec(sizeof(*res), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!res) { sc_err(ln, GS(MSG_RDBC_OUT_OF_MEMORY)); return RETURN_ERROR; }
+
+    DP_SNPRINTF(s_msg, GS(MSG_RS_START_FMT),
+            (unsigned long)(s_st->bd->block_size
+                            ? s_st->bd->total_bytes / s_st->bd->block_size : 0));
+    sc_puts(s_msg);
+
+    s_prog_pct = 0; s_prog_blocks = 0;
+    if (!Rescue_Scan(s_st->bd, deep, script_prog_cb, NULL, res, err)) {
+        sc_puts(err);
+        FreeVec(res);
+        return RETURN_ERROR;
+    }
+    Rescue_Report(res, sc_si_emit, NULL);
+
+    if (res->cancelled) {
+        /* Half a scan must never become a partition table. */
+        sc_puts(GS(MSG_RS_WR_SCAN_CANCELLED));
+        rc = RETURN_ERROR;
+    } else if (report) {
+        sc_puts(GS(MSG_RS_FOOTER));
+    } else {
+        if (!s_st->rdb_ready || !s_st->rdb.valid) {
+            RDB_FreeCode(&s_st->rdb);
+            memset(&s_st->rdb, 0, sizeof(s_st->rdb));    /* build a fresh one */
+        }
+        if (Rescue_Apply(s_st->bd, res, &s_st->rdb, sc_si_emit, NULL) > 0) {
+            s_st->rdb_ready = TRUE;
+            s_st->dirty     = TRUE;
+            sc_puts(GS(MSG_SCR_RESCUE_LOADED));
+        } else if (!s_st->rdb.valid) {
+            s_st->rdb_ready = FALSE;
+        }
+    }
+
+    FreeVec(res);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
 /* CLEARRDB - zero the RDB / MBR / GPT area so the disk is blank      */
 /*   CLEARRDB                                                         */
 /* ------------------------------------------------------------------ */
@@ -2503,9 +2573,6 @@ static LONG do_write(ULONG ln)
 /* IMAGEOUT FILE=<path>  - dump open device to a new image file       */
 /* IMAGEIN  FILE=<path>  - write image file back to open device       */
 /* ------------------------------------------------------------------ */
-
-static ULONG s_prog_pct;
-static ULONG s_prog_blocks;
 
 static BOOL script_prog_cb(void *ud, ULONG cur, ULONG total)
 {
@@ -2993,6 +3060,7 @@ static LONG run_line(char *line, ULONG ln)
     if (ci_eq(tok[0], "PARTIN"))   return do_partin(ln, tok, ntok);
     if (ci_eq(tok[0], "SHRINKINFO")) return do_shrinkinfo(ln, tok, ntok);
     if (ci_eq(tok[0], "CLEARRDB")) return do_clearrdb(ln);
+    if (ci_eq(tok[0], "RESCUE"))   return do_rescue(ln, tok, ntok);
     if (ci_eq(tok[0], "ZEROPART")) return do_zeropart(ln, tok, ntok);
     if (ci_eq(tok[0], "WRITE"))   return do_write(ln);
     if (ci_eq(tok[0], "INFO"))    return do_info(ln);

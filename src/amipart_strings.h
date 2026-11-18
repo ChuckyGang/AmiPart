@@ -1550,8 +1550,10 @@
 #define MSG_PV_RESCUE_SCANNING       1544
 #define MSG_PV_RESCUE_LOAD_FMT       1545
 #define MSG_PV_RESCUE_LOAD_GADGETS   1546
+#define MSG_SCR_RESCUE_USAGE         1547
+#define MSG_SCR_RESCUE_LOADED        1548
 
-#define MSG_COUNT 1547
+#define MSG_COUNT 1549
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -3110,5 +3112,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1544 MSG_PV_RESCUE_SCANNING */ "Scanning for lost partitions",
     /* 1545 MSG_PV_RESCUE_LOAD_FMT */ "%lu entries can be added to the partition table.\n\nLoad them into the editor?\nNothing is written to the disk until you write the\npartition table yourself.",
     /* 1546 MSG_PV_RESCUE_LOAD_GADGETS */ "Load|Cancel",
+    /* 1547 MSG_SCR_RESCUE_USAGE */ "RESCUE: usage: RESCUE [DEEP] [REPORT]",
+    /* 1548 MSG_SCR_RESCUE_LOADED */ "RESCUE: the rebuilt table is in memory - WRITE commits it.\n",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

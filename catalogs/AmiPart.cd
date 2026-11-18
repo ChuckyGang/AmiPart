@@ -4778,3 +4778,9 @@ MSG_PV_RESCUE_LOAD_FMT
 MSG_PV_RESCUE_LOAD_GADGETS
 Load|Cancel
 ;
+MSG_SCR_RESCUE_USAGE
+RESCUE: usage: RESCUE [DEEP] [REPORT]
+;
+MSG_SCR_RESCUE_LOADED
+RESCUE: the rebuilt table is in memory - WRITE commits it.\n
+;
