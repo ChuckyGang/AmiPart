@@ -204,6 +204,16 @@ scripting interface.
 --------------------------------------------------------------------------------
  * SMART status read support (ATA SMART via SCSI ATA PASS-THROUGH).
  * Bad-block scan with per-sector error reporting.
+ * Rescue scan (CLI RESCUE [DEEP]): finds surviving RDB blocks and
+   FFS/OFS, PFS3 and SFS volumes on a disk whose partition table is lost
+   or damaged, and prints a proposed partition table.  Ignores disk
+   images stored as files and leftovers of older layouts.  Read-only;
+   RESCUE WRITE rebuilds the table from the findings (new RDB, or missing
+   entries added to the existing one, surviving filesystem drivers
+   included) after a Y/N question - partition data is never touched.
+   GUI: Advanced > Rescue Lost Partitions... (Scan / Deep Scan with a
+   cancellable progress window, report window, then an offer to load the
+   rebuilt table into the editor - written only by the normal Write).
  * Debug tools: view RDB block, raw block scan, hex dump, raw disk read,
    FFS root-block inspection (post-resize validation).
 

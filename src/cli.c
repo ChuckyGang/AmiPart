@@ -38,6 +38,7 @@
 #include "partclone.h"
 #include "ataident.h"
 #include "clearrdb.h"
+#include "rescue.h"
 
 /* Progress state shared by the image copiers and partition clone (defined
    here so the clone command handlers above cmd_imageout can use it). */
@@ -76,7 +77,8 @@ extern struct DosLibrary *DOSBase;
     "LOWCHIP/S,"                                                  \
     "ADDMBR/S,DELMBR/S,MBRTYPE/K,STARTCYL/K,ENDCYL/K,ACTIVE/S,"    \
     "SHRINKINFO/K,SHRINK/K,PARTOUT/K,PARTIN/K,PARTCLONE/K,TO/K,"   \
-    "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S,SAFE/S"
+    "TODEV/K,DELDIR/K,COPYDISK/S,BADBLOCKS/S,SAFE/S,"                \
+    "RESCUE/S,DEEP/S,WRITE/S"
 
 enum {
     ARG_LISTDEV = 0,
@@ -139,6 +141,9 @@ enum {
     ARG_COPYDISK,
     ARG_BADBLOCKS,
     ARG_SAFE,
+    ARG_RESCUE,
+    ARG_DEEP,
+    ARG_WRITE,
     ARG_COUNT
 };
 
@@ -2112,7 +2117,7 @@ static void cli_move_progress(void *ud, ULONG done, ULONG total,
     struct CliProg *p = (struct CliProg *)ud;
     if (total == 0) return;
     {
-        ULONG pct = (done * 100UL) / total;
+        ULONG pct = dp_pct(done, total);
         if (done != total && pct < p->last_pct + 10) return;
         p->last_pct = pct;
         DP_SNPRINTF(outbuf, "  %s: %lu%%\n", phase, (unsigned long)pct);
@@ -3078,7 +3083,7 @@ static BOOL cli_prog_cb(void *ud, ULONG cur, ULONG total)
     }
 
     if (total > 0) {
-        ULONG pct = (cur * 100UL) / total;
+        ULONG pct = dp_pct(cur, total);
         if (cur != total && pct < p->last_pct + 5) return TRUE;
         p->last_pct = pct;
         DP_SNPRINTF(outbuf, GS(MSG_CLI_PROGRESS_PCT),
@@ -3354,6 +3359,81 @@ static LONG cmd_badblock(const char *devname, ULONG unit)
 }
 
 /* ------------------------------------------------------------------ */
+/* RESCUE [DEEP] [WRITE] - scan the disk for lost RDB blocks and       */
+/* filesystems and report what a partition table could be rebuilt     */
+/* from.  Read-only unless WRITE is given: then the findings are      */
+/* merged into the RDB (a fresh one when none is readable) and        */
+/* written after a Y/N question.  Partition data is never touched.    */
+/* ------------------------------------------------------------------ */
+
+static LONG cmd_rescue(const char *devname, ULONG unit, BOOL deep,
+                       BOOL write, BOOL force)
+{
+    struct BlockDev     *bd;
+    struct RescueResult *res;
+    struct CliProg prog;
+    char   err[96];
+    LONG   rc = RETURN_OK;
+
+    DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), devname, unit);
+    cli_puts(outbuf);
+    bd = cli_open_target(devname, unit);
+    if (!bd) return RETURN_ERROR;
+
+    res = (struct RescueResult *)AllocVec(sizeof(*res), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!res) {
+        cli_puts(GS(MSG_CLI_OUT_OF_MEMORY));
+        BlockDev_Close(bd);
+        return RETURN_ERROR;
+    }
+
+    DP_SNPRINTF(outbuf, GS(MSG_RS_START_FMT),
+            (unsigned long)(bd->block_size ? bd->total_bytes / bd->block_size : 0));
+    cli_puts(outbuf);
+
+    prog.last_pct = 0; prog.last_blocks = 0;
+    if (!Rescue_Scan(bd, deep, cli_prog_cb, &prog, res, err)) {
+        cli_puts(err);
+        FreeVec(res); BlockDev_Close(bd);
+        return RETURN_ERROR;
+    }
+    Rescue_Report(res, cli_si_emit, NULL);
+
+    if (!write) {
+        cli_puts(GS(MSG_RS_FOOTER));
+        if (res->cancelled) rc = RETURN_WARN;
+    } else if (res->cancelled) {
+        /* Half a scan must never become a partition table. */
+        cli_puts(GS(MSG_RS_WR_SCAN_CANCELLED));
+        rc = RETURN_WARN;
+    } else {
+        memset(s_rdb, 0, sizeof(*s_rdb));
+        if (!cli_read_rdb(bd, s_rdb) || !s_rdb->valid)
+            memset(s_rdb, 0, sizeof(*s_rdb));       /* build a fresh one */
+
+        if (Rescue_Apply(bd, res, s_rdb, cli_si_emit, NULL) == 0 ||
+            !ask_yn(GS(MSG_RS_WR_ASK), force)) {
+            cli_puts(GS(MSG_RS_WR_NOT_WRITTEN));
+        } else {
+            cli_puts(GS(MSG_CLI_WRITING_RDB));
+            if (!cli_write_rdb(bd, s_rdb)) {
+                cli_puts(GS(MSG_CLI_FAILED));
+                cli_puts(GS(MSG_RS_WR_NOT_WRITTEN));
+                rc = RETURN_ERROR;
+            } else {
+                cli_puts(GS(MSG_CLI_OK));
+                cli_puts(GS(MSG_RS_WR_DONE));
+            }
+        }
+        RDB_FreeCode(s_rdb);
+    }
+
+    FreeVec(res);
+    BlockDev_Close(bd);
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
 /* ADDMBR MBRTYPE=<t> STARTCYL=<cyl> ENDCYL=<cyl|+size> [ACTIVE]     */
 /* ------------------------------------------------------------------ */
 
@@ -3559,7 +3639,8 @@ LONG cli_run(void)
         !args[ARG_CLEARRDB] &&
         !args[ARG_SHRINKINFO] && !args[ARG_SHRINK] &&
         !args[ARG_PARTOUT] && !args[ARG_PARTIN] && !args[ARG_PARTCLONE] &&
-        !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS] && !args[ARG_MOUNTLIST]) {
+        !args[ARG_COPYDISK] && !args[ARG_BADBLOCKS] && !args[ARG_MOUNTLIST] &&
+        !args[ARG_RESCUE]) {
         FreeArgs(rdargs);
         return CLI_NO_ARGS;
     }
@@ -3620,7 +3701,8 @@ LONG cli_run(void)
          args[ARG_ZEROPART]  || args[ARG_ADDMBR]  || args[ARG_DELMBR] ||
          args[ARG_SHRINKINFO] || args[ARG_SHRINK] ||
          args[ARG_PARTOUT] || args[ARG_PARTIN] || args[ARG_PARTCLONE] ||
-         args[ARG_COPYDISK] || args[ARG_BADBLOCKS] || args[ARG_MOUNTLIST])) {
+         args[ARG_COPYDISK] || args[ARG_BADBLOCKS] || args[ARG_MOUNTLIST] ||
+         args[ARG_RESCUE])) {
 
         char  devname[64];
         ULONG unit;
@@ -3716,6 +3798,10 @@ LONG cli_run(void)
 
             if (rc == RETURN_OK && args[ARG_BADBLOCKS])
                 rc = cmd_badblock(devname, unit);
+
+            if (rc == RETURN_OK && args[ARG_RESCUE])
+                rc = cmd_rescue(devname, unit, (BOOL)args[ARG_DEEP],
+                                (BOOL)args[ARG_WRITE], force);
 
             if (rc == RETURN_OK && args[ARG_DELPART])
                 rc = cmd_delpart(devname, unit, force,

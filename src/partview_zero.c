@@ -63,8 +63,10 @@ static void zero_progress_fn(void *ud, ULONG done, ULONG total,
     bar_h = 6;
 
     if (bar_w > 0) {
-        pct      = (total > 0) ? (done * 100UL / total) : 0;
-        filled_w = (total > 0) ? (WORD)((ULONG)bar_w * done / total) : 0;
+        /* via dp_pct: bar_w * done and done * 100 both overflow 32 bits
+           on a large partition */
+        pct      = dp_pct(done, total);
+        filled_w = (WORD)((ULONG)bar_w * pct / 100UL);
 
         SetAPen(rp, 2);
         RectFill(rp, bar_x, bar_y,

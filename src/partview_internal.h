@@ -85,6 +85,10 @@ void  rdb_verify_block   (struct Window *win, struct BlockDev *bd,
 void  rdb_verify_extended(struct Window *win, struct BlockDev *bd);
 void  pv_export_mountlist(struct Window *win, struct BlockDev *bd,
                           struct RDBInfo *rdb);
+/* Advanced > Rescue Lost Partitions...: scan, report, and on request merge
+   the findings into rdb (in memory only).  TRUE = rdb was changed. */
+BOOL  pv_rescue          (struct Window *win, struct BlockDev *bd,
+                          struct RDBInfo *rdb);
 
 /* ------------------------------------------------------------------ */
 /* partview_image.c                                                     */

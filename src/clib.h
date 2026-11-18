@@ -46,6 +46,18 @@ int   strcmp(const char *a, const char *b);
 char *strncpy(char *dst, const char *src, size_t n);
 char *strcpy (char *dst, const char *src);
 
+/* cur as a percentage of total (0..100).  NOT (cur * 100) / total: with
+   32-bit arithmetic that product wraps once cur passes 42.9 million, i.e.
+   20 GB counted in 512-byte blocks, and the percentage starts over. */
+static inline unsigned long dp_pct(unsigned long cur, unsigned long total)
+{
+    unsigned long p;
+    if (total == 0) return 0;
+    if (cur >= total) return 100;
+    p = (total >= 100000UL) ? cur / (total / 100UL) : (cur * 100UL) / total;
+    return p > 99 ? 99 : p;
+}
+
 unsigned long strtoul(const char *s, char **end, int base);
 long          strtol (const char *s, char **end, int base);
 

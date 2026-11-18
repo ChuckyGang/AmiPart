@@ -202,6 +202,66 @@ BADBLOCKS
 
   Example:  AmiPart DEV scsi.device:0 BADBLOCKS >ram:scan.log
 
+RESCUE [DEEP] [WRITE] [FORCE]
+  Scan the target for the remains of a lost or damaged partition table
+  and print a proposed table.  READ-ONLY unless WRITE is given.
+
+  Two kinds of evidence are collected:
+    * RDB blocks (RDSK, PART, FSHD, LSEG) with a valid checksum, wherever
+      they sit.  The chain pointers are ignored, so PART blocks are still
+      found when the RDSK block is gone or the chain is broken.  A PART
+      block restores a partition completely (name, flags, DosEnvec).
+    * Filesystem signatures: FFS/OFS root blocks, PFS3 rootblocks and SFS
+      root blocks.  Each gives the start and size of its partition, which
+      is enough to rebuild an entry when the whole RDB area was wiped
+      (PC "initialise disk", a stray dd, ...).
+
+  The report lists the RDB blocks, the filesystems (volume name, size,
+  confidence) and the proposed table with the geometry it is based on:
+  taken from the RDSK or a PART block when one survived, otherwise derived
+  from the partition positions.
+
+  What a filesystem-only find cannot give back: the drive name, boot
+  priority and bootable flag, buffers, Mask and MaxTransfer, the
+  filesystem driver stored in the RDB, and for PFS3 the exact DosType
+  (PFS\3 is assumed).  FFS does not store its size; it is settled by the
+  following partition, the end of the disk or the cylinder size.
+
+  Disk images stored as files (ADF/HDF) look like partitions.  A find
+  that starts inside another find is treated as such an image, or as a
+  leftover of an older layout, and is left out of the table.
+
+  The scan jumps over the inside of every partition it has positively
+  identified, so it is usually much shorter than a full read.  DEEP reads
+  every block instead: slower, use it when the normal scan misses
+  something.  Progress every 5%, Ctrl+C cancels (the partial result is
+  still printed, return code WARN).  Needs 512-byte device sectors.
+
+  WRITE rebuilds the partition table from the findings and writes it
+  after a Y/N question (FORCE answers Y).  Only the RDB area is written;
+  partition data is never touched, nothing is formatted.
+    * No readable RDB: a new one is created with the proposed geometry.
+    * Readable RDB: it is kept, and only what it lacks is added (a
+      deleted partition, the entries behind a broken chain).  An intact
+      disk gets "Nothing to add" and is not written at all.
+    * Partitions from a PART block come back with all their settings.
+      Partitions from a filesystem alone get the next free DHn name and
+      the ADDPART defaults, not bootable - correct them afterwards.
+    * Filesystem drivers whose FSHD block and code survived are put
+      back.  For any other non-FFS partition the report says which
+      driver is missing; add it with ADDFS.
+    * Left out, with the reason printed: finds that overlap an existing
+      partition, do not fit the cylinder size, or have an unknown DosType
+      (FFS with its boot block lost) - for those the ADDPART cylinders
+      are printed so they can be added by hand.
+  A cancelled scan never writes.  Run RESCUE without WRITE first and read
+  the report.
+
+  Examples:  AmiPart DEV scsi.device:0 RESCUE >ram:rescue.log
+             AmiPart DEV scsi.device:0 RESCUE WRITE
+             amipart DEV=/dev/sdb RESCUE          (Linux build, card reader)
+             amipart IMAGE=card.img RESCUE DEEP
+
 BACKUP <file>
   Read the RDSK block and save it as a raw 512-byte backup file.
   Safe — read-only operation.

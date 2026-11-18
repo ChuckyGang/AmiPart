@@ -1474,8 +1474,84 @@
 #define MSG_RDBFAIL_VERIFY_READ_FMT  1468
 #define MSG_DEV_FLAG_LASTDISK        1469
 #define MSG_DEV_FLAG_LASTLUN         1470
+#define MSG_RS_ERR_512               1471
+#define MSG_RS_START_FMT             1472
+#define MSG_RS_HDR                   1473
+#define MSG_RS_SCANNED_FMT           1474
+#define MSG_RS_CANCELLED             1475
+#define MSG_RS_HDR_RDB               1476
+#define MSG_RS_RDSK_FMT              1477
+#define MSG_RS_NO_RDSK               1478
+#define MSG_RS_NO_PART               1479
+#define MSG_RS_PART_FMT              1480
+#define MSG_RS_PART_BADGEO           1481
+#define MSG_RS_PART_NESTED           1482
+#define MSG_RS_PART_BEYOND           1483
+#define MSG_RS_PART_OVERLAP          1484
+#define MSG_RS_PART_FSOK_FMT         1485
+#define MSG_RS_PART_NOFS_FMT         1486
+#define MSG_RS_PART_DROPPED_FMT      1487
+#define MSG_RS_FSHD_FMT              1488
+#define MSG_RS_LSEG_FMT              1489
+#define MSG_RS_HDR_FS                1490
+#define MSG_RS_NO_FS                 1491
+#define MSG_RS_FS_FMT                1492
+#define MSG_RS_FS_NOSTART_FMT        1493
+#define MSG_RS_CONF_HIGH             1494
+#define MSG_RS_CONF_MED              1495
+#define MSG_RS_CONF_LOW              1496
+#define MSG_RS_FS_TYPE_FMT           1497
+#define MSG_RS_FS_TYPEGUESS_FMT      1498
+#define MSG_RS_FS_TYPEUNK_FMT        1499
+#define MSG_RS_FS_WHOLEDISK          1500
+#define MSG_RS_FS_NOBOOT             1501
+#define MSG_RS_FS_NOSIZE             1502
+#define MSG_RS_FS_SIZERANGE_FMT      1503
+#define MSG_RS_FS_BEYOND             1504
+#define MSG_RS_FS_OVERLAP            1505
+#define MSG_RS_FS_SIZEDIFF_FMT       1506
+#define MSG_RS_FS_MISALIGNED         1507
+#define MSG_RS_NESTED_FMT            1508
+#define MSG_RS_HDR_PROP_FMT          1509
+#define MSG_RS_GEO_RDSK              1510
+#define MSG_RS_GEO_PART              1511
+#define MSG_RS_GEO_DERIVED           1512
+#define MSG_RS_PROP_FMT              1513
+#define MSG_RS_SRC_PART_FS           1514
+#define MSG_RS_SRC_PART              1515
+#define MSG_RS_SRC_FS                1516
+#define MSG_RS_PROP_LEFTOUT_FMT      1517
+#define MSG_RS_PROP_NONE             1518
+#define MSG_RS_FOOTER                1519
+#define MSG_RS_WR_HDR                1520
+#define MSG_RS_WR_NEWRDB_FMT         1521
+#define MSG_RS_WR_KEEPRDB_FMT        1522
+#define MSG_RS_WR_TRUNC              1523
+#define MSG_RS_WR_ADD_FMT            1524
+#define MSG_RS_WR_SKIP_ALIGN_FMT     1525
+#define MSG_RS_WR_SKIP_OVERLAP_FMT   1526
+#define MSG_RS_WR_SKIP_TYPE_FMT      1527
+#define MSG_RS_WR_SKIP_RANGE_FMT     1528
+#define MSG_RS_WR_SKIP_FULL          1529
+#define MSG_RS_WR_FS_FMT             1530
+#define MSG_RS_WR_FS_BAD_FMT         1531
+#define MSG_RS_WR_NEEDFS_FMT         1532
+#define MSG_RS_WR_DEFAULTS           1533
+#define MSG_RS_WR_NOTHING            1534
+#define MSG_RS_WR_NOGEO              1535
+#define MSG_RS_WR_SCAN_CANCELLED     1536
+#define MSG_RS_WR_ASK                1537
+#define MSG_RS_WR_DONE               1538
+#define MSG_RS_WR_NOT_WRITTEN        1539
+#define MSG_PV_MENU_RESCUE           1540
+#define MSG_PV_RESCUE_TITLE          1541
+#define MSG_PV_RESCUE_INTRO          1542
+#define MSG_PV_RESCUE_GADGETS        1543
+#define MSG_PV_RESCUE_SCANNING       1544
+#define MSG_PV_RESCUE_LOAD_FMT       1545
+#define MSG_PV_RESCUE_LOAD_GADGETS   1546
 
-#define MSG_COUNT 1471
+#define MSG_COUNT 1547
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -2958,5 +3034,81 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1468 MSG_RDBFAIL_VERIFY_READ_FMT */ "ERROR: device error %ld reading back block %lu after the write.\n",
     /* 1469 MSG_DEV_FLAG_LASTDISK */ "  [LAST DISK]",
     /* 1470 MSG_DEV_FLAG_LASTLUN */ "  [LAST LUN]",
+    /* 1471 MSG_RS_ERR_512 */ "ERROR: RESCUE needs 512-byte device sectors.\n",
+    /* 1472 MSG_RS_START_FMT */ "Scanning %lu blocks for RDB blocks and filesystem signatures (read-only).\n",
+    /* 1473 MSG_RS_HDR */ "\n=== RDB rescue scan ===\n",
+    /* 1474 MSG_RS_SCANNED_FMT */ "Blocks read: %lu, skipped inside found partitions: %lu, unreadable: %lu\n",
+    /* 1475 MSG_RS_CANCELLED */ "The scan was cancelled - the results below are incomplete.\n",
+    /* 1476 MSG_RS_HDR_RDB */ "\nRDB blocks found:\n",
+    /* 1477 MSG_RS_RDSK_FMT */ "  RDSK at block %lu: %lu cylinders, %lu heads, %lu sectors\n",
+    /* 1478 MSG_RS_NO_RDSK */ "  No valid RDSK block.\n",
+    /* 1479 MSG_RS_NO_PART */ "  No PART blocks.\n",
+    /* 1480 MSG_RS_PART_FMT */ "  PART at block %lu: %s, cylinders %lu-%lu, %s, %s\n",
+    /* 1481 MSG_RS_PART_BADGEO */ "       unusable geometry in this block - ignored\n",
+    /* 1482 MSG_RS_PART_NESTED */ "       lies inside a partition - part of a disk image stored as a file, ignored\n",
+    /* 1483 MSG_RS_PART_BEYOND */ "       runs past the end of this disk\n",
+    /* 1484 MSG_RS_PART_OVERLAP */ "       overlaps the partition of another PART block - one of them is stale\n",
+    /* 1485 MSG_RS_PART_FSOK_FMT */ "       confirmed: %s filesystem found at its first block (%lu)\n",
+    /* 1486 MSG_RS_PART_NOFS_FMT */ "       no known filesystem at its first block (%lu): unformatted or another filesystem\n",
+    /* 1487 MSG_RS_PART_DROPPED_FMT */ "  (%lu more PART blocks not listed)\n",
+    /* 1488 MSG_RS_FSHD_FMT */ "  FSHD at block %lu: filesystem driver for %s, version %lu.%lu\n",
+    /* 1489 MSG_RS_LSEG_FMT */ "  LSEG blocks (filesystem driver code): %lu\n",
+    /* 1490 MSG_RS_HDR_FS */ "\nFilesystems found by signature:\n",
+    /* 1491 MSG_RS_NO_FS */ "  None.\n",
+    /* 1492 MSG_RS_FS_FMT */ "  %s at block %lu, %lu blocks (%s), volume \"%s\", confidence %s\n",
+    /* 1493 MSG_RS_FS_NOSTART_FMT */ "  %s root block at block %lu, volume \"%s\": the start of its partition could not be determined\n",
+    /* 1494 MSG_RS_CONF_HIGH */ "high",
+    /* 1495 MSG_RS_CONF_MED */ "medium",
+    /* 1496 MSG_RS_CONF_LOW */ "low",
+    /* 1497 MSG_RS_FS_TYPE_FMT */ "       DosType %s, %lu-byte blocks\n",
+    /* 1498 MSG_RS_FS_TYPEGUESS_FMT */ "       DosType %s (assumed - the partition type is not stored on disk), %lu-byte blocks\n",
+    /* 1499 MSG_RS_FS_TYPEUNK_FMT */ "       DosType unknown (boot block lost), %lu-byte blocks\n",
+    /* 1500 MSG_RS_FS_WHOLEDISK */ "       starts at block 0: an unpartitioned volume, or a leftover from before the disk was partitioned\n",
+    /* 1501 MSG_RS_FS_NOBOOT */ "       the boot block at the start of the partition is missing or overwritten\n",
+    /* 1502 MSG_RS_FS_NOSIZE */ "       this volume does not record its size - only its start is known\n",
+    /* 1503 MSG_RS_FS_SIZERANGE_FMT */ "       the size is not stored in the filesystem: %lu to %lu blocks are possible\n",
+    /* 1504 MSG_RS_FS_BEYOND */ "       claims blocks past the end of this disk\n",
+    /* 1505 MSG_RS_FS_OVERLAP */ "       overlaps another find - a leftover of an older layout, left out\n",
+    /* 1506 MSG_RS_FS_SIZEDIFF_FMT */ "       the PART block says %lu blocks, the filesystem says %lu\n",
+    /* 1507 MSG_RS_FS_MISALIGNED */ "       does not sit on a cylinder boundary of the proposed geometry - left out\n",
+    /* 1508 MSG_RS_NESTED_FMT */ "  %lu smaller signatures inside these partitions ignored (disk images stored as files).\n",
+    /* 1509 MSG_RS_HDR_PROP_FMT */ "\nProposed partition table - %lu cylinders, %lu heads, %lu sectors (%s):\n",
+    /* 1510 MSG_RS_GEO_RDSK */ "from the RDSK block",
+    /* 1511 MSG_RS_GEO_PART */ "from a PART block",
+    /* 1512 MSG_RS_GEO_DERIVED */ "derived from the partition positions",
+    /* 1513 MSG_RS_PROP_FMT */ "  %-8s cylinders %lu-%lu, blocks %lu-%lu, %s, %s, %s\n",
+    /* 1514 MSG_RS_SRC_PART_FS */ "from PART block + filesystem",
+    /* 1515 MSG_RS_SRC_PART */ "from PART block only",
+    /* 1516 MSG_RS_SRC_FS */ "from filesystem only (name and boot settings lost)",
+    /* 1517 MSG_RS_PROP_LEFTOUT_FMT */ "  (%lu finds left out of the table - see the notes above)\n",
+    /* 1518 MSG_RS_PROP_NONE */ "\nNothing was found that a partition table could be rebuilt from.\n",
+    /* 1519 MSG_RS_FOOTER */ "\nThis was a read-only scan. Nothing on the disk was changed.\n",
+    /* 1520 MSG_RS_WR_HDR */ "\nRebuilding the partition table:\n",
+    /* 1521 MSG_RS_WR_NEWRDB_FMT */ "  New RDB: %lu cylinders, %lu heads, %lu sectors\n",
+    /* 1522 MSG_RS_WR_KEEPRDB_FMT */ "  Existing RDB kept: %lu partitions, %lu filesystem drivers\n",
+    /* 1523 MSG_RS_WR_TRUNC */ "  Its damaged chain is rewritten - entries that could not be read are dropped.\n",
+    /* 1524 MSG_RS_WR_ADD_FMT */ "  + %-8s cylinders %lu-%lu, %s, %s\n",
+    /* 1525 MSG_RS_WR_SKIP_ALIGN_FMT */ "  - block %lu \"%s\": does not fit the cylinder size, left out\n",
+    /* 1526 MSG_RS_WR_SKIP_OVERLAP_FMT */ "  - block %lu \"%s\": overlaps partition %s, left out\n",
+    /* 1527 MSG_RS_WR_SKIP_TYPE_FMT */ "  - block %lu \"%s\": DosType unknown, left out - add it by hand with ADDPART LOW=%lu HIGH=%lu TYPE=...\n",
+    /* 1528 MSG_RS_WR_SKIP_RANGE_FMT */ "  - block %lu \"%s\": outside the usable cylinders of this disk, left out\n",
+    /* 1529 MSG_RS_WR_SKIP_FULL */ "  - the partition table is full, the rest is left out\n",
+    /* 1530 MSG_RS_WR_FS_FMT */ "  + filesystem driver for %s, version %lu.%lu, %lu bytes\n",
+    /* 1531 MSG_RS_WR_FS_BAD_FMT */ "  - filesystem driver for %s at block %lu: code damaged, left out\n",
+    /* 1532 MSG_RS_WR_NEEDFS_FMT */ "  ! %s uses %s, but the RDB holds no driver for it - add one with ADDFS\n",
+    /* 1533 MSG_RS_WR_DEFAULTS */ "  Partitions rebuilt from the filesystem alone got a new drive name and default\n  settings (not bootable, boot priority 0) - correct them before booting from this disk.\n",
+    /* 1534 MSG_RS_WR_NOTHING */ "  Nothing to add - the partition table already holds everything that was found.\n",
+    /* 1535 MSG_RS_WR_NOGEO */ "  Nothing usable was found - no partition table can be built.\n",
+    /* 1536 MSG_RS_WR_SCAN_CANCELLED */ "The scan was cancelled - nothing is written.\n",
+    /* 1537 MSG_RS_WR_ASK */ "Write this partition table to the disk?",
+    /* 1538 MSG_RS_WR_DONE */ "Partition table written. Check it with INFO before using the disk.\n",
+    /* 1539 MSG_RS_WR_NOT_WRITTEN */ "Nothing written.\n",
+    /* 1540 MSG_PV_MENU_RESCUE */ "Rescue Lost Partitions...",
+    /* 1541 MSG_PV_RESCUE_TITLE */ "Rescue Lost Partitions",
+    /* 1542 MSG_PV_RESCUE_INTRO */ "Scan this disk for lost partitions?\n\nThe scan looks for surviving RDB blocks and for FFS, PFS3\nand SFS volumes. It only reads - nothing is written.\n\nScan skips the inside of partitions it has identified.\nDeep Scan reads every block: slow, use it when Scan\nmisses something.",
+    /* 1543 MSG_PV_RESCUE_GADGETS */ "Scan|Deep Scan|Cancel",
+    /* 1544 MSG_PV_RESCUE_SCANNING */ "Scanning for lost partitions",
+    /* 1545 MSG_PV_RESCUE_LOAD_FMT */ "%lu entries can be added to the partition table.\n\nLoad them into the editor?\nNothing is written to the disk until you write the\npartition table yourself.",
+    /* 1546 MSG_PV_RESCUE_LOAD_GADGETS */ "Load|Cancel",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

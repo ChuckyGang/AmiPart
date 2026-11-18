@@ -4546,3 +4546,235 @@ MSG_DEV_FLAG_LASTDISK
 MSG_DEV_FLAG_LASTLUN
   [LAST LUN]
 ;
+;
+;==========================================================================
+; RESCUE - read-only scan for lost RDB blocks and filesystems
+;==========================================================================
+MSG_RS_ERR_512
+ERROR: RESCUE needs 512-byte device sectors.\n
+;
+MSG_RS_START_FMT
+Scanning %lu blocks for RDB blocks and filesystem signatures (read-only).\n
+;
+MSG_RS_HDR
+\n=== RDB rescue scan ===\n
+;
+MSG_RS_SCANNED_FMT
+Blocks read: %lu, skipped inside found partitions: %lu, unreadable: %lu\n
+;
+MSG_RS_CANCELLED
+The scan was cancelled - the results below are incomplete.\n
+;
+MSG_RS_HDR_RDB
+\nRDB blocks found:\n
+;
+MSG_RS_RDSK_FMT
+  RDSK at block %lu: %lu cylinders, %lu heads, %lu sectors\n
+;
+MSG_RS_NO_RDSK
+  No valid RDSK block.\n
+;
+MSG_RS_NO_PART
+  No PART blocks.\n
+;
+MSG_RS_PART_FMT
+  PART at block %lu: %s, cylinders %lu-%lu, %s, %s\n
+;
+MSG_RS_PART_BADGEO
+       unusable geometry in this block - ignored\n
+;
+MSG_RS_PART_NESTED
+       lies inside a partition - part of a disk image stored as a file, ignored\n
+;
+MSG_RS_PART_BEYOND
+       runs past the end of this disk\n
+;
+MSG_RS_PART_OVERLAP
+       overlaps the partition of another PART block - one of them is stale\n
+;
+MSG_RS_PART_FSOK_FMT
+       confirmed: %s filesystem found at its first block (%lu)\n
+;
+MSG_RS_PART_NOFS_FMT
+       no known filesystem at its first block (%lu): unformatted or another filesystem\n
+;
+MSG_RS_PART_DROPPED_FMT
+  (%lu more PART blocks not listed)\n
+;
+MSG_RS_FSHD_FMT
+  FSHD at block %lu: filesystem driver for %s, version %lu.%lu\n
+;
+MSG_RS_LSEG_FMT
+  LSEG blocks (filesystem driver code): %lu\n
+;
+MSG_RS_HDR_FS
+\nFilesystems found by signature:\n
+;
+MSG_RS_NO_FS
+  None.\n
+;
+MSG_RS_FS_FMT
+  %s at block %lu, %lu blocks (%s), volume "%s", confidence %s\n
+;
+MSG_RS_FS_NOSTART_FMT
+  %s root block at block %lu, volume "%s": the start of its partition could not be determined\n
+;
+MSG_RS_CONF_HIGH
+high
+;
+MSG_RS_CONF_MED
+medium
+;
+MSG_RS_CONF_LOW
+low
+;
+MSG_RS_FS_TYPE_FMT
+       DosType %s, %lu-byte blocks\n
+;
+MSG_RS_FS_TYPEGUESS_FMT
+       DosType %s (assumed - the partition type is not stored on disk), %lu-byte blocks\n
+;
+MSG_RS_FS_TYPEUNK_FMT
+       DosType unknown (boot block lost), %lu-byte blocks\n
+;
+MSG_RS_FS_WHOLEDISK
+       starts at block 0: an unpartitioned volume, or a leftover from before the disk was partitioned\n
+;
+MSG_RS_FS_NOBOOT
+       the boot block at the start of the partition is missing or overwritten\n
+;
+MSG_RS_FS_NOSIZE
+       this volume does not record its size - only its start is known\n
+;
+MSG_RS_FS_SIZERANGE_FMT
+       the size is not stored in the filesystem: %lu to %lu blocks are possible\n
+;
+MSG_RS_FS_BEYOND
+       claims blocks past the end of this disk\n
+;
+MSG_RS_FS_OVERLAP
+       overlaps another find - a leftover of an older layout, left out\n
+;
+MSG_RS_FS_SIZEDIFF_FMT
+       the PART block says %lu blocks, the filesystem says %lu\n
+;
+MSG_RS_FS_MISALIGNED
+       does not sit on a cylinder boundary of the proposed geometry - left out\n
+;
+MSG_RS_NESTED_FMT
+  %lu smaller signatures inside these partitions ignored (disk images stored as files).\n
+;
+MSG_RS_HDR_PROP_FMT
+\nProposed partition table - %lu cylinders, %lu heads, %lu sectors (%s):\n
+;
+MSG_RS_GEO_RDSK
+from the RDSK block
+;
+MSG_RS_GEO_PART
+from a PART block
+;
+MSG_RS_GEO_DERIVED
+derived from the partition positions
+;
+MSG_RS_PROP_FMT
+  %-8s cylinders %lu-%lu, blocks %lu-%lu, %s, %s, %s\n
+;
+MSG_RS_SRC_PART_FS
+from PART block + filesystem
+;
+MSG_RS_SRC_PART
+from PART block only
+;
+MSG_RS_SRC_FS
+from filesystem only (name and boot settings lost)
+;
+MSG_RS_PROP_LEFTOUT_FMT
+  (%lu finds left out of the table - see the notes above)\n
+;
+MSG_RS_PROP_NONE
+\nNothing was found that a partition table could be rebuilt from.\n
+;
+MSG_RS_FOOTER
+\nThis was a read-only scan. Nothing on the disk was changed.\n
+;
+MSG_RS_WR_HDR
+\nRebuilding the partition table:\n
+;
+MSG_RS_WR_NEWRDB_FMT
+  New RDB: %lu cylinders, %lu heads, %lu sectors\n
+;
+MSG_RS_WR_KEEPRDB_FMT
+  Existing RDB kept: %lu partitions, %lu filesystem drivers\n
+;
+MSG_RS_WR_TRUNC
+  Its damaged chain is rewritten - entries that could not be read are dropped.\n
+;
+MSG_RS_WR_ADD_FMT
+  + %-8s cylinders %lu-%lu, %s, %s\n
+;
+MSG_RS_WR_SKIP_ALIGN_FMT
+  - block %lu "%s": does not fit the cylinder size, left out\n
+;
+MSG_RS_WR_SKIP_OVERLAP_FMT
+  - block %lu "%s": overlaps partition %s, left out\n
+;
+MSG_RS_WR_SKIP_TYPE_FMT
+  - block %lu "%s": DosType unknown, left out - add it by hand with ADDPART LOW=%lu HIGH=%lu TYPE=...\n
+;
+MSG_RS_WR_SKIP_RANGE_FMT
+  - block %lu "%s": outside the usable cylinders of this disk, left out\n
+;
+MSG_RS_WR_SKIP_FULL
+  - the partition table is full, the rest is left out\n
+;
+MSG_RS_WR_FS_FMT
+  + filesystem driver for %s, version %lu.%lu, %lu bytes\n
+;
+MSG_RS_WR_FS_BAD_FMT
+  - filesystem driver for %s at block %lu: code damaged, left out\n
+;
+MSG_RS_WR_NEEDFS_FMT
+  ! %s uses %s, but the RDB holds no driver for it - add one with ADDFS\n
+;
+MSG_RS_WR_DEFAULTS
+  Partitions rebuilt from the filesystem alone got a new drive name and default\n  settings (not bootable, boot priority 0) - correct them before booting from this disk.\n
+;
+MSG_RS_WR_NOTHING
+  Nothing to add - the partition table already holds everything that was found.\n
+;
+MSG_RS_WR_NOGEO
+  Nothing usable was found - no partition table can be built.\n
+;
+MSG_RS_WR_SCAN_CANCELLED
+The scan was cancelled - nothing is written.\n
+;
+MSG_RS_WR_ASK
+Write this partition table to the disk?
+;
+MSG_RS_WR_DONE
+Partition table written. Check it with INFO before using the disk.\n
+;
+MSG_RS_WR_NOT_WRITTEN
+Nothing written.\n
+;
+MSG_PV_MENU_RESCUE
+Rescue Lost Partitions...
+;
+MSG_PV_RESCUE_TITLE
+Rescue Lost Partitions
+;
+MSG_PV_RESCUE_INTRO
+Scan this disk for lost partitions?\n\nThe scan looks for surviving RDB blocks and for FFS, PFS3\nand SFS volumes. It only reads - nothing is written.\n\nScan skips the inside of partitions it has identified.\nDeep Scan reads every block: slow, use it when Scan\nmisses something.
+;
+MSG_PV_RESCUE_GADGETS
+Scan|Deep Scan|Cancel
+;
+MSG_PV_RESCUE_SCANNING
+Scanning for lost partitions
+;
+MSG_PV_RESCUE_LOAD_FMT
+%lu entries can be added to the partition table.\n\nLoad them into the editor?\nNothing is written to the disk until you write the\npartition table yourself.
+;
+MSG_PV_RESCUE_LOAD_GADGETS
+Load|Cancel
+;

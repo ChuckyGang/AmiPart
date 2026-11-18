@@ -171,7 +171,7 @@ BOOL ProgressWin_Callback(void *ud, ULONG cur, ULONG total)
     if (p->cancelled) return FALSE;
 
     if (total > 0) {
-        ULONG pct = (cur * 100UL) / total;
+        ULONG pct = dp_pct(cur, total);
         if (cur != total && pct == p->last_pct) return TRUE;
         p->last_pct = pct;
         DP_SNPRINTF(line, GS(MSG_IMG_PROGRESS_PCT_FMT),

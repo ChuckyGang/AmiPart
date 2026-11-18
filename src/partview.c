@@ -1811,6 +1811,8 @@ static struct NewMenu partview_menu_def[] = {
     { NM_ITEM,  "Restore Partition from File...", NULL, 0, 0, NULL }, /* ITEM 26 */
     { NM_ITEM,  NM_BARLABEL,             NULL,         0, 0, NULL },  /* ITEM 27 */
     { NM_ITEM,  "Clear RDB and MBR...",  NULL,         0, 0, NULL },  /* ITEM 28 */
+    { NM_ITEM,  NM_BARLABEL,             NULL,         0, 0, NULL },  /* ITEM 29 */
+    { NM_ITEM,  "Rescue Lost Partitions...", NULL,     0, 0, NULL },  /* ITEM 30 */
     /* Menu 2 - Health: disk diagnostics */
     { NM_TITLE, "Health",                NULL,         0, 0, NULL },
     { NM_ITEM,  "SMART Status",          NULL,         0, 0, NULL },  /* ITEM 0 */
@@ -1868,6 +1870,8 @@ static void localize_partview_menu(void)
         MSG_PV_MENU_RESTORE_PART,
         -1,                          /* NM_BARLABEL */
         MSG_PV_MENU_CLEAR_RDB,
+        -1,                          /* NM_BARLABEL */
+        MSG_PV_MENU_RESCUE,
         MSG_PV_MENU_HEALTH,
         MSG_PV_MENU_SMART,
         MSG_PV_MENU_BADBLOCK,
@@ -2551,6 +2555,23 @@ BOOL partview_run(const char *devname, ULONG unit)
                             image_restore_disk(win, bd);
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 14)
                             pv_export_mountlist(win, bd, rdb);
+                        else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 30) {
+                            /* Rescue: merges what the scan found into the
+                               in-memory table only - written by the normal
+                               Write, dropped by Undo. */
+                            if (pv_rescue(win, bd, rdb)) {
+                                { struct TagItem st[]={{GTCB_Checked,0},{TAG_DONE,0}};
+                                  if (lastdisk_gad) { st[0].ti_Data=(rdb->flags&RDBFF_LAST)?1:0;    GT_SetGadgetAttrsA(lastdisk_gad,win,NULL,st); }
+                                  if (lastlun_gad)  { st[0].ti_Data=(rdb->flags&RDBFF_LASTLUN)?1:0; GT_SetGadgetAttrsA(lastlun_gad, win,NULL,st); } }
+                                sel = -1;
+                                dirty = TRUE;
+                                refresh_listview(win, lv_gad, rdb, sel);
+                                draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                            ix, iy, iw, bx, by, bw, bh,
+                                            hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                refresh_all_gadgets(win, glist);
+                            }
+                        }
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 28) {
                             if (offer_clear_rdb(win, bd, rdb, s_mbr)) {
                                 bd = reopen_after_raw_write(bd, devname, unit);

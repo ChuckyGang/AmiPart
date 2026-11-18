@@ -39,6 +39,8 @@
 #include "mountlist.h"
 #include "partview_internal.h"
 #include "ataident.h"
+#include "rescue.h"
+#include "progresswin.h"
 
 extern struct ExecBase      *SysBase;
 extern struct DosLibrary    *DOSBase;
@@ -3320,7 +3322,7 @@ void bad_block_scan(struct Window *win, struct BlockDev *bd,
 
             /* Update title every 1000 blocks */
             if (scan_win && (blk % 1000 == 0)) {
-                ULONG pct = blk * 100UL / total_blks;
+                ULONG pct = dp_pct(blk, total_blks);
                 DP_SNPRINTF(title_buf, GS(MSG_RDB_BBSCAN_PROGRESS_FMT),
                         (unsigned long)(blk + 1), (unsigned long)total_blks,
                         (unsigned long)pct, (unsigned long)bad_count);
@@ -3976,4 +3978,224 @@ ve_cleanup:
         if (scr)     UnlockPubScreen(NULL, scr);
     }
     vrdb_end();
+}
+
+/* ------------------------------------------------------------------ */
+/* pv_rescue - Advanced > Rescue Lost Partitions...                    */
+/*                                                                    */
+/* GUI front-end of the RESCUE scan (rescue.c).  Scan with a          */
+/* cancellable progress window, show the report, then offer to load   */
+/* the rebuilt table into the editor.  Loading only changes the       */
+/* in-memory RDB: the user reviews it (names, boot flags) and writes  */
+/* it with the normal Write button, or drops it with Undo.            */
+/* ------------------------------------------------------------------ */
+
+/* Report lines arrive as CLI text: "\n" separated, sometimes with a
+   leading "\n" for a blank line, often wider than a list row.  Split
+   them, and wrap long ones at a space with an indented continuation. */
+static void rs_add_wrapped(char *line)
+{
+    char  out[80];
+    BOOL  first = TRUE;
+
+    for (;;) {
+        UWORD len = (UWORD)strlen(line), cut, room = first ? 76 : 68;
+        if (len <= room) {
+            if (first) vrdb_add(line);
+            else { DP_SNPRINTF(out, "        %s", line); vrdb_add(out); }
+            return;
+        }
+        for (cut = room; cut > 20 && line[cut] != ' '; cut--) ;
+        if (line[cut] != ' ') cut = room;
+        {
+            char save = line[cut];
+            line[cut] = '\0';
+            if (first) vrdb_add(line);
+            else { DP_SNPRINTF(out, "        %s", line); vrdb_add(out); }
+            line[cut] = save;
+        }
+        line += cut;
+        while (*line == ' ') line++;
+        first = FALSE;
+    }
+}
+
+static void rs_vrdb_emit(void *ud, const char *text)
+{
+    char  line[256];
+    UWORD n = 0;
+
+    (void)ud;
+    for (; *text; text++) {
+        if (*text == '\n') {
+            line[n] = '\0';
+            rs_add_wrapped(line);
+            n = 0;
+        } else if (n < sizeof(line) - 1) {
+            line[n++] = *text;
+        }
+    }
+    if (n) { line[n] = '\0'; rs_add_wrapped(line); }
+}
+
+/* Show the collected vrdb lines in a sizeable list window with a Close
+   button; returns when it is closed. */
+static void vrdb_show(const char *title)
+{
+    struct Screen  *scr;
+    APTR            vi    = NULL;
+    struct Gadget  *glist = NULL;
+    struct Window  *vwin  = NULL;
+    UWORD font_h, bor_t, bor_b, row_h, btn_h, pad, win_w, win_h, min_h;
+    UWORD scr_w, scr_h;
+    BOOL  running = TRUE;
+
+    scr = LockPubScreen(NULL);
+    if (!scr) return;
+    vi = GetVisualInfoA(scr, NULL);
+    if (!vi) { UnlockPubScreen(NULL, scr); return; }
+
+    font_h = (UWORD)scr->Font->ta_YSize;
+    bor_t  = (UWORD)scr->WBorTop + font_h + 1;
+    bor_b  = (UWORD)scr->WBorBottom;
+    pad    = 4;
+    row_h  = font_h + 2;
+    btn_h  = font_h + 6;
+    win_w  = vrdb_fit_w(scr, 520);
+    win_h  = bor_t + pad + row_h * 24 + pad + btn_h + pad + bor_b;
+    min_h  = bor_t + pad + row_h *  4 + pad + btn_h + pad + bor_b;
+    scr_w  = scr->Width;
+    scr_h  = scr->Height;
+    if (win_h > scr_h) win_h = scr_h;
+
+    if (vrdb_make_gadgets(vi, scr, win_w, win_h, &glist)) {
+        struct TagItem wt[] = {
+            { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
+            { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
+            { WA_Width,     win_w }, { WA_Height, win_h },
+            { WA_Title,     (ULONG)title },
+            { WA_Gadgets,   (ULONG)glist },
+            { WA_PubScreen, (ULONG)scr },
+            { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
+                            IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
+            { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
+                            WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG|
+                            WFLG_SIZEGADGET|WFLG_SIZEBBOTTOM },
+            { WA_MinWidth,  300 },
+            { WA_MinHeight, min_h },
+            { WA_MaxWidth,  scr_w },
+            { WA_MaxHeight, scr_h },
+            { TAG_DONE, 0 } };
+        vwin = OpenWindowTagList(NULL, wt);
+    }
+    UnlockPubScreen(NULL, scr);
+
+    if (vwin) {
+        GT_RefreshWindow(vwin, NULL);
+        while (running) {
+            struct IntuiMessage *imsg;
+            WaitPort(vwin->UserPort);
+            while ((imsg = GT_GetIMsg(vwin->UserPort)) != NULL) {
+                ULONG iclass = imsg->Class;
+                struct Gadget *gad = (struct Gadget *)imsg->IAddress;
+                GT_ReplyIMsg(imsg);
+                switch (iclass) {
+                case IDCMP_CLOSEWINDOW: running = FALSE; break;
+                case IDCMP_NEWSIZE: {
+                    struct Gadget *ng2 = NULL;
+                    RemoveGList(vwin, glist, -1);
+                    FreeGadgets(glist); glist = NULL;
+                    if (vrdb_make_gadgets(vi, vwin->WScreen,
+                                          (UWORD)vwin->Width,
+                                          (UWORD)vwin->Height, &ng2)) {
+                        glist = ng2;
+                        AddGList(vwin, glist, ~0, -1, NULL);
+                        RefreshGList(glist, vwin, NULL, -1);
+                    }
+                    GT_RefreshWindow(vwin, NULL);
+                    break; }
+                case IDCMP_REFRESHWINDOW:
+                    GT_BeginRefresh(vwin); GT_EndRefresh(vwin, TRUE); break;
+                case IDCMP_GADGETUP:
+                    if (gad->GadgetID == VRDB_DONE) running = FALSE;
+                    break;
+                }
+            }
+        }
+        if (glist) RemoveGList(vwin, glist, -1);
+        CloseWindow(vwin);
+    }
+    if (glist) FreeGadgets(glist);
+    FreeVisualInfo(vi);
+}
+
+BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
+{
+    struct EasyStruct    es;
+    struct RescueResult *res = NULL;
+    struct RDBInfo      *tmp = NULL;
+    struct ProgressWin   pw;
+    char   err[96];
+    LONG   choice;
+    UWORD  added = 0, orig_fs = 0, k;
+    BOOL   changed = FALSE, scanned;
+
+    es.es_StructSize   = sizeof(es);
+    es.es_Flags        = 0;
+    es.es_Title        = (UBYTE *)GS(MSG_PV_RESCUE_TITLE);
+    es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+
+    if (!bd || !rdb) {
+        es.es_TextFormat = (UBYTE *)GS(MSG_RDB_DEV_NOT_ACCESSIBLE);
+        EasyRequest(win, &es, NULL);
+        return FALSE;
+    }
+
+    es.es_TextFormat   = (UBYTE *)GS(MSG_PV_RESCUE_INTRO);
+    es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_RESCUE_GADGETS);
+    choice = EasyRequest(win, &es, NULL);       /* Scan=1, Deep Scan=2, Cancel=0 */
+    if (choice == 0) return FALSE;
+    es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+
+    res = (struct RescueResult *)AllocVec(sizeof(*res), MEMF_PUBLIC | MEMF_CLEAR);
+    tmp = (struct RDBInfo *)AllocVec(sizeof(*tmp), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!res || !tmp || !vrdb_begin()) goto done;
+
+    ProgressWin_Open(&pw, GS(MSG_PV_RESCUE_SCANNING));
+    scanned = Rescue_Scan(bd, (BOOL)(choice == 2), ProgressWin_Callback, &pw, res, err);
+    ProgressWin_Close(&pw);
+    if (!scanned) {
+        es.es_TextFormat = (UBYTE *)"%s";
+        EasyRequest(win, &es, NULL, (ULONG)err);
+        goto done;
+    }
+
+    Rescue_Report(res, rs_vrdb_emit, NULL);
+    if (!res->cancelled) {
+        /* Work on a copy: the editor's table changes only if the user
+           agrees.  The copy shares the driver code buffers the table
+           already owns; only buffers added by the rescue are new. */
+        if (rdb->valid) { *tmp = *rdb; orig_fs = rdb->num_fs; }
+        added = Rescue_Apply(bd, res, tmp, rs_vrdb_emit, NULL);
+    }
+    vrdb_show(GS(MSG_PV_RESCUE_TITLE));
+
+    if (added) {
+        es.es_TextFormat   = (UBYTE *)GS(MSG_PV_RESCUE_LOAD_FMT);
+        es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_RESCUE_LOAD_GADGETS);
+        if (EasyRequest(win, &es, NULL, (ULONG)added) == 1) {
+            if (!rdb->valid) RDB_FreeCode(rdb);
+            *rdb = *tmp;
+            changed = TRUE;
+        } else {
+            for (k = orig_fs; k < tmp->num_fs; k++)
+                if (tmp->filesystems[k].code) FreeVec(tmp->filesystems[k].code);
+        }
+    }
+
+done:
+    vrdb_end();
+    if (res) FreeVec(res);
+    if (tmp) FreeVec(tmp);
+    return changed;
 }

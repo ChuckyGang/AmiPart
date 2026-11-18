@@ -2207,7 +2207,7 @@ static void script_move_progress(void *ud, ULONG done, ULONG total,
     ULONG pct;
     (void)ud;
     if (total == 0) return;
-    pct = (done * 100UL) / total;
+    pct = dp_pct(done, total);
     if (done != total && pct < last + 20) return;
     last = (done == total) ? 0 : pct;
     DP_SNPRINTF(s_msg, GS(MSG_SCR_GROW_STEP_FMT), phase);
@@ -2517,7 +2517,7 @@ static BOOL script_prog_cb(void *ud, ULONG cur, ULONG total)
     }
 
     if (total > 0) {
-        ULONG pct = (cur * 100UL) / total;
+        ULONG pct = dp_pct(cur, total);
         if (cur != total && pct < s_prog_pct + 5) return TRUE;
         s_prog_pct = pct;
         DP_SNPRINTF(s_msg, GS(MSG_SCR_PROG_PCT_FMT),
