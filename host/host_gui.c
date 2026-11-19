@@ -540,7 +540,11 @@ BOOL hg_ensure(void)
             return FALSE;
         }
         if ((e = getenv("AMIPART_GUI_SCALE")) != NULL) hg_scale = atoi(e);
-        else if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.h >= 1500) hg_scale = 2;
+        else if (SDL_GetCurrentDisplayMode(0, &dm) == 0) {
+            /* largest whole-number scale that still leaves room on the desktop */
+            while (hg_scale < 4 && W * (hg_scale + 1) <= dm.w * 9 / 10 &&
+                                   H * (hg_scale + 1) <= dm.h * 85 / 100) hg_scale++;
+        }
         if (hg_scale < 1 || hg_scale > 4) hg_scale = 1;
         sdl_win = SDL_CreateWindow("AmiPart", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                    W * hg_scale, H * hg_scale, SDL_WINDOW_RESIZABLE);

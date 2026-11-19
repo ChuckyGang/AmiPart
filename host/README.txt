@@ -100,7 +100,8 @@ Different from the Amiga:
 
 Environment:
   AMIPART_GUI_SIZE=WxH     screen size in pixels before scaling (800x600)
-  AMIPART_GUI_SCALE=n      integer scale 1-4 (default 2 on high-DPI displays)
+  AMIPART_GUI_SCALE=n      integer scale 1-4 (default: the largest that fits
+                           the desktop)
   AMIPART_GUI_HEADLESS=1   no SDL video at all - for tests
   AMIPART_GUI_SCRIPT=file  feed input and take screenshots (.ppm); see
                            hg_script_step() in host_gui.c and
