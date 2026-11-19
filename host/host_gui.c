@@ -207,6 +207,7 @@ void InitRastPort(struct RastPort *rp)
 {
     memset(rp, 0, sizeof(*rp));
     rp->FgPen = 1;
+    rp->DrawMode = JAM2;          /* as graphics.library: text replaces what is under it */
     rp->Font = &hg_tf;
     rp->TxHeight = HG_FH; rp->TxWidth = HG_FW; rp->TxBaseline = HG_FB;
 }
