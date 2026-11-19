@@ -63,7 +63,7 @@ def open_image(name):
     """Script lines from program start to the main window on image <name>."""
     return ["expect WARNING", "gadid 1",          # startup warning -> Continue
             "expect Select Device", "gadid 6",    # Use Image
-            "set 3 " + name, "gadid 4",           # file requester: name + Open
+            "set 3 " + name,                      # file requester: name + Return
             "expect " + name]
 
 
