@@ -62,6 +62,13 @@ scripting interface.
 --------------------------------------------------------------------------------
  * Add a partition with the "Add" button, or by click-and-dragging in an empty
    area of the partition map.
+ * Zoomable partition map, so small partitions next to large ones on big
+   disks (SD/CF cards) stay selectable and resizable: "-" / "+" buttons (or
+   the + and - keys, or the mouse wheel over the map, zooming around the
+   pointer), "Fit" (or 0) for the whole disk, and "Selected" to zoom onto
+   the selected partition.  The scroller under the map pans; picking a
+   partition in the list pans it into view.  Drags work at any zoom level
+   and get finer as you zoom in.
  * Quick-format a newly added partition immediately (Volume name + "Do not
    format" option in the Add dialog; VOLNAME= on the CLI / in scripts).
    CLI and scripts default to AmiPart's INTERNAL formatter (nativefmt.c): it
