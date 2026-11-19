@@ -1,7 +1,13 @@
 # AmiPart Linux GUI - plan
 
-Status: plan only, nothing built. Written 2026-11-18. Numbers below were
-measured on the tree at commit f8f4e99.
+Status 2026-11-19: stages 1-4 are built and pass the headless test
+(`test/guitest.py`): the whole GUI compiles and runs on Linux, edits and
+writes images and raw devices, and every menu entry opens. Not done yet:
+a look at it on a real display by a person, packaging (stage 5 - the CI
+artifact links SDL2 dynamically and is not attached to the release),
+SMART / raw SCSI views on Linux, catalogs. See `host/README.txt`.
+
+Original plan, written 2026-11-18 (numbers measured at commit f8f4e99):
 
 ## Goal
 

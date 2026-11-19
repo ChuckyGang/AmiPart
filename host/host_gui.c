@@ -771,14 +771,17 @@ void SetWindowTitles(struct Window *win, UBYTE *wtitle, UBYTE *stitle)
     }
 }
 
+/* As Intuition: 0 leaves a limit alone, and a limit the current window
+   size already violates is not set (the call then returns FALSE). */
 BOOL WindowLimits(struct Window *win, LONG minw, LONG minh, ULONG maxw, ULONG maxh)
 {
+    BOOL ok = TRUE;
     if (!win) return FALSE;
-    if (minw) win->MinWidth  = (WORD)minw;
-    if (minh) win->MinHeight = (WORD)minh;
-    if (maxw) win->MaxWidth  = (UWORD)maxw;
-    if (maxh) win->MaxHeight = (UWORD)maxh;
-    return TRUE;
+    if (minw) { if (minw <= win->Width)  win->MinWidth  = (WORD)minw; else ok = FALSE; }
+    if (minh) { if (minh <= win->Height) win->MinHeight = (WORD)minh; else ok = FALSE; }
+    if (maxw) { if (maxw >= (ULONG)win->Width)  win->MaxWidth  = (UWORD)maxw; else ok = FALSE; }
+    if (maxh) { if (maxh >= (ULONG)win->Height) win->MaxHeight = (UWORD)maxh; else ok = FALSE; }
+    return ok;
 }
 
 void SetPointer(struct Window *win, UWORD *data, LONG h, LONG w, LONG xo, LONG yo)
@@ -1084,7 +1087,14 @@ static void hg_sdl_event(SDL_Event *e)
 {
     switch (e->type) {
     case SDL_QUIT:
-        if (hg_top) hw_post(hg_top, IDCMP_CLOSEWINDOW, 0, 0, &hg_top->w);
+        /* The desktop's close button: close the top window if it can be
+           closed, otherwise answer it like Esc (requesters cancel). */
+        if (hg_top) {
+            if (hg_top->w.IDCMPFlags & IDCMP_CLOSEWINDOW)
+                hw_post(hg_top, IDCMP_CLOSEWINDOW, 0, 0, &hg_top->w);
+            else
+                hg_key(27);
+        }
         break;
     case SDL_WINDOWEVENT:
         if (e->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {

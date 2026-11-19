@@ -29,6 +29,24 @@ Quick-format works here too: AmiPart's internal formatter writes FFS/OFS,
 PFS3 and SFS volumes itself, byte-identical to the real handlers.
 See `host/README.txt` for details.
 
+## Linux GUI (experimental)
+
+The same GUI as on the Amiga, in a window on Linux — the Amiga GUI source
+compiled against a small Intuition/GadTools layer on SDL2. Open an image
+file or a raw disk, edit, rescue, write:
+
+```
+sudo apt install libsdl2-dev        # build dependency
+make linux-gui                      # builds host/amipart-gui
+./host/amipart-gui                  # GUI;  with arguments it is the CLI
+```
+
+It looks and works like AmiPart on an Amiga, not like a native Linux
+program. Menus are in the bar at the top (left click, or Ctrl+key for the
+shortcuts). Mounting, unmounting, the OS formatter and reboot prompts do
+not exist here; SMART and the raw SCSI debug tools need an Amiga driver.
+Raw disks need the same permissions as the CLI. See `host/README.txt`.
+
 ---
 
 ## About

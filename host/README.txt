@@ -63,3 +63,48 @@ Correctness: the reference partitioning script produces a byte-identical
 image from this binary and from the m68k binary under vamos, and
 test/host/hostrdb round-trips an Amiga-written RDB byte-identically
 through the same endian-explicit core (src/rdbbe.h).
+
+
+Linux GUI (experimental)
+========================
+
+  make gui            (in this directory; needs libsdl2-dev)
+  ./amipart-gui       opens the GUI; with arguments it is the same CLI
+
+The GUI is the Amiga GUI source (../src/partview*.c, diskselect.c, main.c
+...) compiled unchanged against an implementation of the Intuition,
+GadTools, graphics and ASL calls it makes:
+
+  host_gui.h        the Amiga structs/constants/prototypes the GUI uses
+  host_gui.c        screen, windows, drawing, input, event pump (SDL2)
+  host_gadtools.c   button, checkbox, cycle, string, listview, text
+                    gadgets and menus
+  host_req.c        EasyRequest, the file requester, small exec/dos stubs
+  gui_font.h        8x13 bitmap font (X11 misc-fixed, public domain;
+                    regenerate with ../support/mkguifont.py)
+
+One SDL window is the "screen"; AmiPart's windows are drawn inside it.
+Input goes to the most recently opened window (all dialogs are modal).
+
+Different from the Amiga:
+  * Menus stay visible in the top bar; left click, or Ctrl+<key>.
+  * A string field is committed when you click elsewhere, not only on
+    Return.  Tab moves to the next field.  Ctrl+V pastes, Ctrl+X clears.
+  * Esc answers a requester with its rightmost button (cancel).  Return
+    only closes one-button requesters - a stray key never confirms a write.
+  * The mouse wheel and the cursor / page keys scroll a list.
+  * No unmount / mount / OS format / reboot: nothing from the disk is
+    mounted here.  SMART and the raw SCSI debug views need an Amiga driver.
+  * A disk that cannot be opened (mounted, no permission) is reported
+    and you return to the device list.
+
+Environment:
+  AMIPART_GUI_SIZE=WxH     screen size in pixels before scaling (800x600)
+  AMIPART_GUI_SCALE=n      integer scale 1-4 (default 2 on high-DPI displays)
+  AMIPART_GUI_HEADLESS=1   no SDL video at all - for tests
+  AMIPART_GUI_SCRIPT=file  feed input and take screenshots (.ppm); see
+                           hg_script_step() in host_gui.c and
+                           ../test/guitest.py
+
+Test:  python3 ../test/guitest.py     (headless, also run in CI)
+

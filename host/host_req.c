@@ -179,10 +179,8 @@ static LONG easy_run(struct Window *parent, struct EasyStruct *es, const char *b
     const char *q;
 
     (void)parent;
-    if (!scr) {                       /* no display: report on the terminal, answer "cancel" */
-        fprintf(stderr, "%s\n", body);
-        return 0;
-    }
+    (void)body;
+    if (!scr) return 0;               /* no display (already reported): answer "cancel" */
 
     strncpy(labels, es->es_GadgetFormat ? (char *)es->es_GadgetFormat : "OK", sizeof(labels) - 1);
     labels[sizeof(labels) - 1] = '\0';
