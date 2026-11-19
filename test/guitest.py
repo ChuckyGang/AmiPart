@@ -98,6 +98,14 @@ def main():
         check("start, device list, open image", rc == 0 and "DH0" in out and "DH1" in out
               and "FFS+Intl" in out, out[-600:])
 
+        # ---- file requester: click a file in the list, then Open ----------
+        shutil.copy(base, os.path.join(d, "t.hdf"))
+        rc, out = gui(d, ["gadid 1", "gadid 6", "expect image file",
+                          "lvrow 2 2", "expect image file", "dump",     # rows: base.hdf, script.txt, t.hdf
+                          "gadid 4", "expect t.hdf", "dump"])
+        check("file requester: pick a file by clicking it",
+              rc == 0 and 'value="t.hdf"' in out and "DH1" in out, out[-700:])
+
         # ---- delete + write == CLI DELPART ------------------------------
         shutil.copy(base, os.path.join(d, "t.hdf"))
         shutil.copy(base, os.path.join(d, "c.hdf"))

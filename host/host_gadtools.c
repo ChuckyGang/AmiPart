@@ -512,7 +512,7 @@ void hgad_blur(struct HWin *hw)
     hw->active = NULL;
     a->si.LongInt = (LONG)strtol((char *)a->si.Buffer, NULL, 10);
     hgad_draw(a);
-    hw_post(hw, IDCMP_GADGETUP, 0, 0, &a->g);
+    hw_post(hw, IDCMP_GADGETUP, 9, 0, &a->g);   /* Code 9 as for Tab: left, not Return */
 }
 
 void hgad_mouse_down(struct HGad *g, int x, int y, int shift)

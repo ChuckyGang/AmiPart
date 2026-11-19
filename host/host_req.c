@@ -480,7 +480,10 @@ BOOL AslRequest(APTR req, struct TagItem *tags)
             if (cls != IDCMP_GADGETUP) continue;
             switch (g->GadgetID) {
             case FRG_CANCEL: done = TRUE; break;
-            case FRG_OK: case FRG_FILE: ok = TRUE; done = TRUE; break;
+            case FRG_OK: ok = TRUE; done = TRUE; break;
+            case FRG_FILE:                    /* Return confirms; merely leaving the field does not */
+                if (code == 0) { ok = TRUE; done = TRUE; }
+                break;
             case FRG_PARENT: {
                 char *sl;
                 strncpy(r->drawer, (char *)((struct StringInfo *)g_drawer->SpecialInfo)->Buffer, sizeof(r->drawer) - 1);
