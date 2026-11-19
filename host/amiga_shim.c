@@ -2,6 +2,7 @@
  * (dos.library) path is functional; the exec device path is stubbed to
  * fail, since the PoC uses BlockDev_OpenFile (BD_FILE) exclusively. */
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -180,6 +181,25 @@ static int shim_driver(void)
 struct MsgPort *CreateMsgPort(void) { return NULL; }
 void DeleteMsgPort(struct MsgPort *p) { (void)p; }
 
+/* Why the last OpenDevice failed, or the read-only note when it worked.
+   Printed for the CLI; the GUI shows it in a requester (host_open_message). */
+static char host_open_msg[300];
+static void open_msg(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(host_open_msg, sizeof(host_open_msg), fmt, ap);
+    va_end(ap);
+    fputs(host_open_msg, stderr);
+}
+const char *host_open_message(void)      /* read once: the message is then cleared */
+{
+    static char out[300];
+    memcpy(out, host_open_msg, sizeof(out));
+    host_open_msg[0] = '\0';
+    return out;
+}
+
 LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
 {
     const char *name = (const char *)n;
@@ -188,15 +208,16 @@ LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
     int fd, ro = 0;
     (void)u; (void)f;
 
+    host_open_msg[0] = '\0';
     if (!name || name[0] != '/' || !io) return -1;
 
     if (stat(name, &st) != 0) {
-        fprintf(stderr, "%s: %s\n", name, strerror(errno));
+        open_msg("%s: %s\n", name, strerror(errno));
         return -1;
     }
     if (!S_ISBLK(st.st_mode) &&
         !(shim_driver() != SHIM_DRV_DEFAULT && S_ISREG(st.st_mode))) {
-        fprintf(stderr, "%s: not a block device (use IMAGE=<file> for image files)\n", name);
+        open_msg("%s: not a block device (use IMAGE=<file> for image files)\n", name);
         return -1;
     }
 
@@ -207,17 +228,17 @@ LONG OpenDevice(CONST_STRPTR n, ULONG u, struct IORequest *io, ULONG f)
     }
     if (fd < 0) {
         if (errno == EBUSY)
-            fprintf(stderr, "%s: device is busy - a partition is mounted or "
+            open_msg("%s: device is busy - a partition is mounted or "
                     "another program holds it. Unmount it first.\n", name);
         else if (errno == EACCES)
-            fprintf(stderr, "%s: permission denied (try sudo, or add yourself "
+            open_msg("%s: permission denied (try sudo, or add yourself "
                     "to the 'disk' group)\n", name);
         else
-            fprintf(stderr, "%s: %s\n", name, strerror(errno));
+            open_msg("%s: %s\n", name, strerror(errno));
         return -1;
     }
     if (ro)
-        fprintf(stderr, "%s: opened READ-ONLY (no write permission) - "
+        open_msg("%s: opened READ-ONLY (no write permission) - "
                 "writes will fail\n", name);
 
     hd = (struct HostDev *)calloc(1, sizeof(*hd));

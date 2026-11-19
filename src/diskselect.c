@@ -308,7 +308,11 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
         UWORD bor_t   = (UWORD)scr->WBorTop + font_h + 1;
         UWORD bor_r   = (UWORD)scr->WBorRight;
         UWORD bor_b   = (UWORD)scr->WBorBottom;
+#ifdef AMIPART_HOST
+        UWORD win_w   = 640;   /* "/dev/sdX  size  model  [IN USE]" lines are wider */
+#else
         UWORD win_w   = 400;
+#endif
         UWORD inner_w;
         UWORD pad     = 4;
         {   /* button row must fit its labels (issue #14/4) */

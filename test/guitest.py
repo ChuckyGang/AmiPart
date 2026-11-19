@@ -46,12 +46,14 @@ def cli(img, args):
                           capture_output=True, text=True, errors="replace", timeout=120)
 
 
-def gui(workdir, lines, timeout=120):
+def gui(workdir, lines, timeout=120, extra_env=None):
     """Run the GUI with a script; returns (returncode, stdout)."""
     script = os.path.join(workdir, "script.txt")
     with open(script, "w", encoding="latin-1") as f:
         f.write("\n".join(lines) + "\n")
     env = dict(os.environ, AMIPART_GUI_HEADLESS="1", AMIPART_GUI_SCRIPT=script)
+    if extra_env:
+        env.update(extra_env)
     p = subprocess.run([GUI], cwd=workdir, env=env, stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, errors="replace", timeout=timeout)
     return p.returncode, p.stdout + p.stderr
@@ -107,6 +109,26 @@ def main():
         check("delete + write: same image as CLI DELPART",
               rc == 0 and r.returncode == 0 and same(os.path.join(d, "t.hdf"), os.path.join(d, "c.hdf")),
               out[-600:])
+
+        # ---- same through the raw-device backend ---------------------------
+        # The shim driver lets a plain file under /dev/shm stand in for a
+        # block device (as the CLI job in CI does), so no root is needed.
+        if os.path.isdir("/dev/shm"):
+            dev = "/dev/shm/amipart-guitest-%d.hdf" % os.getpid()
+            shutil.copy(base, dev)
+            try:
+                rc, out = gui(d, ["expect WARNING", "gadid 1", "expect Select Device",
+                                  "set 5 " + dev, "gadid 2",          # manual device name, Select
+                                  "expect " + dev, "dump", "lvrow 1 0", "gadid 2",   # unit 0
+                                  "expect unit 0", "lvrow 1 1", "gadid 5",
+                                  "expect Delete", "gadid 1",
+                                  "gadid 7", "expect Write partition table", "gadid 1"],
+                              extra_env={"AMIPART_SHIM_DRIVER": "warpata"})
+                check("device backend: unit list shows the RDB", "RDB @ block 0: DH0 DH1" in out, out[-600:])
+                check("device backend: delete + write same image as CLI",
+                      rc == 0 and same(dev, os.path.join(d, "c.hdf")), out[-600:])
+            finally:
+                os.remove(dev)
 
         # ---- add in the free gap + write --------------------------------
         shutil.copy(base, os.path.join(d, "t.hdf"))

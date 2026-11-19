@@ -2235,7 +2235,36 @@ BOOL partview_run(const char *devname, ULONG unit)
     bg_pen = rdb_pen = mbr_pen = -1;
 
     /* ---- Open device, read RDB, get geometry if needed ---- */
+#ifdef AMIPART_HOST
+    {
+        /* The host layer knows why a disk could not be opened (in use, no
+           permission) or that it is read-only.  Say so in a requester; an
+           unopenable disk goes back to the selector instead of opening an
+           empty editor. */
+        extern const char *host_open_message(void);
+        const char *why;
+        bd  = BlockDev_Open(devname, unit);
+        why = host_open_message();
+        if (!bd || (why && why[0])) {
+            struct EasyStruct es;
+            static char omsg[400];
+            UWORD k;
+            DP_SNPRINTF(omsg, "%s", (why && why[0]) ? why : "Cannot open the disk or image file.");
+            for (k = 0; omsg[k]; k++) ;                 /* strip the trailing newline */
+            if (k && omsg[k - 1] == '\n') omsg[k - 1] = '\0';
+            for (k = 60; omsg[k] && strlen(omsg) > 70; k++)   /* fold a long line once or twice */
+                if (omsg[k] == ' ') { omsg[k] = '\n'; k += 60; if (k >= strlen(omsg)) break; }
+            es.es_StructSize=sizeof(es); es.es_Flags=0;
+            es.es_Title=(UBYTE*)AMIPART_VERTITLE;
+            es.es_TextFormat=(UBYTE*)"%s";
+            es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
+            EasyRequest(NULL, &es, NULL, (IPTR)omsg);
+            if (!bd) goto cleanup;
+        }
+    }
+#else
     bd = BlockDev_Open(devname, unit);
+#endif
 
     if (bd && !BlockDev_IsHardDisk(bd)) {
         struct EasyStruct es;

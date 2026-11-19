@@ -176,11 +176,31 @@ jobs:
           cmp loop.img ref.img
           echo "raw-device RDB byte-identical to image mode"
 
+      # Linux GUI: the Amiga GUI source on an Intuition/GadTools layer over
+      # SDL2.  Building it here also keeps the GUI source portable; the test
+      # drives it headless (no display, no SDL video) with scripted input.
+      - name: Build Linux GUI
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libsdl2-dev
+          make linux-gui
+
+      - name: Linux GUI test (headless)
+        run: python3 test/guitest.py
+
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
           name: amipart-linux-x86_64
           path: host/amipart
+          if-no-files-found: error
+
+      # Not attached to the release yet: links SDL2 dynamically (libsdl2-2.0-0).
+      - name: Upload Linux GUI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: amipart-gui-linux-x86_64
+          path: host/amipart-gui
           if-no-files-found: error
 
   release:
