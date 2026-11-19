@@ -71,6 +71,11 @@ Linux GUI (experimental)
   make gui            (in this directory; needs libsdl2-dev)
   ./amipart-gui       opens the GUI; with arguments it is the same CLI
 
+This is an experimental wrapper and a fun side project.  It runs the
+Amiga GUI code on Linux through a small compatibility layer, so yes, it
+looks very Amiga-like, and that is by choice.  The main goal of AmiPart is
+still the Amiga program; this is not a native Linux application.
+
 The GUI is the Amiga GUI source (../src/partview*.c, diskselect.c, main.c
 ...) compiled unchanged against an implementation of the Intuition,
 GadTools, graphics and ASL calls it makes:

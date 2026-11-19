@@ -31,6 +31,12 @@ See `host/README.txt` for details.
 
 ## Linux GUI (experimental)
 
+**This is an experimental wrapper and a fun side project.** It runs the
+Amiga GUI code on Linux through a small compatibility layer, so yes, it
+looks very Amiga-like, and that is by choice. The main goal of AmiPart is
+still the Amiga program; this is not a native Linux application and gets
+attention only after the Amiga side.
+
 The same GUI as on the Amiga, in a window on Linux — the Amiga GUI source
 compiled against a small Intuition/GadTools layer on SDL2. Open an image
 file or a raw disk, edit, rescue, write:

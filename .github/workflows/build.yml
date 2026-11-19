@@ -253,9 +253,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          HEAD="Automated prototype build from commit \`${{ github.sha }}\`."
+          cat > notes.md <<EOF
+          $HEAD
+
+          **About the Linux GUI (\`amipart-gui\`, built with \`make linux-gui\`):** it is an
+          experimental wrapper, a fun side project. It runs the Amiga GUI code
+          on Linux through a small compatibility layer, so yes, it looks very
+          Amiga-like, and that is by choice. The main goal of AmiPart is still
+          the Amiga program; the Linux GUI is not a native Linux application
+          and is not included in this release (build it from source).
+          EOF
           gh release create proto \
             --title "AmiPart ${{ steps.date.outputs.DATE }} PROTO" \
-            --notes "Automated prototype build from commit \`${{ github.sha }}\`." \
+            --notes-file notes.md \
             --prerelease \
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
@@ -269,9 +280,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="proto-${{ steps.date.outputs.DATE }}-${GITHUB_SHA::7}"
+          HEAD="Archived prototype build from commit \`${{ github.sha }}\`. The rolling \`proto\` release always has the newest build."
+          cat > notes.md <<EOF
+          $HEAD
+
+          **About the Linux GUI (\`amipart-gui\`, built with \`make linux-gui\`):** it is an
+          experimental wrapper, a fun side project. It runs the Amiga GUI code
+          on Linux through a small compatibility layer, so yes, it looks very
+          Amiga-like, and that is by choice. The main goal of AmiPart is still
+          the Amiga program; the Linux GUI is not a native Linux application
+          and is not included in this release (build it from source).
+          EOF
           gh release create "$TAG" \
             --title "AmiPart ${{ steps.date.outputs.DATE }} (${GITHUB_SHA::7})" \
-            --notes "Archived prototype build from commit \`${{ github.sha }}\`. The rolling \`proto\` release always has the newest build." \
+            --notes-file notes.md \
             --prerelease \
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
