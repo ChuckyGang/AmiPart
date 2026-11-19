@@ -2050,6 +2050,12 @@ static BOOL unmount_deleted_partitions(struct Window *win, struct BlockDev *bd, 
     int   any = 0;
     BOOL  need_reboot = FALSE;
 
+#ifdef AMIPART_HOST
+    /* Nothing from this disk is mounted on the host: no report. */
+    (void)win; (void)bd; (void)rdb; (void)i; (void)k; (void)any; (void)rlen; (void)report;
+    s_unmount_count = 0;
+    if (!need_reboot) return FALSE;
+#endif
     report[0] = '\0';
     for (i = 0; i < s_unmount_count; i++) {
         const char *nm = s_unmount_names[i];

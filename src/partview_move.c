@@ -29,6 +29,7 @@
 #include "sfsresize.h"
 #include "partmove.h"
 #include "partview_internal.h"
+#include "rdbbe.h"
 #include "quickformat.h"
 #include "locale_support.h"
 #include "guisize.h"
@@ -109,6 +110,8 @@ void check_ffs_root(struct Window *win, struct BlockDev *bd,
         return;
     }
 
+    BE32_SWAB_BUF(buf, L);   /* big-endian on disk; no-op on the Amiga */
+
     /* Verify checksum: sum of all L longs must be 0 */
     ULONG sum = 0;
     for (ULONG i = 0; i < L; i++) sum += buf[i];
@@ -127,7 +130,7 @@ void check_ffs_root(struct Window *win, struct BlockDev *bd,
         ULONG *bb = (ULONG *)AllocVec(512, MEMF_PUBLIC | MEMF_CLEAR);
         if (bb) {
             if (BlockDev_ReadBlock(bd, part_abs, bb))
-                bb2 = bb[2];
+                bb2 = BE32R(bb[2]);
             FreeVec(bb);
         }
     }

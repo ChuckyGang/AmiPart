@@ -895,10 +895,10 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
 
     /* ---- Verify checksum ---- */
     {
-        ULONG sum = 0, n = r->rdb_SummedLongs, i;
+        ULONG sum = 0, n = BE32R(r->rdb_SummedLongs), i;
         ULONG *lw = (ULONG *)buf;
         if (n > bd->block_size / 4) n = bd->block_size / 4;
-        for (i = 0; i < n; i++) sum += lw[i];
+        for (i = 0; i < n; i++) sum += BE32R(lw[i]);
 
         /* ---- Build display lines ---- */
         if (!vrdb_begin()) { FreeVec(buf); return; }
@@ -938,79 +938,79 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
         vrdb_add(GS(MSG_RDB_HDR_IDENTITY));
         { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BLOCK_NUMBER_FMT), (unsigned long)rdb->block_num); vrdb_add(b); }
         { char id[8], b[80];
-          id[0]=(char)((r->rdb_ID>>24)&0xFF); id[1]=(char)((r->rdb_ID>>16)&0xFF);
-          id[2]=(char)((r->rdb_ID>> 8)&0xFF); id[3]=(char)( r->rdb_ID     &0xFF);
+          id[0]=(char)((BE32R(r->rdb_ID)>>24)&0xFF); id[1]=(char)((BE32R(r->rdb_ID)>>16)&0xFF);
+          id[2]=(char)((BE32R(r->rdb_ID)>> 8)&0xFF); id[3]=(char)( BE32R(r->rdb_ID)     &0xFF);
           id[4]='\0';
           for (i=0;i<4;i++) if (id[i]<0x20||id[i]>0x7E) id[i]='.';
-          DP_SNPRINTF(b, GS(MSG_RDB_ID_FMT), id, (unsigned long)r->rdb_ID);
+          DP_SNPRINTF(b, GS(MSG_RDB_ID_FMT), id, (unsigned long)BE32R(r->rdb_ID));
           vrdb_add(b); }
         { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_SUMMEDLONGS_FMT),
-              (unsigned long)r->rdb_SummedLongs,
-              (unsigned long)(r->rdb_SummedLongs * 4)); vrdb_add(b); }
+              (unsigned long)BE32R(r->rdb_SummedLongs),
+              (unsigned long)(BE32R(r->rdb_SummedLongs) * 4)); vrdb_add(b); }
         { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_CHECKSUM_FMT),
-              (unsigned long)(ULONG)r->rdb_ChkSum,
+              (unsigned long)(ULONG)BE32R(r->rdb_ChkSum),
               (sum == 0) ? GS(MSG_RDB_VALID) : GS(MSG_RDB_INVALID)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HOSTID_FMT), (unsigned long)r->rdb_HostID); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BLOCKBYTES_FMT), (unsigned long)r->rdb_BlockBytes); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HOSTID_FMT), (unsigned long)BE32R(r->rdb_HostID)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BLOCKBYTES_FMT), (unsigned long)BE32R(r->rdb_BlockBytes)); vrdb_add(b); }
 
         /* --- Flags --- */
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HDR_FLAGS_FMT), (unsigned long)r->rdb_Flags); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT0_LAST_FMT), (r->rdb_Flags & RDBFF_LAST)      ? GS(MSG_RDB_FLAG_SET_NOMORE_DISKS)  : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT1_LASTLUN_FMT), (r->rdb_Flags & RDBFF_LASTLUN)   ? GS(MSG_RDB_FLAG_SET_NOMORE_LUNS)   : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT2_LASTTID_FMT), (r->rdb_Flags & RDBFF_LASTTID)   ? GS(MSG_RDB_FLAG_SET_NOMORE_TIDS)   : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT3_NORESELECT_FMT), (r->rdb_Flags & RDBFF_NORESELECT) ? GS(MSG_RDB_FLAG_SET_NORESELECT)    : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT4_DISKID_FMT), (r->rdb_Flags & RDBFF_DISKID)     ? GS(MSG_RDB_FLAG_SET_DISKID_VALID)  : GS(MSG_RDB_NOT_SET_DISKID_GARBAGE)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT5_CTRLRID_FMT), (r->rdb_Flags & RDBFF_CTRLRID)    ? GS(MSG_RDB_FLAG_SET_CTRLID_VALID)  : GS(MSG_RDB_NOT_SET_CTRLID_GARBAGE)); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT6_SYNCH_FMT), (r->rdb_Flags & RDBFF_SYNCH)      ? GS(MSG_RDB_FLAG_SET_SYNCH)         : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HDR_FLAGS_FMT), (unsigned long)BE32R(r->rdb_Flags)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT0_LAST_FMT), (BE32R(r->rdb_Flags) & RDBFF_LAST)      ? GS(MSG_RDB_FLAG_SET_NOMORE_DISKS)  : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT1_LASTLUN_FMT), (BE32R(r->rdb_Flags) & RDBFF_LASTLUN)   ? GS(MSG_RDB_FLAG_SET_NOMORE_LUNS)   : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT2_LASTTID_FMT), (BE32R(r->rdb_Flags) & RDBFF_LASTTID)   ? GS(MSG_RDB_FLAG_SET_NOMORE_TIDS)   : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT3_NORESELECT_FMT), (BE32R(r->rdb_Flags) & RDBFF_NORESELECT) ? GS(MSG_RDB_FLAG_SET_NORESELECT)    : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT4_DISKID_FMT), (BE32R(r->rdb_Flags) & RDBFF_DISKID)     ? GS(MSG_RDB_FLAG_SET_DISKID_VALID)  : GS(MSG_RDB_NOT_SET_DISKID_GARBAGE)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT5_CTRLRID_FMT), (BE32R(r->rdb_Flags) & RDBFF_CTRLRID)    ? GS(MSG_RDB_FLAG_SET_CTRLID_VALID)  : GS(MSG_RDB_NOT_SET_CTRLID_GARBAGE)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_BIT6_SYNCH_FMT), (BE32R(r->rdb_Flags) & RDBFF_SYNCH)      ? GS(MSG_RDB_FLAG_SET_SYNCH)         : GS(MSG_RDB_NOT_SET)); vrdb_add(b); }
 
         /* --- Block List Heads --- */
         vrdb_add(GS(MSG_RDB_HDR_BLOCKLISTS));
         { char v[32], b[80];
-          if (r->rdb_BadBlockList == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_BadBlockList);
-          DP_SNPRINTF(b,GS(MSG_RDB_BADBLOCKLIST_FMT), v, (unsigned long)r->rdb_BadBlockList); vrdb_add(b); }
+          if (BE32R(r->rdb_BadBlockList) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_BadBlockList));
+          DP_SNPRINTF(b,GS(MSG_RDB_BADBLOCKLIST_FMT), v, (unsigned long)BE32R(r->rdb_BadBlockList)); vrdb_add(b); }
         { char v[32], b[80];
-          if (r->rdb_PartitionList == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_PartitionList);
-          DP_SNPRINTF(b,GS(MSG_RDB_PARTITIONLIST_FMT), v, (unsigned long)r->rdb_PartitionList); vrdb_add(b); }
+          if (BE32R(r->rdb_PartitionList) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_PartitionList));
+          DP_SNPRINTF(b,GS(MSG_RDB_PARTITIONLIST_FMT), v, (unsigned long)BE32R(r->rdb_PartitionList)); vrdb_add(b); }
         { char v[32], b[80];
-          if (r->rdb_FileSysHeaderList == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_FileSysHeaderList);
-          DP_SNPRINTF(b,GS(MSG_RDB_FILESYSHDRLIST_FMT), v, (unsigned long)r->rdb_FileSysHeaderList); vrdb_add(b); }
+          if (BE32R(r->rdb_FileSysHeaderList) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_FileSysHeaderList));
+          DP_SNPRINTF(b,GS(MSG_RDB_FILESYSHDRLIST_FMT), v, (unsigned long)BE32R(r->rdb_FileSysHeaderList)); vrdb_add(b); }
         { char v[32], b[80];
-          if (r->rdb_DriveInit == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_DriveInit);
-          DP_SNPRINTF(b,GS(MSG_RDB_DRIVEINIT_FMT), v, (unsigned long)r->rdb_DriveInit); vrdb_add(b); }
+          if (BE32R(r->rdb_DriveInit) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NONE));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_DriveInit));
+          DP_SNPRINTF(b,GS(MSG_RDB_DRIVEINIT_FMT), v, (unsigned long)BE32R(r->rdb_DriveInit)); vrdb_add(b); }
 
         /* --- Physical Drive --- */
         vrdb_add(GS(MSG_RDB_HDR_PHYSICAL));
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_CYLINDERS_FMT), (unsigned long)r->rdb_Cylinders);   vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_SECTORS_TRACK_FMT), (unsigned long)r->rdb_Sectors);     vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HEADS_FMT), (unsigned long)r->rdb_Heads);       vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_INTERLEAVE_FMT), (unsigned long)r->rdb_Interleave);  vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_PARK_CYL_FMT), (unsigned long)r->rdb_Park);        vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_CYLINDERS_FMT), (unsigned long)BE32R(r->rdb_Cylinders));   vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_SECTORS_TRACK_FMT), (unsigned long)BE32R(r->rdb_Sectors));     vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HEADS_FMT), (unsigned long)BE32R(r->rdb_Heads));       vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_INTERLEAVE_FMT), (unsigned long)BE32R(r->rdb_Interleave));  vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_PARK_CYL_FMT), (unsigned long)BE32R(r->rdb_Park));        vrdb_add(b); }
         { char v[32], b[80];
-          if (r->rdb_WritePreComp == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NOT_USED));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_WritePreComp);
+          if (BE32R(r->rdb_WritePreComp) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NOT_USED));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_WritePreComp));
           DP_SNPRINTF(b,GS(MSG_RDB_WRITEPRECOMP_FMT), v); vrdb_add(b); }
         { char v[32], b[80];
-          if (r->rdb_ReducedWrite == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NOT_USED));
-          else DP_SNPRINTF(v,"%lu",(unsigned long)r->rdb_ReducedWrite);
+          if (BE32R(r->rdb_ReducedWrite) == RDB_END_MARK) DP_SNPRINTF(v,GS(MSG_RDB_NOT_USED));
+          else DP_SNPRINTF(v,"%lu",(unsigned long)BE32R(r->rdb_ReducedWrite));
           DP_SNPRINTF(b,GS(MSG_RDB_REDUCEDWRITE_FMT), v); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_STEPRATE_FMT), (unsigned long)r->rdb_StepRate);    vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_STEPRATE_FMT), (unsigned long)BE32R(r->rdb_StepRate));    vrdb_add(b); }
 
         /* --- Logical Drive --- */
         vrdb_add(GS(MSG_RDB_HDR_LOGICAL));
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_RDBBLOCKSLO_FMT), (unsigned long)r->rdb_RDBBlocksLo);  vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_RDBBLOCKSHI_FMT), (unsigned long)r->rdb_RDBBlocksHi);  vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_LOCYLINDER_FMT), (unsigned long)r->rdb_LoCylinder);   vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HICYLINDER_FMT), (unsigned long)r->rdb_HiCylinder);   vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_RDBBLOCKSLO_FMT), (unsigned long)BE32R(r->rdb_RDBBlocksLo));  vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_RDBBLOCKSHI_FMT), (unsigned long)BE32R(r->rdb_RDBBlocksHi));  vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_LOCYLINDER_FMT), (unsigned long)BE32R(r->rdb_LoCylinder));   vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HICYLINDER_FMT), (unsigned long)BE32R(r->rdb_HiCylinder));   vrdb_add(b); }
         { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_CYLBLOCKS_FMT),
-              (unsigned long)r->rdb_CylBlocks,
-              (unsigned long)r->rdb_Sectors,
-              (unsigned long)r->rdb_Heads); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_AUTOPARKSECS_FMT), (unsigned long)r->rdb_AutoParkSeconds); vrdb_add(b); }
-        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HIGHRDSKBLOCK_FMT), (unsigned long)r->rdb_HighRDSKBlock); vrdb_add(b); }
+              (unsigned long)BE32R(r->rdb_CylBlocks),
+              (unsigned long)BE32R(r->rdb_Sectors),
+              (unsigned long)BE32R(r->rdb_Heads)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_AUTOPARKSECS_FMT), (unsigned long)BE32R(r->rdb_AutoParkSeconds)); vrdb_add(b); }
+        { char b[80]; DP_SNPRINTF(b, GS(MSG_RDB_HIGHRDSKBLOCK_FMT), (unsigned long)BE32R(r->rdb_HighRDSKBlock)); vrdb_add(b); }
 
         /* --- Drive Identification --- */
         vrdb_add(GS(MSG_RDB_HDR_DRIVE_ID));
@@ -1032,23 +1032,23 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
         vrdb_add(GS(MSG_RDB_HDR_RESERVED));
         { UWORD ri; char b[80];
           for (ri = 0; ri < 6; ri++) {
-              ULONG v = r->rdb_Reserved1[ri];
+              ULONG v = BE32R(r->rdb_Reserved1[ri]);
               DP_SNPRINTF(b, GS(MSG_RDB_RESERVED1_FMT), ri, (unsigned long)v,
                       (v == 0xFFFFFFFFUL) ? "" : GS(MSG_RDB_MODIFIED_MARK));
               vrdb_add(b); } }
         { UWORD ri; char b[80];
           for (ri = 0; ri < 3; ri++) {
-              ULONG v = r->rdb_Reserved2[ri];
+              ULONG v = BE32R(r->rdb_Reserved2[ri]);
               DP_SNPRINTF(b, GS(MSG_RDB_RESERVED2_FMT), ri, (unsigned long)v,
                       (v == 0xFFFFFFFFUL) ? "" : GS(MSG_RDB_MODIFIED_MARK));
               vrdb_add(b); } }
         { UWORD ri; char b[80];
           for (ri = 0; ri < 5; ri++) {
-              ULONG v = r->rdb_Reserved3[ri];
+              ULONG v = BE32R(r->rdb_Reserved3[ri]);
               DP_SNPRINTF(b, GS(MSG_RDB_RESERVED3_FMT), ri, (unsigned long)v,
                       (v == 0xFFFFFFFFUL) ? "" : GS(MSG_RDB_MODIFIED_MARK));
               vrdb_add(b); } }
-        { char b[80]; ULONG v = r->rdb_Reserved4;
+        { char b[80]; ULONG v = BE32R(r->rdb_Reserved4);
           DP_SNPRINTF(b, GS(MSG_RDB_RESERVED4_FMT), (unsigned long)v,
                   (v == 0xFFFFFFFFUL || v == 0) ? "" : GS(MSG_RDB_MODIFIED_MARK));
           vrdb_add(b); }
@@ -1372,10 +1372,10 @@ void rdb_raw_scan(struct Window *win, struct BlockDev *bd)
         vrdb_add(hdr);
         /* lw[7]=PartitionList  lw[16]=Cylinders  lw[17]=Sectors  lw[18]=Heads */
         DP_SNPRINTF(line, GS(MSG_RDB_PARTLIST_CYLS_FMT),
-                lw[7], lw[16], lw[17], lw[18]);
+                BE32R(lw[7]), BE32R(lw[16]), BE32R(lw[17]), BE32R(lw[18]));
         vrdb_add(line);
 
-        part_blk = lw[7];
+        part_blk = BE32R(lw[7]);
         vrdb_add("");
         if (part_blk == RDB_END_MARK) {
             vrdb_add(GS(MSG_RDB_PART_ENDOFLIST));
@@ -1431,24 +1431,24 @@ void rdb_raw_scan(struct Window *win, struct BlockDev *bd)
                 vrdb_add(line);
 
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_TABLESZ_FMT),
-                        env[0], env[1]);
+                        BE32R(env[0]), BE32R(env[1]));
                 vrdb_add(line);
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_HEADS_FMT),
-                        env[3], env[5]);
+                        BE32R(env[3]), BE32R(env[5]));
                 vrdb_add(line);
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_LOCYL_FMT),
-                        env[9], env[10]);
+                        BE32R(env[9]), BE32R(env[10]));
                 vrdb_add(line);
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_NUMBUF_FMT),
-                        env[11], env[15]);
+                        BE32R(env[11]), BE32R(env[15]));
                 vrdb_add(line);
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_DOSTYPE_FMT),
-                        env[16],
+                        BE32R(env[16]),
                         (unsigned long)buf[192], (unsigned long)buf[193],
                         (unsigned long)buf[194], (unsigned long)buf[195]);
                 vrdb_add(line);
                 DP_SNPRINTF(line, GS(MSG_RDB_ENV_MAXXFER_FMT),
-                        env[13], env[14]);
+                        BE32R(env[13]), BE32R(env[14]));
                 vrdb_add(line);
 
                 /* Hex dump of env region: bytes 128-207 (env[0]-env[19]) */
@@ -2186,8 +2186,8 @@ void raw_disk_read(struct Window *win, struct BlockDev *bd)
                     buf[0x24], buf[0x25], buf[0x26], buf[0x27]);
             vrdb_add(line);
             DP_SNPRINTF(line, GS(MSG_RDB_RAWBLK_DOSTYPE_FMT),
-                    (unsigned long)env[16],
-                    (unsigned long)env[9], (unsigned long)env[10]);
+                    (unsigned long)BE32R(env[16]),
+                    (unsigned long)BE32R(env[9]), (unsigned long)BE32R(env[10]));
             vrdb_add(line);
             DP_SNPRINTF(line, GS(MSG_RDB_RAWBLK_RAWC0_FMT),
                     buf[0xC0], buf[0xC1], buf[0xC2], buf[0xC3]);
@@ -4191,8 +4191,9 @@ BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
     }
 
     /* Three lines at the top are filled in below, once it is known what
-       can be loaded - they say what the Load button does. */
-    vrdb_add(""); vrdb_add(""); vrdb_add(""); vrdb_add("");
+       can be loaded - they say what the Load button does.  (The report
+       itself starts with a blank line.) */
+    vrdb_add(""); vrdb_add(""); vrdb_add("");
     Rescue_Report(res, rs_vrdb_emit, NULL);
     if (!res->cancelled) {
         /* Work on a copy: the editor's table changes only if the user
