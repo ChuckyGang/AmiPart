@@ -9,7 +9,7 @@ amipart: $(SRCS) amiga_compat.h
 # Linux GUI: the Amiga GUI source on an Intuition/GadTools layer over SDL2
 # (host_gui.c, host_gadtools.c, host_req.c).  Needs libsdl2-dev.
 # With arguments it is the same CLI as amipart; without, it opens the GUI.
-GUI    = main diskselect guilv guisize partview partview_clear \
+GUI    = main diskselect guilv guisize mapview partview partview_clear \
          partview_dialogs partview_diskcopy partview_fs partview_image \
          partview_mbr partview_move partview_partclone partview_partcopy \
          partview_rdb partview_shrink partview_zero progresswin

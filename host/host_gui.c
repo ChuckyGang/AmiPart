@@ -587,7 +587,9 @@ void hw_post(struct HWin *hw, ULONG cls, UWORD code, UWORD qual, APTR iaddr)
     struct timeval tv;
     if (!hw || !(hw->w.IDCMPFlags & cls)) return;
     /* fold a run of mouse moves into the newest one */
-    if (cls == IDCMP_MOUSEMOVE && hw->qtail && hw->qtail->im.Class == IDCMP_MOUSEMOVE) {
+    if (cls == IDCMP_MOUSEMOVE && hw->qtail && hw->qtail->im.Class == IDCMP_MOUSEMOVE &&
+        hw->qtail->im.IAddress == iaddr) {
+        hw->qtail->im.Code = code;
         hw->qtail->im.MouseX = hw->w.MouseX;
         hw->qtail->im.MouseY = hw->w.MouseY;
         return;
@@ -941,6 +943,16 @@ static void hg_key(int code)
     if (code < 256) hw_post(hw, IDCMP_VANILLAKEY, (UWORD)code, hg_qual(), &hw->w);
 }
 
+/* Mouse wheel at the pointer: a listview under it scrolls, otherwise the
+   window gets the NewMouse rawkey codes Amiga wheel drivers send. */
+static void hg_wheel(int dy)
+{
+    struct HWin *hw = hg_top;
+    if (!hw) return;
+    if (hgad_wheel(hw, hg_mx - hw->w.LeftEdge, hg_my - hw->w.TopEdge, dy)) return;
+    hw_post(hw, IDCMP_RAWKEY, (UWORD)(dy > 0 ? 0x7A : 0x7B), hg_qual(), &hw->w);
+}
+
 static void hg_char(int ch)
 {
     struct HWin *hw = hg_top;
@@ -988,6 +1000,7 @@ static void hg_dump(void)
                hg->text ? hg->text : "", g->LeftEdge, g->TopEdge, g->Width, g->Height,
                (g->Flags & GFLG_DISABLED) ? " DISABLED" : "");
         if (hg->kind == STRING_KIND)   printf(" value=\"%s\"", (char *)hg->si.Buffer);
+        if (hg->kind == SCROLLER_KIND) printf(" top=%d visible=%d total=%d", hg->sc_top, hg->sc_vis, hg->sc_total);
         if (hg->kind == CHECKBOX_KIND) printf(" checked=%d", (g->Flags & GFLG_SELECTED) ? 1 : 0);
         if (hg->kind == CYCLE_KIND && hg->cy_labels && hg->cy_count)
             printf(" active=\"%s\"", hg->cy_labels[hg->cy_active]);
@@ -1042,6 +1055,9 @@ static BOOL hg_script_step(void)
     else if (!strcmp(line, "up") && sscanf(a, "%d %d", &x, &y) == 2) hg_mouse_up(x, y, 0);
     else if (!strcmp(line, "click") && sscanf(a, "%d %d", &x, &y) == 2) script_click(x, y);
     else if (!strcmp(line, "key") && sscanf(a, "%d", &n) == 1) hg_key(n);
+    else if (!strcmp(line, "wheel") && sscanf(a, "%d %d %d", &x, &y, &n) == 3) {   /* wheel X Y +1|-1 */
+        hg_mouse_move(x, y); hg_wheel(n);
+    }
     else if (!strcmp(line, "enter")) hg_key(13);
     else if (!strcmp(line, "esc")) hg_key(27);
     else if (!strcmp(line, "type")) { for (; *a; a++) hg_char((unsigned char)*a); }
@@ -1128,8 +1144,8 @@ static void hg_sdl_event(SDL_Event *e)
                         e->button.button == SDL_BUTTON_RIGHT);
         break;
     case SDL_MOUSEWHEEL:
-        if (hg_top && !hmenu_is_open())
-            hgad_wheel(hg_top, hg_mx - hg_top->w.LeftEdge, hg_my - hg_top->w.TopEdge, e->wheel.y);
+        if (hg_top && !hmenu_is_open() && e->wheel.y)
+            hg_wheel(e->wheel.y);
         break;
     case SDL_TEXTINPUT:
         if (!hg_ctrl) hg_utf8_input(e->text.text);

@@ -46,6 +46,8 @@ struct HGad {
     /* cycle */
     const char **cy_labels;
     int    cy_active, cy_count;
+    /* scroller: sc_part while pressed = 1 knob, 2/3 arrows, 4/5 page */
+    int    sc_top, sc_vis, sc_total, sc_arrow, sc_horiz, sc_part, sc_grab;
     /* text */
     const char *tx_text;
     int    tx_border;
@@ -92,7 +94,7 @@ void hgad_mouse_move(struct HGad *g, int x, int y);
 void hgad_mouse_up(struct HGad *g, int x, int y);
 BOOL hgad_key(struct HWin *hw, int code, int ctrl, int shift);   /* TRUE = consumed */
 void hgad_text_input(struct HWin *hw, int ch);
-void hgad_wheel(struct HWin *hw, int x, int y, int dy);
+BOOL hgad_wheel(struct HWin *hw, int x, int y, int dy);   /* TRUE = a gadget took it */
 void hgad_window_closing(struct HWin *hw);
 void hgad_blur(struct HWin *hw);
 const char *hgad_kind_name(int kind);

@@ -32,9 +32,11 @@ static void hg_grab_args(int argc, char **argv)
 /* exec / dos / icon odds and ends                                      */
 /* ------------------------------------------------------------------ */
 
-static struct Library hg_lib = { { NULL, NULL, 0, 0, NULL }, 47, 0 };
 
-struct Library *OpenLibrary(CONST_STRPTR name, ULONG version) { (void)name; (void)version; return &hg_lib; }
+/* Every library base is this one object; it is as large as the largest
+   base the program reads fields from (GfxBase->DefaultFont, NULL here). */
+static struct GfxBase hg_anybase = { { { NULL, NULL, 0, 0, NULL }, 47, 0 }, NULL };
+struct Library *OpenLibrary(CONST_STRPTR name, ULONG version) { (void)name; (void)version; return &hg_anybase.LibNode; }
 void CloseLibrary(struct Library *lib) { (void)lib; }
 APTR OpenResource(CONST_STRPTR name) { (void)name; return NULL; }
 void Forbid(void) {}

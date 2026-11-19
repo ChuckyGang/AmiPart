@@ -27,6 +27,7 @@ const char *hgad_kind_name(int kind)
     case STRING_KIND:   return "string";
     case LISTVIEW_KIND: return "listview";
     case TEXT_KIND:     return "text";
+    case SCROLLER_KIND: return "scroller";
     default:            return "?";
     }
 }
@@ -56,6 +57,15 @@ static void lv_clamp(struct HGad *g)
     int rows = lv_rows(g);
     if (g->top > g->total - rows) g->top = g->total - rows;
     if (g->top < 0) g->top = 0;
+}
+
+static void sc_clamp(struct HGad *g)
+{
+    if (g->sc_total < 1) g->sc_total = 1;
+    if (g->sc_vis < 1) g->sc_vis = 1;
+    if (g->sc_vis > g->sc_total) g->sc_vis = g->sc_total;
+    if (g->sc_top > g->sc_total - g->sc_vis) g->sc_top = g->sc_total - g->sc_vis;
+    if (g->sc_top < 0) g->sc_top = 0;
 }
 
 static void str_set(struct HGad *g, const char *s)
@@ -110,6 +120,11 @@ static void apply_tags(struct HGad *g, struct TagItem *tags)
         case GTLV_ShowSelected: g->showsel = 1; break;
         case GTLV_ReadOnly:     g->readonly = t->ti_Data != 0; break;
         case GTLV_CallBack:     g->hook = (struct Hook *)t->ti_Data; break;
+        case GTSC_Top:     g->sc_top = (int)t->ti_Data; sc_clamp(g); break;
+        case GTSC_Total:   g->sc_total = (int)t->ti_Data; sc_clamp(g); break;
+        case GTSC_Visible: g->sc_vis = (int)t->ti_Data; sc_clamp(g); break;
+        case GTSC_Arrows:  g->sc_arrow = (int)t->ti_Data; break;
+        case PGA_Freedom:  g->sc_horiz = t->ti_Data == LORIENT_HORIZ; break;
         case GTTX_Text:    g->tx_text = (const char *)t->ti_Data; break;
         case GTTX_Border:  g->tx_border = t->ti_Data != 0; break;
         default: break;
@@ -153,6 +168,7 @@ struct Gadget *CreateGadgetA(ULONG kind, struct Gadget *prev, struct NewGadget *
         g->g.SpecialInfo = &g->si;
     }
     if (kind == CHECKBOX_KIND) { g->g.Width = CB_W; g->g.Height = CB_H; }
+    if (kind == SCROLLER_KIND) { g->sc_total = g->sc_vis = 1; }
     apply_tags(g, tags);
 
     prev->NextGadget = &g->g;
@@ -303,6 +319,78 @@ static void draw_listview(struct HGad *g, struct HSurf *s)
     }
 }
 
+/* Scroller geometry along its axis: the container is [c0, c0+clen), the
+   knob [*k0, *k0+*klen), then two arrow buttons of sc_arrow pixels each (as
+   GadTools puts them: both at the right/bottom end). */
+static void sc_geom(struct HGad *g, int *c0, int *clen, int *k0, int *klen)
+{
+    int start = g->sc_horiz ? g->g.LeftEdge : g->g.TopEdge;
+    int len   = g->sc_horiz ? g->g.Width : g->g.Height;
+    int inner;
+    len -= 2 * g->sc_arrow;
+    if (len < 8) len = 8;
+    inner = len - 4;
+    *c0 = start; *clen = len;
+    if (g->sc_total > g->sc_vis) {
+        *klen = (int)((long long)inner * g->sc_vis / g->sc_total);
+        if (*klen < 8) *klen = 8;
+        if (*klen > inner) *klen = inner;
+        *k0 = start + 2 + (int)((long long)(inner - *klen) * g->sc_top / (g->sc_total - g->sc_vis));
+    } else { *klen = inner; *k0 = start + 2; }
+}
+
+static void draw_scroller(struct HGad *g, struct HSurf *s)
+{
+    int x = g->g.LeftEdge, y = g->g.TopEdge, w = g->g.Width, h = g->g.Height;
+    int c0, clen, k0, klen, i, k;
+    sc_geom(g, &c0, &clen, &k0, &klen);
+    hs_fill(s, x, y, x + w - 1, y + h - 1, P_BG);
+    if (g->sc_horiz) {
+        hs_bevel(s, c0, y, clen, h, 0);
+        hs_fill(s, k0, y + 2, k0 + klen - 1, y + h - 3, P_FILL);
+        hs_bevel(s, k0, y + 2, klen, h - 4, 0);
+        for (i = 0; i < 2 && g->sc_arrow > 0; i++) {
+            int ax = c0 + clen + i * g->sc_arrow, cx = ax + g->sc_arrow / 2, cy = y + h / 2;
+            int down = g->sc_part == 2 + i;
+            hs_fill(s, ax, y, ax + g->sc_arrow - 1, y + h - 1, down ? P_FILL : P_BG);
+            hs_bevel(s, ax, y, g->sc_arrow, h, down);
+            for (k = 0; k < 4; k++) {        /* left / right triangle */
+                int col = i == 0 ? cx - 2 + k : cx + 1 - k;
+                hs_vline(s, col, cy - k, cy + k, P_TEXT);
+            }
+        }
+    } else {
+        hs_bevel(s, x, c0, w, clen, 0);
+        hs_fill(s, x + 2, k0, x + w - 3, k0 + klen - 1, P_FILL);
+        hs_bevel(s, x + 2, k0, w - 4, klen, 0);
+        for (i = 0; i < 2 && g->sc_arrow > 0; i++) {
+            int ay = c0 + clen + i * g->sc_arrow, cx = x + w / 2, cy = ay + g->sc_arrow / 2;
+            int down = g->sc_part == 2 + i;
+            hs_fill(s, x, ay, x + w - 1, ay + g->sc_arrow - 1, down ? P_FILL : P_BG);
+            hs_bevel(s, x, ay, w, g->sc_arrow, down);
+            for (k = 0; k < 4; k++) {        /* up / down triangle */
+                int row = i == 0 ? cy - 2 + k : cy + 1 - k;
+                hs_hline(s, cx - k, cx + k, row, P_TEXT);
+            }
+        }
+    }
+    if (g->g.Flags & GFLG_DISABLED) hs_ghost(s, x, y, x + w - 1, y + h - 1);
+}
+
+/* Knob follows the pointer (pos along the axis, sc_grab = offset in knob). */
+static void sc_track_to(struct HGad *g, int pos)
+{
+    int c0, clen, k0, klen, room;
+    sc_geom(g, &c0, &clen, &k0, &klen);
+    room = clen - 4 - klen;
+    if (room <= 0 || g->sc_total <= g->sc_vis) return;
+    pos -= c0 + 2 + g->sc_grab;
+    if (pos < 0) pos = 0;
+    if (pos > room) pos = room;
+    g->sc_top = (int)(((long long)pos * (g->sc_total - g->sc_vis) + room / 2) / room);
+    sc_clamp(g);
+}
+
 static void draw_string(struct HGad *g, struct HSurf *s)
 {
     int x = g->g.LeftEdge, y = g->g.TopEdge, w = g->g.Width, h = g->g.Height;
@@ -377,6 +465,9 @@ void hgad_draw(struct HGad *g)
         if (len > 0) hs_text(s, x + 4, y + (h - HG_FH) / 2, t, len, P_TEXT);
         draw_label(g, s);
         break; }
+    case SCROLLER_KIND:
+        draw_scroller(g, s);
+        break;
     case LISTVIEW_KIND:
         draw_listview(g, s);
         draw_label(g, s);
@@ -433,6 +524,7 @@ LONG GT_GetGadgetAttrsA(struct Gadget *gad, struct Window *win, APTR req, struct
         if (!out) continue;
         switch (t->ti_Tag) {
         case GTLV_Top:      *out = (ULONG)g->top; n++; break;
+        case GTSC_Top:      *out = (ULONG)g->sc_top; n++; break;
         case GTLV_Selected: *out = (ULONG)g->sel; n++; break;
         case GTCB_Checked:  *out = (g->g.Flags & GFLG_SELECTED) ? 1 : 0; n++; break;
         case GTCY_Active:   *out = (ULONG)g->cy_active; n++; break;
@@ -546,14 +638,36 @@ void hgad_mouse_down(struct HGad *g, int x, int y, int shift)
         }
         hgad_draw(g);
         break; }
+    case SCROLLER_KIND: {
+        int c0, clen, k0, klen, pos = g->sc_horiz ? x : y, old = g->sc_top;
+        int step = g->sc_vis / 8;      /* arrows: the Amiga steps 1 and repeats */
+        if (step < 1) step = 1;
+        sc_geom(g, &c0, &clen, &k0, &klen);
+        if (pos >= c0 + clen + g->sc_arrow) { g->sc_part = 3; g->sc_top += step; }
+        else if (pos >= c0 + clen)          { g->sc_part = 2; g->sc_top -= step; }
+        else if (pos < k0)                  { g->sc_part = 4; g->sc_top -= g->sc_vis > 1 ? g->sc_vis - 1 : 1; }
+        else if (pos >= k0 + klen)          { g->sc_part = 5; g->sc_top += g->sc_vis > 1 ? g->sc_vis - 1 : 1; }
+        else                                { g->sc_part = 1; g->sc_grab = pos - k0; }
+        sc_clamp(g);
+        hgad_draw(g);
+        (void)old;
+        hw_post(hw, IDCMP_GADGETDOWN, (UWORD)g->sc_top, 0, &g->g);
+        break; }
     default: break;
     }
 }
 
 void hgad_mouse_move(struct HGad *g, int x, int y)
 {
-    (void)x;
     if (g->kind == LISTVIEW_KIND && g->pressed) { lv_track_to(g, y); hgad_draw(g); }
+    if (g->kind == SCROLLER_KIND && g->sc_part == 1) {
+        int old = g->sc_top;
+        sc_track_to(g, g->sc_horiz ? x : y);
+        if (g->sc_top != old) {
+            hgad_draw(g);
+            if (g->win) hw_post(g->win, IDCMP_MOUSEMOVE, (UWORD)g->sc_top, 0, &g->g);
+        }
+    }
 }
 
 void hgad_mouse_up(struct HGad *g, int x, int y)
@@ -587,20 +701,26 @@ void hgad_mouse_up(struct HGad *g, int x, int y)
         hgad_draw(g);
         if (row >= 0) hw_post(hw, IDCMP_GADGETUP, (UWORD)row, 0, &g->g);
         break; }
+    case SCROLLER_KIND:
+        g->sc_part = 0;
+        hgad_draw(g);
+        hw_post(hw, IDCMP_GADGETUP, (UWORD)g->sc_top, 0, &g->g);
+        break;
     default: break;
     }
 }
 
-void hgad_wheel(struct HWin *hw, int x, int y, int dy)
+BOOL hgad_wheel(struct HWin *hw, int x, int y, int dy)
 {
     struct Gadget *g;
     for (g = hw->w.FirstGadget; g; g = g->NextGadget) {
         struct HGad *hg = (struct HGad *)g;
         if (hg->kind == LISTVIEW_KIND && inside(hg, x, y)) {
             hg->top -= dy * 3; lv_clamp(hg); hgad_draw(hg);
-            return;
+            return TRUE;
         }
     }
+    return FALSE;
 }
 
 static struct HGad *next_string(struct HWin *hw, struct HGad *from, int back)

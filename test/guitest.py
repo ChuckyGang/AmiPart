@@ -12,6 +12,7 @@ What is checked:
   - Add in a free gap + Write gives a table the CLI reads back correctly
   - Rescue (scan, "Load into AmiPart", Write) gives the same image as
     RESCUE WRITE on the command line
+  - the map zoom controls change the view and leave the table alone
   - every menu entry can be opened without the program failing
 
 Build first:  make -C host amipart gui
@@ -152,6 +153,24 @@ def main():
         check("add in free gap + write: CLI reads the new partition",
               rc == 0 and "Lo: 301" in out and len(line) == 1 and "301-" in line[0].replace(" ", ""),
               out[-400:] + info[-400:])
+
+        # ---- map zoom: buttons, keys, wheel, pan scroller -----------------
+        # The zoom row sits under the map; the scroller's values in the dump
+        # show the visible cylinder window.  Zooming must not change the table.
+        shutil.copy(base, os.path.join(d, "t.hdf"))
+        rc, out = gui(d, open_image("t.hdf") + [
+            "dump",                                     # whole disk
+            "lvrow 1 0", "gadid 16", "dump",            # Selected: zoom to DH0
+            "key 45", "dump",                           # '-' : out one step
+            "wheel 400 222 1", "dump",                  # wheel up over the map: in
+            "gadid 15", "dump",                         # Fit
+            "gadid 7", "expect Write partition table", "gadid 1"])
+        vis = [int(l.split("visible=")[1].split()[0]) for l in out.splitlines() if "scroller" in l]
+        tot = [int(l.split("total=")[1].split()[0]) for l in out.splitlines() if "scroller" in l]
+        check("map zoom: Selected, '-', wheel and Fit change the view",
+              rc == 0 and len(vis) == 5 and vis[0] == tot[0] and vis[1] < vis[0]
+              and vis[2] > vis[1] and vis[3] < vis[2] and vis[4] == tot[4], str(vis) + out[-300:])
+        check("map zoom: table unchanged", same(os.path.join(d, "t.hdf"), base))
 
         # ---- rescue: GUI load + write == CLI RESCUE WRITE ----------------
         for n in ("t.hdf", "c.hdf"):

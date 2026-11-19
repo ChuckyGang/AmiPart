@@ -48,7 +48,8 @@ extern void *host_reg_a0, *host_reg_a1, *host_reg_a2;
 struct Library { struct Node lib_Node; UWORD lib_Version, lib_Revision; };
 struct ExecBase      { struct Library LibNode; };
 struct IntuitionBase { struct Library LibNode; };
-struct GfxBase       { struct Library LibNode; };
+struct TextFont;
+struct GfxBase       { struct Library LibNode; struct TextFont *DefaultFont; };
 struct DosLibrary    { struct Library dl_lib; };
 struct Process       { APTR pr_CLI; };
 
@@ -280,6 +281,12 @@ struct IntuiMessage {
 #define GA_Dummy    (TAG_USER + 0x30000)
 #define GA_Text     (GA_Dummy + 0x0009)
 #define GA_Disabled (GA_Dummy + 0x000E)
+#define GA_Immediate (GA_Dummy + 0x0015)
+#define GA_RelVerify (GA_Dummy + 0x0016)
+#define PGA_Dummy   (TAG_USER + 0x31000)
+#define PGA_Freedom (PGA_Dummy + 0x0001)
+#define LORIENT_HORIZ 1
+#define LORIENT_VERT  2
 
 struct EasyStruct {
     ULONG  es_StructSize;
@@ -361,6 +368,10 @@ struct NewMenu {
 #define GT_TagBase        (TAG_USER + 0x80000)
 #define GTCB_Checked      (GT_TagBase + 4)
 #define GTLV_Top          (GT_TagBase + 5)
+#define GTSC_Top          (GT_TagBase + 21)
+#define GTSC_Total        (GT_TagBase + 22)
+#define GTSC_Visible      (GT_TagBase + 23)
+#define GTSC_Arrows       (GT_TagBase + 59)
 #define GTLV_Labels       (GT_TagBase + 6)
 #define GTLV_ReadOnly     (GT_TagBase + 7)
 #define GTLV_ScrollWidth  (GT_TagBase + 8)
