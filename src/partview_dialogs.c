@@ -822,7 +822,11 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                    partition (temp-mount + dos.library Format) instead of
                    AmiPart's internal formatter.  See nativefmt.h. */
                 {
+#ifdef AMIPART_HOST   /* no Amiga filesystem handlers on the host: ghosted */
+                    struct TagItem cbt[] = { { GTCB_Checked, 0 }, { GA_Disabled, TRUE }, { TAG_DONE, 0 } };
+#else
                     struct TagItem cbt[] = { { GTCB_Checked, 0 }, { TAG_DONE, 0 } };
+#endif
                     cbt[0].ti_Data = (ULONG)FALSE;   /* internal formatter by default */
                     ng.ng_LeftEdge=bor_l+pad; ng.ng_TopEdge=ROW_Y(row);
                     ng.ng_Width=inner_w - pad * 2; ng.ng_Height=row_h;
