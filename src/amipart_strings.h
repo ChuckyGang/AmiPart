@@ -1552,8 +1552,13 @@
 #define MSG_PV_RESCUE_LOAD_GADGETS   1546
 #define MSG_SCR_RESCUE_USAGE         1547
 #define MSG_SCR_RESCUE_LOADED        1548
+#define MSG_PV_RESCUE_BTN_LOAD       1549
+#define MSG_PV_RESCUE_HINT1_FMT      1550
+#define MSG_PV_RESCUE_HINT2          1551
+#define MSG_PV_RESCUE_HINT3          1552
+#define MSG_PV_RESCUE_NOTHING        1553
 
-#define MSG_COUNT 1549
+#define MSG_COUNT 1554
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -3114,5 +3119,10 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1546 MSG_PV_RESCUE_LOAD_GADGETS */ "Load|Cancel",
     /* 1547 MSG_SCR_RESCUE_USAGE */ "RESCUE: usage: RESCUE [DEEP] [REPORT]",
     /* 1548 MSG_SCR_RESCUE_LOADED */ "RESCUE: the rebuilt table is in memory - WRITE commits it.\n",
+    /* 1549 MSG_PV_RESCUE_BTN_LOAD */ "Load into AmiPart",
+    /* 1550 MSG_PV_RESCUE_HINT1_FMT */ "%lu entries can be loaded into AmiPart with the button below.",
+    /* 1551 MSG_PV_RESCUE_HINT2 */ "They are added to the partition table in memory only: nothing is",
+    /* 1552 MSG_PV_RESCUE_HINT3 */ "written to the disk until you press Write in the main window.",
+    /* 1553 MSG_PV_RESCUE_NOTHING */ "Nothing was found that can be added to the partition table.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

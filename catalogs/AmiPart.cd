@@ -4784,3 +4784,18 @@ RESCUE: usage: RESCUE [DEEP] [REPORT]
 MSG_SCR_RESCUE_LOADED
 RESCUE: the rebuilt table is in memory - WRITE commits it.\n
 ;
+;
+MSG_PV_RESCUE_BTN_LOAD
+Load into AmiPart
+;
+MSG_PV_RESCUE_HINT1_FMT
+%lu entries can be loaded into AmiPart with the button below.
+;
+MSG_PV_RESCUE_HINT2
+They are added to the partition table in memory only: nothing is
+;
+MSG_PV_RESCUE_HINT3
+written to the disk until you press Write in the main window.
+;
+MSG_PV_RESCUE_NOTHING
+Nothing was found that can be added to the partition table.

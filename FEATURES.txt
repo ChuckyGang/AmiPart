@@ -214,8 +214,9 @@ scripting interface.
    Script: RESCUE [DEEP] [REPORT] merges into the in-memory RDB; WRITE
    commits it.
    GUI: Advanced > Rescue Lost Partitions... (Scan / Deep Scan with a
-   cancellable progress window, report window, then an offer to load the
-   rebuilt table into the editor - written only by the normal Write).
+   cancellable progress window, then a report window with
+   "Load into AmiPart" / Cancel - loading only changes the table in
+   memory, it is written only by the normal Write).
  * Debug tools: view RDB block, raw block scan, hex dump, raw disk read,
    FFS root-block inspection (post-resize validation).
 

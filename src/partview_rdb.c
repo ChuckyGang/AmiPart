@@ -700,6 +700,7 @@ BOOL rdb_restore_extended(struct Window *win, struct BlockDev *bd)
 
 #define VRDB_LIST     1
 #define VRDB_DONE     2
+#define VRDB_LOAD     3
 #define VRDB_MAXLINES 600   /* holds a 16-block hex dump (16 * 34 = 544 lines) */
 
 /* Line text + list nodes, ~56 KB.  Allocated by vrdb_begin() when one of
@@ -710,6 +711,9 @@ static char      (*vrdb_strs)[80];
 static struct Node *vrdb_nodes;
 static struct List vrdb_list;
 static UWORD       vrdb_count;
+/* When set, vrdb_make_gadgets builds two buttons: this label (VRDB_LOAD)
+   on the left and Cancel (VRDB_DONE) on the right, instead of Close. */
+static const char *vrdb_load_label;
 
 void vrdb_end(void)
 {
@@ -832,9 +836,20 @@ static BOOL vrdb_make_gadgets(APTR vi, struct Screen *scr,
       ng.ng_Height     = btn_h;
       ng.ng_Width      = inner_w - pad * 2;
       ng.ng_LeftEdge   = bor_l + pad;
-      ng.ng_GadgetText = GS(MSG_CLOSE);
-      ng.ng_GadgetID   = VRDB_DONE;
       ng.ng_Flags      = PLACETEXT_IN;
+      if (vrdb_load_label) {
+          UWORD half = (UWORD)((inner_w - pad * 3) / 2);
+          ng.ng_Width      = half;
+          ng.ng_GadgetText = (UBYTE *)vrdb_load_label;
+          ng.ng_GadgetID   = VRDB_LOAD;
+          prev = CreateGadgetA(BUTTON_KIND, prev, &ng, bt);
+          if (!prev) { FreeGadgets(glist); return FALSE; }
+          ng.ng_LeftEdge   = (WORD)(bor_l + inner_w - pad - half);
+          ng.ng_GadgetText = GS(MSG_CANCEL);
+      } else {
+          ng.ng_GadgetText = GS(MSG_CLOSE);
+      }
+      ng.ng_GadgetID   = VRDB_DONE;
       prev = CreateGadgetA(BUTTON_KIND, prev, &ng, bt);
       if (!prev) { FreeGadgets(glist); return FALSE; } }
 
@@ -4038,9 +4053,10 @@ static void rs_vrdb_emit(void *ud, const char *text)
     if (n) { line[n] = '\0'; rs_add_wrapped(line); }
 }
 
-/* Show the collected vrdb lines in a sizeable list window with a Close
-   button; returns when it is closed. */
-static void vrdb_show(const char *title)
+/* Show the collected vrdb lines in a sizeable list window.  load_label
+   NULL: one Close button.  Otherwise two buttons, load_label and Cancel;
+   returns TRUE only when load_label was pressed. */
+static BOOL vrdb_show(const char *title, const char *load_label)
 {
     struct Screen  *scr;
     APTR            vi    = NULL;
@@ -4048,12 +4064,13 @@ static void vrdb_show(const char *title)
     struct Window  *vwin  = NULL;
     UWORD font_h, bor_t, bor_b, row_h, btn_h, pad, win_w, win_h, min_h;
     UWORD scr_w, scr_h;
-    BOOL  running = TRUE;
+    BOOL  running = TRUE, load = FALSE;
 
     scr = LockPubScreen(NULL);
-    if (!scr) return;
+    if (!scr) return FALSE;
     vi = GetVisualInfoA(scr, NULL);
-    if (!vi) { UnlockPubScreen(NULL, scr); return; }
+    if (!vi) { UnlockPubScreen(NULL, scr); return FALSE; }
+    vrdb_load_label = load_label;
 
     font_h = (UWORD)scr->Font->ta_YSize;
     bor_t  = (UWORD)scr->WBorTop + font_h + 1;
@@ -4118,6 +4135,7 @@ static void vrdb_show(const char *title)
                     GT_BeginRefresh(vwin); GT_EndRefresh(vwin, TRUE); break;
                 case IDCMP_GADGETUP:
                     if (gad->GadgetID == VRDB_DONE) running = FALSE;
+                    if (gad->GadgetID == VRDB_LOAD) { load = TRUE; running = FALSE; }
                     break;
                 }
             }
@@ -4127,6 +4145,8 @@ static void vrdb_show(const char *title)
     }
     if (glist) FreeGadgets(glist);
     FreeVisualInfo(vi);
+    vrdb_load_label = NULL;
+    return load;
 }
 
 BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
@@ -4170,6 +4190,9 @@ BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
         goto done;
     }
 
+    /* Three lines at the top are filled in below, once it is known what
+       can be loaded - they say what the Load button does. */
+    vrdb_add(""); vrdb_add(""); vrdb_add(""); vrdb_add("");
     Rescue_Report(res, rs_vrdb_emit, NULL);
     if (!res->cancelled) {
         /* Work on a copy: the editor's table changes only if the user
@@ -4178,12 +4201,18 @@ BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
         if (rdb->valid) { *tmp = *rdb; orig_fs = rdb->num_fs; }
         added = Rescue_Apply(bd, res, tmp, rs_vrdb_emit, NULL);
     }
-    vrdb_show(GS(MSG_PV_RESCUE_TITLE));
-
     if (added) {
-        es.es_TextFormat   = (UBYTE *)GS(MSG_PV_RESCUE_LOAD_FMT);
-        es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_RESCUE_LOAD_GADGETS);
-        if (EasyRequest(win, &es, NULL, (ULONG)added) == 1) {
+        DP_SNPRINTF(vrdb_strs[0], GS(MSG_PV_RESCUE_HINT1_FMT), (unsigned long)added);
+        strncpy(vrdb_strs[1], GS(MSG_PV_RESCUE_HINT2), 79);
+        strncpy(vrdb_strs[2], GS(MSG_PV_RESCUE_HINT3), 79);
+    } else if (!res->cancelled) {
+        strncpy(vrdb_strs[0], GS(MSG_PV_RESCUE_NOTHING), 79);
+    }
+
+    if (!added) {
+        vrdb_show(GS(MSG_PV_RESCUE_TITLE), NULL);
+    } else {
+        if (vrdb_show(GS(MSG_PV_RESCUE_TITLE), GS(MSG_PV_RESCUE_BTN_LOAD))) {
             if (!rdb->valid) RDB_FreeCode(rdb);
             *rdb = *tmp;
             changed = TRUE;
