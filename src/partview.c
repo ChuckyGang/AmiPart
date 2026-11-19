@@ -191,9 +191,15 @@ static struct MBRInfo *s_mbr;
    register, so the captured value is always the original incoming one. */
 static ULONG lv_render(void)
 {
+#ifdef AMIPART_HOST   /* no registers: the host layer hands them over */
+    struct Hook      *h    = (struct Hook *)host_reg_a0;
+    struct LVDrawMsg *msg  = (struct LVDrawMsg *)host_reg_a1;
+    struct Node      *node = (struct Node *)host_reg_a2;
+#else
     register struct Hook      *h    __asm__("a0");
     register struct LVDrawMsg *msg  __asm__("a1");
     register struct Node      *node __asm__("a2");
+#endif
     struct Hook      *_h    = h;    /* capture before GCC reuses registers */
     struct LVDrawMsg *_msg  = msg;
     struct Node      *_node = node;
@@ -401,6 +407,16 @@ static void offer_reboot(struct Window *win, const char *msg)
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
     es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
+#ifdef AMIPART_HOST
+    /* Nothing to reboot here: the disk or image is used by another machine. */
+    (void)msg;
+    es.es_TextFormat   = (UBYTE *)"Partition table written.\n\n"
+                                  "The Amiga (or emulator) sees the change the\n"
+                                  "next time it starts with this disk.";
+    es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+    EasyRequest(win, &es, NULL);
+    return;
+#endif
     es.es_TextFormat   = (UBYTE *)msg;
     es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_REBOOT_LATER);
     if (EasyRequest(win, &es, NULL) == 1) {
@@ -416,8 +432,8 @@ static void offer_reboot(struct Window *win, const char *msg)
                 { WA_Left,      (ULONG)((scr->Width  - w) / 2) },
                 { WA_Top,       (ULONG)((scr->Height - h) / 2) },
                 { WA_Width,     (ULONG)w }, { WA_Height, (ULONG)h },
-                { WA_Title,     (ULONG)GS(MSG_PV_PLEASE_WAIT) },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)GS(MSG_PV_PLEASE_WAIT) },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_Flags,     WFLG_DRAGBAR | PV_REFRESH_FLAG },
                 { WA_IDCMP,     0 },
                 { TAG_DONE,     0 }
@@ -1245,9 +1261,9 @@ static void refresh_listview(struct Window *win, struct Gadget *lv_gad,
                               struct RDBInfo *rdb, WORD sel)
 {
     ULONG top = 0;
-    struct TagItem get_top[]  = { { GTLV_Top,    (ULONG)&top       }, { TAG_DONE, 0 } };
+    struct TagItem get_top[]  = { { GTLV_Top,    (IPTR)&top       }, { TAG_DONE, 0 } };
     struct TagItem detach[]   = { { GTLV_Labels, ~0UL              }, { TAG_DONE, 0 } };
-    struct TagItem reattach[] = { { GTLV_Labels, (ULONG)&part_list }, { TAG_DONE, 0 } };
+    struct TagItem reattach[] = { { GTLV_Labels, (IPTR)&part_list }, { TAG_DONE, 0 } };
     struct TagItem restore[]  = { { GTLV_Top,    0                 }, { TAG_DONE, 0 } };
 
     g_part_sel = sel;
@@ -1677,8 +1693,8 @@ static BOOL build_gadgets(APTR vi,
     /* Partition listview - render hook draws columns at computed pixel positions */
     {
         struct TagItem lt[] = {
-            { GTLV_Labels,   (ULONG)&part_list  },
-            { GTLV_CallBack, (ULONG)&lv_hook    },
+            { GTLV_Labels,   (IPTR)&part_list  },
+            { GTLV_CallBack, (IPTR)&lv_hook    },
             { TAG_DONE, 0 }
         };
         ng.ng_LeftEdge   = bor_l + pad;
@@ -2217,7 +2233,7 @@ BOOL partview_run(const char *devname, ULONG unit)
 
     if (bd && !BlockDev_IsHardDisk(bd)) {
         struct EasyStruct es;
-        ULONG fmtargs[1];
+        IPTR fmtargs[1];
         fmtargs[0] = bd->device_type;
         es.es_StructSize=sizeof(es); es.es_Flags=0;
         es.es_Title=(UBYTE*)AMIPART_VERTITLE;
@@ -2341,9 +2357,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                 { WA_Left,      win_left },
                 { WA_Top,       win_top },
                 { WA_Width,     win_w }, { WA_Height, win_h },
-                { WA_Title,     (ULONG)win_title },
+                { WA_Title,     (IPTR)win_title },
                 { WA_Gadgets,   0 },             /* added after open, see below */
-                { WA_PubScreen, (ULONG)scr },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_MinWidth,  min_w },
                 { WA_MinHeight, min_h },
                 { WA_MaxWidth,  (ULONG)scr->Width  },

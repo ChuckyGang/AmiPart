@@ -20,6 +20,14 @@
 typedef signed long SIPTR;   /* m68k: 32-bit, same as LONG */
 #endif
 
+/* Pointer-sized unsigned integer, for pointers that travel as integers:
+   TagItem.ti_Data and requester argument lists.  On the Amiga it is ULONG
+   (zero change); the Linux GUI build defines it pointer-width. */
+#ifndef DP_IPTR_DEFINED
+#define DP_IPTR_DEFINED
+typedef unsigned long IPTR;  /* m68k: 32-bit, same as ULONG */
+#endif
+
 #include <stddef.h>   /* size_t */
 
 extern size_t strlen(const char *s);

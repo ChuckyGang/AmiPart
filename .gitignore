@@ -7,3 +7,5 @@ host/amipart
 # emulator droppings when the repo dir is mounted as a drive
 Disk.info
 Disk.info.uaem
+host/amipart-gui
+host/gobj/

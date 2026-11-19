@@ -100,10 +100,10 @@ void rdb_backup_block(struct Window *win, struct BlockDev *bd,
         struct FileRequester *fr;
         BOOL chosen = FALSE;
         { struct TagItem asl_tags[] = {
-              { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SAVE_BLOCK) },
+              { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SAVE_BLOCK) },
               { ASLFR_DoSaveMode,   TRUE },
-              { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-              { ASLFR_InitialFile,  (ULONG)"RDB.backup" },
+              { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+              { ASLFR_InitialFile,  (IPTR)"RDB.backup" },
               { TAG_DONE, 0 } };
           fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, asl_tags); }
         if (fr) {
@@ -170,10 +170,10 @@ void pv_export_mountlist(struct Window *win, struct BlockDev *bd,
         struct FileRequester *fr;
         BOOL chosen = FALSE;
         { struct TagItem asl_tags[] = {
-              { ASLFR_TitleText,    (ULONG)GS(MSG_ML_ASL_SAVE) },
+              { ASLFR_TitleText,    (IPTR)GS(MSG_ML_ASL_SAVE) },
               { ASLFR_DoSaveMode,   TRUE },
-              { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-              { ASLFR_InitialFile,  (ULONG)"MountList" },
+              { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+              { ASLFR_InitialFile,  (IPTR)"MountList" },
               { TAG_DONE, 0 } };
           fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, asl_tags); }
         if (fr) {
@@ -250,9 +250,9 @@ BOOL rdb_restore_block(struct Window *win, struct BlockDev *bd)
         struct FileRequester *fr;
         BOOL chosen = FALSE;
         { struct TagItem asl_tags[] = {
-              { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SELECT_BLOCK) },
-              { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-              { ASLFR_InitialFile,  (ULONG)"RDB.backup" },
+              { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SELECT_BLOCK) },
+              { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+              { ASLFR_InitialFile,  (IPTR)"RDB.backup" },
               { TAG_DONE, 0 } };
           fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, asl_tags); }
         if (fr) {
@@ -431,10 +431,10 @@ void rdb_backup_extended(struct Window *win, struct BlockDev *bd,
 
     { struct FileRequester *fr; BOOL chosen = FALSE;
       { struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SAVE_EXT) },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SAVE_EXT) },
             { ASLFR_DoSaveMode,   TRUE },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-            { ASLFR_InitialFile,  (ULONG)init_file },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+            { ASLFR_InitialFile,  (IPTR)init_file },
             { TAG_DONE, 0 } };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at); }
       if (fr) {
@@ -535,9 +535,9 @@ BOOL rdb_restore_extended(struct Window *win, struct BlockDev *bd)
 
     { struct FileRequester *fr; BOOL chosen = FALSE;
       { struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SELECT_EXT) },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-            { ASLFR_InitialFile,  (ULONG)"RDB_extended.backup" },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SELECT_EXT) },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+            { ASLFR_InitialFile,  (IPTR)"RDB_extended.backup" },
             { TAG_DONE, 0 } };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at); }
       if (fr) {
@@ -827,7 +827,7 @@ static BOOL vrdb_make_gadgets(APTR vi, struct Screen *scr,
     ng.ng_Height     = lv_h;
     ng.ng_GadgetID   = VRDB_LIST;
     ng.ng_Flags      = 0;
-    { struct TagItem lt[] = { { GTLV_Labels,(ULONG)&vrdb_list }, { TAG_DONE,0 } };
+    { struct TagItem lt[] = { { GTLV_Labels,(IPTR)&vrdb_list }, { TAG_DONE,0 } };
       prev = CreateGadgetA(LISTVIEW_KIND, gctx, &ng, lt);
       if (!prev) { FreeGadgets(glist); return FALSE; } }
 
@@ -1128,9 +1128,9 @@ void rdb_view_block(struct Window *win, struct BlockDev *bd,
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_VIEW_WINTITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_VIEW_WINTITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -1763,9 +1763,9 @@ void rdb_raw_scan(struct Window *win, struct BlockDev *bd)
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_RAWSCAN_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_RAWSCAN_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -2254,9 +2254,9 @@ void raw_disk_read(struct Window *win, struct BlockDev *bd)
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_RAWREAD_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_RAWREAD_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_NEWSIZE|IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -2439,7 +2439,7 @@ static BOOL vrdb_ask_block(ULONG deflt, ULONG *out)
         ng.ng_GadgetText = GS(MSG_RDB_HEXDUMP_START_BLK);
         ng.ng_GadgetID   = 10;
         ng.ng_Flags      = PLACETEXT_LEFT;
-        { struct TagItem st[] = { { GTST_String,(ULONG)initbuf },
+        { struct TagItem st[] = { { GTST_String,(IPTR)initbuf },
                                   { GTST_MaxChars, 11 }, { TAG_DONE, 0 } };
           str_gad = CreateGadgetA(STRING_KIND, gctx, &ng, st);
           if (!str_gad) { FreeGadgets(glist); UnlockPubScreen(NULL,scr); FreeVisualInfo(vi); return FALSE; }
@@ -2462,8 +2462,8 @@ static BOOL vrdb_ask_block(ULONG deflt, ULONG *out)
               { WA_Left,   (ULONG)((scr->Width  - win_w) / 2) },
               { WA_Top,    (ULONG)((scr->Height - win_h) / 2) },
               { WA_Width,  win_w }, { WA_Height, win_h },
-              { WA_Title,  (ULONG)GS(MSG_RDB_HEXDUMP_ASK_TITLE) },
-              { WA_Gadgets,(ULONG)glist }, { WA_PubScreen, (ULONG)scr },
+              { WA_Title,  (IPTR)GS(MSG_RDB_HEXDUMP_ASK_TITLE) },
+              { WA_Gadgets,(IPTR)glist }, { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,  IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
               { WA_Flags,  WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
                            WFLG_ACTIVATE|PV_REFRESH_FLAG },
@@ -2620,9 +2620,9 @@ void raw_hex_dump(struct Window *win, struct BlockDev *bd)
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_HEXDUMP_WINTITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_HEXDUMP_WINTITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -3015,9 +3015,9 @@ smart_show:
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height,    win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_SMART_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_SMART_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                               IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -3287,9 +3287,9 @@ void bad_block_scan(struct Window *win, struct BlockDev *bd,
                         { WA_Left,      (ULONG)((scr->Width  - win_w) / 2) },
                         { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                         { WA_Width,     win_w }, { WA_Height, win_h },
-                        { WA_Title,     (ULONG)GS(MSG_RDB_BBSCAN_TITLE) },
-                        { WA_Gadgets,   (ULONG)scan_list },
-                        { WA_PubScreen, (ULONG)scr },
+                        { WA_Title,     (IPTR)GS(MSG_RDB_BBSCAN_TITLE) },
+                        { WA_Gadgets,   (IPTR)scan_list },
+                        { WA_PubScreen, (IPTR)scr },
                         { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                         IDCMP_REFRESHWINDOW },
                         { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -3415,9 +3415,9 @@ void bad_block_scan(struct Window *win, struct BlockDev *bd,
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_BBSCAN_RESULTS_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_BBSCAN_RESULTS_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                               IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW },
               { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -3556,9 +3556,9 @@ void rdb_integrity_check(struct Window *win, struct BlockDev *bd,
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_INTEGRITY_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_INTEGRITY_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -3656,9 +3656,9 @@ void rdb_verify_block(struct Window *win, struct BlockDev *bd,
 
     { struct FileRequester *fr; BOOL chosen = FALSE;
       { struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SELECT_VERIFY) },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-            { ASLFR_InitialFile,  (ULONG)"RDB.backup" },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SELECT_VERIFY) },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+            { ASLFR_InitialFile,  (IPTR)"RDB.backup" },
             { TAG_DONE, 0 } };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at); }
       if (fr) {
@@ -3782,8 +3782,8 @@ void rdb_verify_extended(struct Window *win, struct BlockDev *bd)
 
     { struct FileRequester *fr; BOOL chosen = FALSE;
       { struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_RDB_ASL_SELECT_EXT_VERIFY) },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_RDB_ASL_SELECT_EXT_VERIFY) },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
             { TAG_DONE, 0 } };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at); }
       if (fr) {
@@ -3935,9 +3935,9 @@ void rdb_verify_extended(struct Window *win, struct BlockDev *bd)
               { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
               { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
               { WA_Width,     win_w }, { WA_Height, win_h },
-              { WA_Title,     (ULONG)GS(MSG_RDB_VERIFY_EXT_TITLE) },
-              { WA_Gadgets,   (ULONG)glist },
-              { WA_PubScreen, (ULONG)scr },
+              { WA_Title,     (IPTR)GS(MSG_RDB_VERIFY_EXT_TITLE) },
+              { WA_Gadgets,   (IPTR)glist },
+              { WA_PubScreen, (IPTR)scr },
               { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                               IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
               { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -4090,9 +4090,9 @@ static BOOL vrdb_show(const char *title, const char *load_label)
             { WA_Left,      (ULONG)((scr_w - win_w) / 2) },
             { WA_Top,       (ULONG)((scr_h - win_h) / 2) },
             { WA_Width,     win_w }, { WA_Height, win_h },
-            { WA_Title,     (ULONG)title },
-            { WA_Gadgets,   (ULONG)glist },
-            { WA_PubScreen, (ULONG)scr },
+            { WA_Title,     (IPTR)title },
+            { WA_Gadgets,   (IPTR)glist },
+            { WA_PubScreen, (IPTR)scr },
             { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                             IDCMP_REFRESHWINDOW|IDCMP_NEWSIZE },
             { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
@@ -4186,7 +4186,7 @@ BOOL pv_rescue(struct Window *win, struct BlockDev *bd, struct RDBInfo *rdb)
     ProgressWin_Close(&pw);
     if (!scanned) {
         es.es_TextFormat = (UBYTE *)"%s";
-        EasyRequest(win, &es, NULL, (ULONG)err);
+        EasyRequest(win, &es, NULL, (IPTR)err);
         goto done;
     }
 

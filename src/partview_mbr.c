@@ -211,8 +211,8 @@ LONG init_rdb_dialog(struct Window *parent, const char *body,
             { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
             { WA_Width,     win_w },
             { WA_Height,    win_h },
-            { WA_Title,     (ULONG)GS(MSG_PV_INIT_TITLE) },
-            { WA_PubScreen, (ULONG)scr },
+            { WA_Title,     (IPTR)GS(MSG_PV_INIT_TITLE) },
+            { WA_PubScreen, (IPTR)scr },
             { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_CLOSEWINDOW |
                             IDCMP_REFRESHWINDOW },
             { WA_Flags,     WFLG_DRAGBAR | WFLG_ACTIVATE | PV_REFRESH_FLAG },
@@ -452,9 +452,9 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
                 { WA_Left,      (ULONG)((scr->Width  - win_w) / 2) },
                 { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                 { WA_Width,     win_w }, { WA_Height, win_h },
-                { WA_Title,     (ULONG)(is_add ? GS(MSG_MBR_DLG_ADD_TITLE)
+                { WA_Title,     (IPTR)(is_add ? GS(MSG_MBR_DLG_ADD_TITLE)
                                                : GS(MSG_MBR_DLG_EDIT_TITLE)) },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_Gadgets,   0 },
                 { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                                 IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW },
@@ -480,7 +480,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
         ng.ng_Flags      = PLACETEXT_LEFT;
         {
             struct TagItem ct[] = {
-                { GTCY_Labels, (ULONG)s_cycle_labels     },
+                { GTCY_Labels, (IPTR)s_cycle_labels     },
                 { GTCY_Active, (ULONG)cur_type_idx       },
                 { TAG_DONE, 0 }
             };
@@ -516,7 +516,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
         ng.ng_Flags      = PLACETEXT_LEFT;
         {
             struct TagItem st[] = {
-                { GTST_String,   (ULONG)start_buf },
+                { GTST_String,   (IPTR)start_buf },
                 { GTST_MaxChars, 12               },
                 { TAG_DONE, 0 }
             };
@@ -534,7 +534,7 @@ static BOOL mbr_edit_dialog(struct Window *parent, struct BlockDev *bd,
         ng.ng_Flags      = PLACETEXT_LEFT;
         {
             struct TagItem st[] = {
-                { GTST_String,   (ULONG)end_buf   },
+                { GTST_String,   (IPTR)end_buf   },
                 { GTST_MaxChars, 16               },
                 { TAG_DONE, 0 }
             };

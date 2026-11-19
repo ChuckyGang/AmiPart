@@ -34,10 +34,10 @@ static BOOL pv_pc_pick_file(struct Window *win, const char *title,
     struct FileRequester *fr;
     BOOL chosen = FALSE;
     struct TagItem at[] = {
-        { ASLFR_TitleText,     (ULONG)title },
+        { ASLFR_TitleText,     (IPTR)title },
         { ASLFR_DoSaveMode,    save ? TRUE : FALSE },
-        { ASLFR_InitialDrawer, (ULONG)"RAM:" },
-        { ASLFR_InitialFile,   (ULONG)(initfile ? initfile : "") },
+        { ASLFR_InitialDrawer, (IPTR)"RAM:" },
+        { ASLFR_InitialFile,   (IPTR)(initfile ? initfile : "") },
         { TAG_DONE, 0 }
     };
     if (!AslBase) {

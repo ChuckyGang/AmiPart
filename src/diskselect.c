@@ -178,9 +178,15 @@ static WORD g_namelist_sel = -1;
 
 static ULONG namelist_lv_render(void)
 {
+#ifdef AMIPART_HOST   /* no registers: the host layer hands them over */
+    struct Hook      *h    = (struct Hook *)host_reg_a0;
+    struct LVDrawMsg *msg  = (struct LVDrawMsg *)host_reg_a1;
+    struct Node      *node = (struct Node *)host_reg_a2;
+#else
     register struct Hook      *h    __asm__("a0");
     register struct LVDrawMsg *msg  __asm__("a1");
     register struct Node      *node __asm__("a2");
+#endif
     struct Hook      *_h    = h;
     struct LVDrawMsg *_msg  = msg;
     struct Node      *_node = node;
@@ -355,8 +361,8 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
             struct NewGadget ng;
             struct TagItem bt[]      = { { TAG_DONE, 0 } };
             struct TagItem lv_tags[] = {
-                { GTLV_Labels,   (ULONG)&name_list      },
-                { GTLV_CallBack, (ULONG)&namelist_lv_hook },
+                { GTLV_Labels,   (IPTR)&name_list      },
+                { GTLV_CallBack, (IPTR)&namelist_lv_hook },
                 { TAG_DONE,    0                 }
             };
             struct Gadget *prev;
@@ -436,9 +442,9 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
                 { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                 { WA_Width,     win_w },
                 { WA_Height,    win_h },
-                { WA_Title,     (ULONG)dev_title },
-                { WA_Gadgets,   (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)dev_title },
+                { WA_Gadgets,   (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                 IDCMP_GADGETDOWN  | IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -522,9 +528,9 @@ WORD DiskSelect_PickDeviceName(struct DevNameList *dn, char *manual_devname_out,
                         GT_SetGadgetAttrsA(lv_gad, win, NULL, detach);
                         display_count = build_name_list(dn, &name_list, name_nodes,
                                                         sel_map, show_all);
-                        reattach[0].ti_Data = (ULONG)&name_list;
+                        reattach[0].ti_Data = (IPTR)&name_list;
                         GT_SetGadgetAttrsA(lv_gad, win, NULL, reattach);
-                        relabel[0].ti_Data  = (ULONG)(show_all ? GS(MSG_MAIN_FILTER) : GS(MSG_MAIN_SHOWALL));
+                        relabel[0].ti_Data  = (IPTR)(show_all ? GS(MSG_MAIN_FILTER) : GS(MSG_MAIN_SHOWALL));
                         GT_SetGadgetAttrsA(showall_gad, win, NULL, relabel);
                         RefreshGList(showall_gad, win, NULL, 1);
                         sel = -1;
@@ -716,9 +722,9 @@ static void probe_win_open(struct ProbeWin *pw, const char *devname)
             { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
             { WA_Width,     win_w  },
             { WA_Height,    win_h  },
-            { WA_Title,     (ULONG)pw->title },
-            { WA_PubScreen, (ULONG)scr },
-            { WA_Gadgets,   (ULONG)pw->glist },
+            { WA_Title,     (IPTR)pw->title },
+            { WA_PubScreen, (IPTR)scr },
+            { WA_Gadgets,   (IPTR)pw->glist },
             { WA_IDCMP,     pw->glist ? IDCMP_GADGETUP : 0 },
             { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET | PV_REFRESH_FLAG },
             { TAG_DONE,     0 }
@@ -864,8 +870,8 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
 
             {
                 struct TagItem lv_tags[] = {
-                    { GTLV_Labels,   (ULONG)&ulist            },
-                    { GTLV_CallBack, (ULONG)&namelist_lv_hook },
+                    { GTLV_Labels,   (IPTR)&ulist            },
+                    { GTLV_CallBack, (IPTR)&namelist_lv_hook },
                     { TAG_DONE,    0              }
                 };
                 struct Gadget *lv_gad;
@@ -906,9 +912,9 @@ WORD DiskSelect_PickUnit(const char *devname, struct UnitList *ul)
                     { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                     { WA_Width,     win_w },
                     { WA_Height,    win_h },
-                    { WA_Title,     (ULONG)win_title },
-                    { WA_Gadgets,   (ULONG)glist },
-                    { WA_PubScreen, (ULONG)scr },
+                    { WA_Title,     (IPTR)win_title },
+                    { WA_Gadgets,   (IPTR)glist },
+                    { WA_PubScreen, (IPTR)scr },
                     { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                     IDCMP_GADGETDOWN  | IDCMP_REFRESHWINDOW },
                     { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |

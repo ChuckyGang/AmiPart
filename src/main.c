@@ -130,10 +130,10 @@ static BOOL pick_image_path(char *out, ULONG outsz)
 
     {
         struct TagItem asl_tags[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_MAIN_ASL_TITLE) },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_MAIN_ASL_TITLE) },
             { ASLFR_DoSaveMode,   TRUE },
-            { ASLFR_InitialDrawer,(ULONG)"" },
-            { ASLFR_InitialFile,  (ULONG)"" },
+            { ASLFR_InitialDrawer,(IPTR)"" },
+            { ASLFR_InitialFile,  (IPTR)"" },
             { TAG_DONE, 0 }
         };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, asl_tags);
@@ -222,7 +222,7 @@ static BOOL image_size_dialog(const char *path, char *out, ULONG outsz)
             struct TagItem bt[]       = { { TAG_DONE, 0 } };
             struct TagItem str_tags[] = {
                 { GTST_MaxChars, 31 },
-                { GTST_String,   (ULONG)"100M" },
+                { GTST_String,   (IPTR)"100M" },
                 { TAG_DONE,      0 }
             };
             (void)font_x;
@@ -265,9 +265,9 @@ static BOOL image_size_dialog(const char *path, char *out, ULONG outsz)
                 { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                 { WA_Width,     win_w },
                 { WA_Height,    win_h },
-                { WA_Title,     (ULONG)GS(MSG_MAIN_NEW_IMAGE_TITLE) },
-                { WA_Gadgets,   (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)GS(MSG_MAIN_NEW_IMAGE_TITLE) },
+                { WA_Gadgets,   (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                 IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -413,7 +413,9 @@ int main(void)
     int result = 0;
 
     /* Must be first: SysBase lives at AbsExecBase (address 4) */
+#ifndef AMIPART_HOST
     SysBase = *((struct ExecBase **)4UL);
+#endif
 
     DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 37);
     if (!DOSBase) goto cleanup;

@@ -394,7 +394,7 @@ BOOL offer_move_partition(struct Window *win,
     {
         struct NewGadget ng;
         struct TagItem st[] = {
-            { GTST_String,   (ULONG)cyl_str },
+            { GTST_String,   (IPTR)cyl_str },
             { GTST_MaxChars, 10 },
             { TAG_DONE, 0 }
         };
@@ -465,9 +465,9 @@ BOOL offer_move_partition(struct Window *win,
             { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
             { WA_Width,     win_w  },
             { WA_Height,    win_h  },
-            { WA_Title,     (ULONG)GS(MSG_MOVE_DLG_TITLE) },
-            { WA_Gadgets,   (ULONG)glist },
-            { WA_PubScreen, (ULONG)scr   },
+            { WA_Title,     (IPTR)GS(MSG_MOVE_DLG_TITLE) },
+            { WA_Gadgets,   (IPTR)glist },
+            { WA_PubScreen, (IPTR)scr   },
             { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_REFRESHWINDOW },
             { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_CLOSEGADGET |
                             WFLG_ACTIVATE | PV_REFRESH_FLAG },
@@ -575,8 +575,8 @@ BOOL offer_move_partition(struct Window *win,
                 { WA_Top,       (ULONG)((pscr->Height - pw_h) / 2) },
                 { WA_Width,     pw_w  },
                 { WA_Height,    pw_h  },
-                { WA_Title,     (ULONG)GS(MSG_MOVE_PROG_TITLE) },
-                { WA_PubScreen, (ULONG)pscr },
+                { WA_Title,     (IPTR)GS(MSG_MOVE_PROG_TITLE) },
+                { WA_PubScreen, (IPTR)pscr },
                 { WA_Flags,     WFLG_DRAGBAR },
                 { WA_IDCMP,     0 },
                 { TAG_END, 0 }
@@ -787,8 +787,8 @@ static struct Window *grow_open_progress(struct Window *win, CONST_STRPTR title,
     prog_tags[1].ti_Data = (ULONG)((scr->Height - pw_h) / 2);
     prog_tags[2].ti_Data = (ULONG)pw_w;
     prog_tags[3].ti_Data = (ULONG)pw_h;
-    prog_tags[4].ti_Data = (ULONG)title;
-    prog_tags[5].ti_Data = (ULONG)scr;
+    prog_tags[4].ti_Data = (IPTR)title;
+    prog_tags[5].ti_Data = (IPTR)scr;
 
     pu->win   = OpenWindowTagList(NULL, prog_tags);
     pu->step  = 0;
@@ -831,7 +831,7 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_FFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) != 1) return GROW_NONE;
+    if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) != 1) return GROW_NONE;
 
     {
         struct GrowProgUD prog_ud;
@@ -996,7 +996,7 @@ int offer_pfs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_PFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) == 1) {
+    if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) == 1) {
         struct GrowProgUD prog_ud;
         struct Window *prog_win =
             grow_open_progress(win, GS(MSG_MOVE_GROW_PFS_PROG_TITLE),
@@ -1068,7 +1068,7 @@ int offer_sfs_grow(struct Window *win, struct BlockDev *bd,
     es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_SFS_BODY_FMT);
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
-    if (EasyRequest(win, &es, NULL, (ULONG)pi->drive_name) == 1) {
+    if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) == 1) {
         struct GrowProgUD prog_ud;
         /* Total: 14 SFS steps + RDB write + done. */
         struct Window *prog_win =

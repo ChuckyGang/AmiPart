@@ -358,7 +358,10 @@ void DeleteIORequest(APTR io) { (void)io; }
 
 BYTE AllocSignal(LONG bit) { (void)bit; return 0; }
 void FreeSignal(LONG bit) { (void)bit; }
-APTR FindTask(CONST_STRPTR name) { (void)name; return (APTR)1; }
+/* Returned as a struct Process by the GUI's main(): its only field read
+   is pr_CLI (first member), non-NULL = started from a shell. */
+static void *host_process[4] = { (void *)1 };
+APTR FindTask(CONST_STRPTR name) { (void)name; return (APTR)host_process; }
 LONG DeleteFile(CONST_STRPTR name) { (void)name; return 0; }
 
 /* ================================================================== */

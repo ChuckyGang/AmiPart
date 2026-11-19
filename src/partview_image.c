@@ -84,10 +84,10 @@ void image_dump_disk(struct Window *win, struct BlockDev *bd)
         struct FileRequester *fr;
         BOOL chosen = FALSE;
         struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_IMG_SAVE_REQ_TITLE) },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_IMG_SAVE_REQ_TITLE) },
             { ASLFR_DoSaveMode,   TRUE },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-            { ASLFR_InitialFile,  (ULONG)"disk.hdf" },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+            { ASLFR_InitialFile,  (IPTR)"disk.hdf" },
             { TAG_DONE, 0 }
         };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at);
@@ -172,9 +172,9 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
         struct FileRequester *fr;
         BOOL chosen = FALSE;
         struct TagItem at[] = {
-            { ASLFR_TitleText,    (ULONG)GS(MSG_IMG_LOAD_REQ_TITLE) },
-            { ASLFR_InitialDrawer,(ULONG)"RAM:" },
-            { ASLFR_InitialFile,  (ULONG)"" },
+            { ASLFR_TitleText,    (IPTR)GS(MSG_IMG_LOAD_REQ_TITLE) },
+            { ASLFR_InitialDrawer,(IPTR)"RAM:" },
+            { ASLFR_InitialFile,  (IPTR)"" },
             { TAG_DONE, 0 }
         };
         fr = (struct FileRequester *)AllocAslRequest(ASL_FileRequest, at);

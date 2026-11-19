@@ -55,9 +55,15 @@ static struct Node *pcp_nodes_base;   /* h_Data: the node array in use */
 
 static ULONG pcp_lv_render(void)
 {
+#ifdef AMIPART_HOST   /* no registers: the host layer hands them over */
+    struct Hook      *h    = (struct Hook *)host_reg_a0;
+    struct LVDrawMsg *msg  = (struct LVDrawMsg *)host_reg_a1;
+    struct Node      *node = (struct Node *)host_reg_a2;
+#else
     register struct Hook      *h    __asm__("a0");
     register struct LVDrawMsg *msg  __asm__("a1");
     register struct Node      *node __asm__("a2");
+#endif
     struct Hook      *_h    = h;
     struct LVDrawMsg *_msg  = msg;
     struct Node      *_node = node;
@@ -239,8 +245,8 @@ static WORD pcp_pick_partition_body(struct Window *parent, struct RDBInfo *drdb,
         struct NewGadget ng;
         struct Gadget *lv_gad, *sel_gad, *cancel_gad;
         struct TagItem lv_tags[] = {
-            { GTLV_Labels,   (ULONG)&list },
-            { GTLV_CallBack, (ULONG)&pcp_lv_hook },
+            { GTLV_Labels,   (IPTR)&list },
+            { GTLV_CallBack, (IPTR)&pcp_lv_hook },
             { TAG_DONE, 0 }
         };
         struct TagItem bt[] = { { TAG_DONE, 0 } };
@@ -276,8 +282,8 @@ static WORD pcp_pick_partition_body(struct Window *parent, struct RDBInfo *drdb,
                 { WA_Left, (ULONG)((scr->Width - win_w) / 2) },
                 { WA_Top,  (ULONG)((scr->Height - win_h) / 2) },
                 { WA_Width, win_w }, { WA_Height, win_h },
-                { WA_Title, (ULONG)title }, { WA_Gadgets, (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title, (IPTR)title }, { WA_Gadgets, (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                             IDCMP_GADGETDOWN | IDCMP_REFRESHWINDOW },
                 { WA_Flags, WFLG_DRAGBAR | WFLG_DEPTHGADGET | WFLG_CLOSEGADGET |

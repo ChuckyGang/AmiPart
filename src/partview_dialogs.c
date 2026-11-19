@@ -376,7 +376,7 @@ void partition_advanced_dialog(struct PartInfo *pi)
     ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=ROW_Y(row); \
     ng.ng_Width=gad_w; ng.ng_Height=row_h; \
     ng.ng_GadgetText=(lbl); ng.ng_GadgetID=(gid); ng.ng_Flags=PLACETEXT_LEFT; \
-    { struct TagItem st_[]={{GTST_String,(ULONG)(initstr)}, \
+    { struct TagItem st_[]={{GTST_String,(IPTR)(initstr)}, \
                             {GTST_MaxChars,(maxch)},{TAG_DONE,0}}; \
       *(pgad)=CreateGadgetA(STRING_KIND,prev,&ng,st_); \
       if (!*(pgad)) { goto cleanup; } prev=*(pgad); } row++;
@@ -390,7 +390,7 @@ void partition_advanced_dialog(struct PartInfo *pi)
             ng.ng_Width=gad_w; ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_BUF_MEM_TYPE); ng.ng_GadgetID=ADLG_BUFMEMTYPE;
             ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem bmt[]={{GTCY_Labels,(ULONG)bufmem_labels},
+            { struct TagItem bmt[]={{GTCY_Labels,(IPTR)bufmem_labels},
                                     {GTCY_Active,(ULONG)cur_bufmem},{TAG_DONE,0}};
               prev=CreateGadgetA(CYCLE_KIND,prev,&ng,bmt);
               if (!prev) goto cleanup; }
@@ -428,9 +428,9 @@ void partition_advanced_dialog(struct PartInfo *pi)
                 { WA_Left,      (ULONG)((scr->Width -win_w)/2) },
                 { WA_Top,       (ULONG)((scr->Height-win_h)/2) },
                 { WA_Width,     win_w }, { WA_Height, win_h },
-                { WA_Title,     (ULONG)GS(MSG_DLG_ADV_TITLE) },
-                { WA_Gadgets,   (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)GS(MSG_DLG_ADV_TITLE) },
+                { WA_Gadgets,   (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
                                 WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG },
@@ -679,7 +679,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
     ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=ROW_Y(row); \
     ng.ng_Width=gad_w;    ng.ng_Height=row_h; \
     ng.ng_GadgetText=(lbl); ng.ng_GadgetID=(gid); ng.ng_Flags=PLACETEXT_LEFT; \
-    { struct TagItem st_[]={ {GTST_String,(ULONG)(initstr)}, \
+    { struct TagItem st_[]={ {GTST_String,(IPTR)(initstr)}, \
                              {GTST_MaxChars,(maxch)}, {TAG_DONE,0} }; \
       *(pgad)=CreateGadgetA(STRING_KIND, prev, &ng, st_); \
       if (!*(pgad)) { goto cleanup; } prev=*(pgad); } row++;
@@ -689,7 +689,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             ng.ng_Width=gad_w; ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_NAME); ng.ng_GadgetID=PDLG_NAME;
             ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem st[]={{GTST_String,(ULONG)pi->drive_name},
+            { struct TagItem st[]={{GTST_String,(IPTR)pi->drive_name},
                                    {GTST_MaxChars,30},{TAG_DONE,0}};
               name_gad=CreateGadgetA(STRING_KIND,gctx,&ng,st);
               if (!name_gad) { goto cleanup; } prev=name_gad; }
@@ -699,7 +699,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             ng.ng_LeftEdge=gad_x; ng.ng_TopEdge=ROW_Y(row);
             ng.ng_Width=gad_w; ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_CYLINDER); ng.ng_GadgetID=0; ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem tt[]={{GTTX_Text,(ULONG)locyl_str},{TAG_DONE,0}};
+            { struct TagItem tt[]={{GTTX_Text,(IPTR)locyl_str},{TAG_DONE,0}};
               prev=CreateGadgetA(TEXT_KIND,prev,&ng,tt);
               if (!prev) goto cleanup; }
             row++;
@@ -711,7 +711,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             ng.ng_Width=gad_w; ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_FILESYSTEM); ng.ng_GadgetID=PDLG_TYPE;
             ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem ct[]={{GTCY_Labels,(ULONG)dlg_fs_labels},
+            { struct TagItem ct[]={{GTCY_Labels,(IPTR)dlg_fs_labels},
                                    {GTCY_Active,(ULONG)cur_fs},{TAG_DONE,0}};
               prev=CreateGadgetA(CYCLE_KIND,prev,&ng,ct);
               if (!prev) goto cleanup; }
@@ -722,7 +722,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             ng.ng_Width=gad_w; ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_BLOCK_SIZE); ng.ng_GadgetID=PDLG_BLOCKSIZE;
             ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem bs[]={{GTCY_Labels,(ULONG)blocksize_labels},
+            { struct TagItem bs[]={{GTCY_Labels,(IPTR)blocksize_labels},
                                    {GTCY_Active,(ULONG)cur_bsz},{TAG_DONE,0}};
               prev=CreateGadgetA(CYCLE_KIND,prev,&ng,bs);
               if (!prev) goto cleanup; }
@@ -733,7 +733,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
             ng.ng_Width=52;       ng.ng_Height=row_h;
             ng.ng_GadgetText=GS(MSG_DLG_BOOT_PRIORITY); ng.ng_GadgetID=PDLG_BOOTPRI;
             ng.ng_Flags=PLACETEXT_LEFT;
-            { struct TagItem bpst[]={ {GTST_String,(ULONG)bootpri_str},
+            { struct TagItem bpst[]={ {GTST_String,(IPTR)bootpri_str},
                                       {GTST_MaxChars,4}, {TAG_DONE,0} };
               bootpri_gad=CreateGadgetA(STRING_KIND,prev,&ng,bpst);
               if (!bootpri_gad) { goto cleanup; } prev=bootpri_gad; }
@@ -861,9 +861,9 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                 { WA_Left,      (ULONG)((scr->Width -win_w)/2) },
                 { WA_Top,       (ULONG)((scr->Height-win_h)/2) },
                 { WA_Width,     win_w }, { WA_Height, win_h },
-                { WA_Title,     (ULONG)title },
-                { WA_Gadgets,   (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)title },
+                { WA_Gadgets,   (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR|WFLG_DEPTHGADGET|
                                 WFLG_CLOSEGADGET|WFLG_ACTIVATE|PV_REFRESH_FLAG },
@@ -955,7 +955,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                                 nes.es_TextFormat   = (UBYTE *)GS(MSG_DLG_NAME_BAD_BODY);
                                 nes.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
                                 EasyRequest(win, &nes, NULL);
-                                { struct TagItem nt[] = {{GTST_String, (ULONG)nb}, {TAG_DONE, 0}};
+                                { struct TagItem nt[] = {{GTST_String, (IPTR)nb}, {TAG_DONE, 0}};
                                   GT_SetGadgetAttrsA(name_gad, win, NULL, nt); }
                                 break;   /* stay in the dialog */
                             }
@@ -971,7 +971,7 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
                             es.es_TextFormat   = (UBYTE *)GS(MSG_DLG_DESTROY_BODY);
                             es.es_GadgetFormat = (UBYTE *)GS(MSG_DLG_DESTROY_GADGETS);
                             if (!EasyRequest(win, &es, NULL,
-                                             (ULONG)pi->drive_name, TAG_DONE))
+                                             (IPTR)pi->drive_name, TAG_DONE))
                                 break; /* user cancelled - stay in dialog */
                         }
                         {
@@ -1205,7 +1205,7 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
     ng.ng_LeftEdge=(WORD)gad_x; ng.ng_TopEdge=GROW_Y(row); \
     ng.ng_Width=(WORD)gad_w; ng.ng_Height=(WORD)row_h; \
     ng.ng_GadgetText=(lbl); ng.ng_GadgetID=(gid); ng.ng_Flags=PLACETEXT_LEFT; \
-    { struct TagItem _gs[]={{GTST_String,(ULONG)(istr)}, \
+    { struct TagItem _gs[]={{GTST_String,(IPTR)(istr)}, \
                             {GTST_MaxChars,10},{TAG_DONE,0}}; \
       *(pgad)=CreateGadgetA(STRING_KIND,prev,&ng,_gs); \
       if (!*(pgad)) { goto geom_cleanup; } prev=*(pgad); } row++;
@@ -1219,7 +1219,7 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
                 UWORD calc_w  = (UWORD)(font_h * 5 + 8);  /* ~48px at 8pt */
                 UWORD str_w   = gad_w - calc_w - pad;
                 WORD  row3_y  = GROW_Y(3);
-                { struct TagItem _gs[] = { {GTST_String,(ULONG)size_str},
+                { struct TagItem _gs[] = { {GTST_String,(IPTR)size_str},
                                            {GTST_MaxChars,12}, {TAG_DONE,0} };
                   ng.ng_LeftEdge  = (WORD)gad_x;
                   ng.ng_TopEdge   = row3_y;
@@ -1269,9 +1269,9 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
                 { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
                 { WA_Width,     (ULONG)win_w },
                 { WA_Height,    (ULONG)win_h },
-                { WA_Title,     (ULONG)GS(MSG_DLG_GEOM_TITLE) },
-                { WA_Gadgets,   (ULONG)glist },
-                { WA_PubScreen, (ULONG)scr },
+                { WA_Title,     (IPTR)GS(MSG_DLG_GEOM_TITLE) },
+                { WA_Gadgets,   (IPTR)glist },
+                { WA_PubScreen, (IPTR)scr },
                 { WA_IDCMP,     IDCMP_CLOSEWINDOW | IDCMP_GADGETUP |
                                 IDCMP_REFRESHWINDOW },
                 { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |
@@ -1356,13 +1356,13 @@ BOOL geometry_dialog(ULONG def_cyls, ULONG def_heads, ULONG def_secs,
                             struct TagItem st[2];
                             st[1].ti_Tag = TAG_DONE; st[1].ti_Data = 0;
                             DP_SNPRINTF(cyls_str,  "%lu", new_cyls);
-                            st[0].ti_Tag = GTST_String; st[0].ti_Data = (ULONG)cyls_str;
+                            st[0].ti_Tag = GTST_String; st[0].ti_Data = (IPTR)cyls_str;
                             GT_SetGadgetAttrsA(cyls_gad,  win, NULL, st);
                             DP_SNPRINTF(heads_str, "16");
-                            st[0].ti_Data = (ULONG)heads_str;
+                            st[0].ti_Data = (IPTR)heads_str;
                             GT_SetGadgetAttrsA(heads_gad, win, NULL, st);
                             DP_SNPRINTF(secs_str,  "63");
-                            st[0].ti_Data = (ULONG)secs_str;
+                            st[0].ti_Data = (IPTR)secs_str;
                             GT_SetGadgetAttrsA(secs_gad,  win, NULL, st);
                         }
                         break;

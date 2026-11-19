@@ -88,9 +88,9 @@ void ProgressWin_Open(struct ProgressWin *p, const char *title)
             { WA_Top,       (ULONG)((scr->Height - win_h) / 2) },
             { WA_Width,     win_w  },
             { WA_Height,    win_h  },
-            { WA_Title,     (ULONG)p->title },
-            { WA_Gadgets,   (ULONG)p->glist },
-            { WA_PubScreen, (ULONG)scr },
+            { WA_Title,     (IPTR)p->title },
+            { WA_Gadgets,   (IPTR)p->glist },
+            { WA_PubScreen, (IPTR)scr },
             { WA_IDCMP,     IDCMP_GADGETUP | IDCMP_CLOSEWINDOW |
                             IDCMP_VANILLAKEY | IDCMP_REFRESHWINDOW },
             { WA_Flags,     WFLG_DRAGBAR | WFLG_DEPTHGADGET |

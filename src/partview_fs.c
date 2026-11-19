@@ -335,7 +335,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Width=dt_str_w; ng.ng_Height=row_h;
         ng.ng_GadgetText=GS(MSG_FS_DOSTYPE_LBL); ng.ng_GadgetID=AFSDLG_DOSTYPE;
         ng.ng_Flags=PLACETEXT_LEFT;
-        { struct TagItem st[]={{GTST_String,(ULONG)dt_str},{GTST_MaxChars,18},{TAG_DONE,0}};
+        { struct TagItem st[]={{GTST_String,(IPTR)dt_str},{GTST_MaxChars,18},{TAG_DONE,0}};
           dostype_gad=CreateGadgetA(STRING_KIND,gctx,&ng,st);
           if (!dostype_gad) { goto fs_add_cleanup; } prev=dostype_gad; }
 
@@ -344,7 +344,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Width=dt_hex_w; ng.ng_Height=row_h;
         ng.ng_GadgetText=NULL; ng.ng_GadgetID=AFSDLG_HEXDISP;
         ng.ng_Flags=0;
-        { struct TagItem tt[]={{GTTX_Text,(ULONG)hex_str},{GTTX_Border,TRUE},{TAG_DONE,0}};
+        { struct TagItem tt[]={{GTTX_Text,(IPTR)hex_str},{GTTX_Border,TRUE},{TAG_DONE,0}};
           hex_gad=CreateGadgetA(TEXT_KIND,prev,&ng,tt);
           if (!hex_gad) { goto fs_add_cleanup; } prev=hex_gad; }
 
@@ -353,7 +353,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
         ng.ng_Width=file_w; ng.ng_Height=row_h;
         ng.ng_GadgetText=GS(MSG_FS_FILE_LBL); ng.ng_GadgetID=AFSDLG_FILE;
         ng.ng_Flags=PLACETEXT_LEFT;
-        { struct TagItem st[]={{GTST_String,(ULONG)file_str},{GTST_MaxChars,255},{TAG_DONE,0}};
+        { struct TagItem st[]={{GTST_String,(IPTR)file_str},{GTST_MaxChars,255},{TAG_DONE,0}};
           file_gad=CreateGadgetA(STRING_KIND,prev,&ng,st);
           if (!file_gad) { goto fs_add_cleanup; } prev=file_gad; }
 
@@ -392,8 +392,8 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
               {WA_Left,(ULONG)((scr->Width-win_w)/2)},
               {WA_Top,(ULONG)((scr->Height-win_h)/2)},
               {WA_Width,win_w},{WA_Height,win_h},
-              {WA_Title,(ULONG)(is_edit ? GS(MSG_FS_EDIT_TITLE) : GS(MSG_FS_ADD_TITLE))},
-              {WA_Gadgets,(ULONG)glist},{WA_PubScreen,(ULONG)scr},
+              {WA_Title,(IPTR)(is_edit ? GS(MSG_FS_EDIT_TITLE) : GS(MSG_FS_ADD_TITLE))},
+              {WA_Gadgets,(IPTR)glist},{WA_PubScreen,(IPTR)scr},
               {WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|IDCMP_REFRESHWINDOW},
               {WA_Flags,WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
                         WFLG_ACTIVATE|PV_REFRESH_FLAG},
@@ -431,7 +431,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                         struct StringInfo *si = (struct StringInfo *)dostype_gad->SpecialInfo;
                         ULONG dt = parse_dostype((char *)si->Buffer);
                         DP_SNPRINTF(hex_str, "0x%08lX", dt);
-                        { struct TagItem tt[]={{GTTX_Text,(ULONG)hex_str},{TAG_DONE,0}};
+                        { struct TagItem tt[]={{GTTX_Text,(IPTR)hex_str},{TAG_DONE,0}};
                           GT_SetGadgetAttrsA(hex_gad, win, NULL, tt); }
                         break;
                     }
@@ -441,9 +441,9 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                             struct FileRequester *fr;
                             struct StringInfo *si = (struct StringInfo *)file_gad->SpecialInfo;
                             { struct TagItem asl_tags[] = {
-                                  { ASLFR_TitleText,    (ULONG)GS(MSG_FS_SELECT_DRIVER) },
-                                  { ASLFR_InitialDrawer,(ULONG)"L:" },
-                                  { ASLFR_InitialFile,  (ULONG)si->Buffer },
+                                  { ASLFR_TitleText,    (IPTR)GS(MSG_FS_SELECT_DRIVER) },
+                                  { ASLFR_InitialDrawer,(IPTR)"L:" },
+                                  { ASLFR_InitialFile,  (IPTR)si->Buffer },
                                   { TAG_DONE, 0 } };
                               fr = (struct FileRequester *)AllocAslRequest(
                                   ASL_FileRequest, asl_tags); }
@@ -456,16 +456,16 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                                     AddPart((UBYTE *)file_str, (UBYTE *)fr->fr_File,
                                             sizeof(file_str));
                                     /* Update the string gadget */
-                                    { struct TagItem ut[]={{GTST_String,(ULONG)file_str},{TAG_DONE,0}};
+                                    { struct TagItem ut[]={{GTST_String,(IPTR)file_str},{TAG_DONE,0}};
                                       GT_SetGadgetAttrsA(file_gad, win, NULL, ut); }
                                     /* Recommend DosType based on the filename */
                                     guessed = guess_dostype_from_path(file_str);
                                     if (guessed != 0) {
                                         FormatDosType(guessed, dt_str);
                                         DP_SNPRINTF(hex_str, "0x%08lX", guessed);
-                                        { struct TagItem dtt[]={{GTST_String,(ULONG)dt_str},{TAG_DONE,0}};
+                                        { struct TagItem dtt[]={{GTST_String,(IPTR)dt_str},{TAG_DONE,0}};
                                           GT_SetGadgetAttrsA(dostype_gad, win, NULL, dtt); }
-                                        { struct TagItem htt[]={{GTTX_Text,(ULONG)hex_str},{TAG_DONE,0}};
+                                        { struct TagItem htt[]={{GTTX_Text,(IPTR)hex_str},{TAG_DONE,0}};
                                           GT_SetGadgetAttrsA(hex_gad, win, NULL, htt); }
                                     }
                                 }
@@ -481,9 +481,9 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                         if (guessed != 0) {
                             FormatDosType(guessed, dt_str);
                             DP_SNPRINTF(hex_str, "0x%08lX", guessed);
-                            { struct TagItem dtt[]={{GTST_String,(ULONG)dt_str},{TAG_DONE,0}};
+                            { struct TagItem dtt[]={{GTST_String,(IPTR)dt_str},{TAG_DONE,0}};
                               GT_SetGadgetAttrsA(dostype_gad, win, NULL, dtt); }
-                            { struct TagItem htt[]={{GTTX_Text,(ULONG)hex_str},{TAG_DONE,0}};
+                            { struct TagItem htt[]={{GTTX_Text,(IPTR)hex_str},{TAG_DONE,0}};
                               GT_SetGadgetAttrsA(hex_gad, win, NULL, htt); }
                         }
                         break;
@@ -588,7 +588,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
            With this set, GadTools gives the listview persistent selection
            highlighting and GADGETUP Code becomes the reliable item ordinal. */
         { UWORD sel_y = bor_t + pad + hdr_h + lv_h + pad;
-          struct TagItem st[] = {{GTST_String,(ULONG)""},{GTST_MaxChars,63},{TAG_DONE,0}};
+          struct TagItem st[] = {{GTST_String,(IPTR)""},{GTST_MaxChars,63},{TAG_DONE,0}};
           ng.ng_LeftEdge  = bor_l + pad;
           ng.ng_TopEdge   = (WORD)sel_y;
           ng.ng_Width     = inner_w - pad * 2;
@@ -608,8 +608,8 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
         ng.ng_GadgetText= NULL;
         ng.ng_GadgetID  = FSDLG_LIST;
         ng.ng_Flags     = 0;
-        { struct TagItem lt[] = {{GTLV_Labels,    (ULONG)&fs_list_gad},
-                                  {GTLV_ShowSelected,(ULONG)sel_gad},
+        { struct TagItem lt[] = {{GTLV_Labels,    (IPTR)&fs_list_gad},
+                                  {GTLV_ShowSelected,(IPTR)sel_gad},
                                   {TAG_DONE,0}};
           lv_gad = CreateGadgetA(LISTVIEW_KIND, prev, &ng, lt);
           if (!lv_gad) goto fs_mgr_cleanup;
@@ -641,8 +641,8 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
               {WA_Left,(ULONG)((scr->Width-win_w)/2)},
               {WA_Top,(ULONG)((scr->Height-win_h)/2)},
               {WA_Width,win_w},{WA_Height,win_h},
-              {WA_Title,(ULONG)GS(MSG_FS_MGR_TITLE)},
-              {WA_Gadgets,(ULONG)glist},{WA_PubScreen,(ULONG)scr},
+              {WA_Title,(IPTR)GS(MSG_FS_MGR_TITLE)},
+              {WA_Gadgets,(IPTR)glist},{WA_PubScreen,(IPTR)scr},
               {WA_IDCMP,IDCMP_CLOSEWINDOW|IDCMP_GADGETUP|
                         IDCMP_GADGETDOWN|IDCMP_REFRESHWINDOW},
               {WA_Flags,WFLG_DRAGBAR|WFLG_DEPTHGADGET|WFLG_CLOSEGADGET|
@@ -742,7 +742,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                                 rdb->filesystems[rdb->num_fs++] = new_fi;
                                 dirty = TRUE;
                                 { struct TagItem dt[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
-                                  struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
+                                  struct TagItem rt[]={{GTLV_Labels,(IPTR)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt);
                                   build_fs_list(rdb);
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, rt); }
@@ -768,7 +768,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                                 rdb->filesystems[sel] = edit_fi;
                                 dirty = TRUE;
                                 { struct TagItem dt[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
-                                  struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
+                                  struct TagItem rt[]={{GTLV_Labels,(IPTR)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt);
                                   build_fs_list(rdb);
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, rt); }
@@ -839,7 +839,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                                 if (sel >= (WORD)rdb->num_fs)
                                     sel = (WORD)rdb->num_fs - 1;
                                 { struct TagItem dt2[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
-                                  struct TagItem rt[]={{GTLV_Labels,(ULONG)&fs_list_gad},{TAG_DONE,0}};
+                                  struct TagItem rt[]={{GTLV_Labels,(IPTR)&fs_list_gad},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt2);
                                   build_fs_list(rdb);
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, rt); }

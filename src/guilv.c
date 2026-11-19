@@ -10,6 +10,7 @@
 #include <proto/gadtools.h>
 #include "gt_compat.h"
 
+#include "clib.h"
 #include "guilv.h"
 
 BOOL quick_double_click(ULONG s_sec, ULONG s_mic, ULONG c_sec, ULONG c_mic)
@@ -24,9 +25,9 @@ BOOL quick_double_click(ULONG s_sec, ULONG s_mic, ULONG c_sec, ULONG c_mic)
 void gui_force_lv_redraw(struct Gadget *gad, struct Window *win, struct List *list)
 {
     ULONG top = 0;
-    struct TagItem get_top[]  = { { GTLV_Top,    (ULONG)&top   }, { TAG_DONE, 0 } };
+    struct TagItem get_top[]  = { { GTLV_Top,    (IPTR)&top   }, { TAG_DONE, 0 } };
     struct TagItem detach[]   = { { GTLV_Labels, ~0UL          }, { TAG_DONE, 0 } };
-    struct TagItem reattach[] = { { GTLV_Labels, (ULONG)list   }, { TAG_DONE, 0 } };
+    struct TagItem reattach[] = { { GTLV_Labels, (IPTR)list   }, { TAG_DONE, 0 } };
     struct TagItem restore[]  = { { GTLV_Top,    0             }, { TAG_DONE, 0 } };
 
     GT_GetGadgetAttrsA(gad, win, NULL, get_top);

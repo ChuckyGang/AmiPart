@@ -1,1 +1,1 @@
-#include "amiga_compat.h"
+#include "host_gui.h"
