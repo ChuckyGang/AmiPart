@@ -1094,10 +1094,23 @@ cleanup:
 void show_about(struct Window *win)
 {
     struct EasyStruct es;
-    char body[512];
+    static char body[1100];        /* static: keep it off the stack */
+    ULONG bl;
     static char about_title[80];   /* Intuition keeps the pointer */
     DP_SNPRINTF(body, GS(MSG_DLG_ABOUT_BODY),
         AMIPART_VERSION, AmiPart_BuildStamp);
+    bl = strlen(body);
+    snprintf(body + bl, sizeof(body) - bl, "%s", GS(MSG_DLG_ABOUT_NOBACKUP));
+#ifdef AMIPART_HOST
+    /* Linux GUI only, English only: what this build is. */
+    bl = strlen(body);
+    snprintf(body + bl, sizeof(body) - bl, "%s",
+        "\n\nLinux GUI: an experimental wrapper and a fun side project.\n"
+        "It runs the Amiga GUI code on Linux through a small\n"
+        "compatibility layer, so yes, it looks very Amiga-like,\n"
+        "and that is by choice. The main goal of AmiPart is still\n"
+        "the Amiga program.");
+#endif
     DP_SNPRINTF(about_title, "%s%s", GS(MSG_DLG_ABOUT_PREFIX), AMIPART_VERTITLE);
 
     es.es_StructSize   = sizeof(es);

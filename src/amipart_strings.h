@@ -1560,8 +1560,9 @@
 #define MSG_PV_RESCUE_HINT2          1554
 #define MSG_PV_RESCUE_HINT3          1555
 #define MSG_PV_RESCUE_NOTHING        1556
+#define MSG_DLG_ABOUT_NOBACKUP       1557
 
-#define MSG_COUNT 1557
+#define MSG_COUNT 1558
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -3130,5 +3131,6 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1554 MSG_PV_RESCUE_HINT2 */ "They are added to the partition table in memory only: nothing is",
     /* 1555 MSG_PV_RESCUE_HINT3 */ "written to the disk until you press Write in the main window.",
     /* 1556 MSG_PV_RESCUE_NOTHING */ "Nothing was found that can be added to the partition table.",
+    /* 1557 MSG_DLG_ABOUT_NOBACKUP */ "\n\nI take no responsibility for lost data.\nMake a backup before you change a disk.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

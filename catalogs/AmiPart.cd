@@ -4811,3 +4811,6 @@ written to the disk until you press Write in the main window.
 ;
 MSG_PV_RESCUE_NOTHING
 Nothing was found that can be added to the partition table.
+;
+MSG_DLG_ABOUT_NOBACKUP
+\n\nI take no responsibility for lost data.\nMake a backup before you change a disk.

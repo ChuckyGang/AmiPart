@@ -3,7 +3,7 @@ CORE = cli script mountlist imagecopy partclone shrinkinfo ffsresize \
        sfsresize pfsresize partmove mbr build rdb clib sfs_util nativefmt ataident clearrdb rescue
 SRCS = $(addprefix ../src/,$(addsuffix .c,$(CORE))) \
        amiga_shim.c host_rdargs.c host_locale.c host_devices.c host_main.c
-amipart: $(SRCS) amiga_compat.h
+amipart: $(SRCS) amiga_compat.h $(wildcard ../src/*.h)
 	gcc -O2 -Wall -Wno-pointer-sign -Wno-format-security -Wno-stringop-truncation -DAMIPART_HOST=1 -I . -I inc -I ../src -o amipart $(SRCS)
 
 # Linux GUI: the Amiga GUI source on an Intuition/GadTools layer over SDL2
@@ -16,7 +16,7 @@ GUI    = main diskselect guilv guisize mapview partview partview_clear \
 GSRCS  = $(addprefix ../src/,$(addsuffix .c,$(CORE) $(GUI))) \
          amiga_shim.c host_rdargs.c host_locale.c host_devices.c \
          host_gui.c host_gadtools.c host_req.c
-GHDRS  = amiga_compat.h host_gui.h hg_int.h gui_font.h
+GHDRS  = amiga_compat.h host_gui.h hg_int.h gui_font.h $(wildcard ../src/*.h)
 SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null)
 SDL_LIBS   := $(shell sdl2-config --libs 2>/dev/null)
 GOBJ   = gobj
