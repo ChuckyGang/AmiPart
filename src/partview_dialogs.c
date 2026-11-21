@@ -521,6 +521,8 @@ BOOL partition_dialog(struct PartInfo *pi, const char *title,
     struct Gadget  *osformat_gad  = NULL;
     struct Window  *win          = NULL;
     BOOL            result       = FALSE;
+    /* Advanced... edits *pi directly; Cancel here must take that back too. */
+    struct PartInfo saved_pi     = *pi;
     UWORD           cur_fs       = 1;   /* default FFS */
     UWORD           cur_bsz      = 0;   /* default 512 */
     /* Extra rows shown only when adding a new partition. */
@@ -1087,6 +1089,7 @@ cleanup:
     if (glist)   FreeGadgets(glist);
     if (vi)      FreeVisualInfo(vi);
     if (scr)     UnlockPubScreen(NULL, scr);
+    if (!result) *pi = saved_pi;
     return result;
 }
 /* ------------------------------------------------------------------ */
@@ -1101,6 +1104,8 @@ void show_about(struct Window *win)
         AMIPART_VERSION, AmiPart_BuildStamp);
     bl = strlen(body);
     snprintf(body + bl, sizeof(body) - bl, "%s", GS(MSG_DLG_ABOUT_NOBACKUP));
+    bl = strlen(body);
+    snprintf(body + bl, sizeof(body) - bl, "%s", GS(MSG_DLG_ABOUT_PFS3AIO));
 #ifdef AMIPART_HOST
     /* Linux GUI only, English only: what this build is. */
     bl = strlen(body);

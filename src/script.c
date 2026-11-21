@@ -14,7 +14,8 @@
  *   DELPART NAME=<n>
  *   ADDMBR TYPE=<t> START=<cyl> END=<cyl|+size> [ACTIVE]
  *           ; Types: FAT32 FAT32LBA FAT16 LINUX LINUXSWAP
- *           ; MBR writes are immediate (no separate WRITE needed).
+ *           ; Written at once on a disk that has its MBR; after
+ *           ; INIT NEW MBR they wait for WRITE.
  *   DELMBR NAME=<MBR1..MBR4>
  *   CHECKRDB
  *   VERIFYRDB FILE=<path>
@@ -77,6 +78,9 @@ struct ScriptState {
     char             unmount_names[MAX_PARTITIONS][32];
     UWORD            unmount_count;
     struct MBRInfo   s_mbr;          /* in-memory MBR (block 0)              */
+    /* ADDMBR/DELMBR after INIT NEW MBR but before WRITE: the MBR is not on
+       disk yet, so the entries wait in s_mbr and go out with the WRITE. */
+    BOOL             mbr_parts_pending;
 };
 
 /* ~16 KB (holds an RDBInfo); allocated for the life of script_run() so it
@@ -131,6 +135,17 @@ static BOOL sc_ask_yn(const char *question)
     if (got <= 0) return FALSE;
     buf[got] = '\0';
     return (BOOL)(buf[0] == 'Y' || buf[0] == 'y');
+}
+
+/* Commands that overwrite disk contents at once - not at WRITE - ask first,
+   like their command-line twins (FORCE answers Y).  FALSE = do not proceed. */
+static BOOL sc_confirm_now(const char *cmd)
+{
+    static char q[160];
+    DP_SNPRINTF(q, GS(MSG_SCR_DESTROY_NOW_ASK_FMT), cmd);
+    if (sc_ask_yn(q)) return TRUE;
+    sc_puts(GS(MSG_SCR_ABORTED));
+    return FALSE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -368,11 +383,14 @@ static BOOL parse_high(const char *s, ULONG low, ULONG hi_cyl,
 static UQUAD parse_size_bytes(const char *s)
 {
     UQUAD val = 0;
-    if (!s) return 0;
+    if (!s || *s < '0' || *s > '9') return 0;
     while (*s >= '0' && *s <= '9') val = val * 10 + (UQUAD)(*s++ - '0');
-    if      (*s == 'K' || *s == 'k') val *= 1024UL;
-    else if (*s == 'M' || *s == 'm') val *= 1024UL * 1024UL;
-    else if (*s == 'G' || *s == 'g') val *= 1024UL * 1024UL * 1024UL;
+    if      (*s == 'K' || *s == 'k') { val *= 1024UL; s++; }
+    else if (*s == 'M' || *s == 'm') { val *= 1024UL * 1024UL; s++; }
+    else if (*s == 'G' || *s == 'g') { val *= 1024UL * 1024UL * 1024UL; s++; }
+    /* Anything left over ("1.5G", "4OM", "10MB") is a typo, not a size: the
+       callers treat 0 as "bad size" rather than act on the digits alone. */
+    if (*s) return 0;
     return val;
 }
 
@@ -458,6 +476,16 @@ static BOOL sc_write_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
             static char why[256];
             RDB_WriteFailText(bd, rdb, why, sizeof(why));
             if (why[0]) sc_puts(why);
+        }
+    } else if (s_st->mbr_parts_pending && !rdb->mbr_init_pending) {
+        /* RDB_Write has just created the empty MBR; add the entries that
+           were queued by ADDMBR/DELMBR since INIT NEW MBR. */
+        if (!MBR_Write(bd, &s_st->s_mbr)) {
+            sc_puts(GS(MSG_SCR_ADDMBR_WRITE_FAIL));
+            sc_puts("\n");
+            ok = FALSE;
+        } else {
+            s_st->mbr_parts_pending = FALSE;
         }
     }
     return ok;
@@ -553,6 +581,22 @@ static LONG do_create(ULONG ln, char **tok, UWORD ntok)
     DP_SNPRINTF(s_msg, GS(MSG_SCR_CREATING_IMAGE_FMT), path, szbuf);
     sc_puts(s_msg);
 
+    /* CREATE erases an existing file.  A dry run must not: it carries on
+       with the file as it is (a file that does not exist yet is created, the
+       rest of the dry run needs something to open). */
+    if (s_st->dryrun) {
+        BPTR probe = Open((UBYTE *)path, MODE_OLDFILE);
+        if (probe) {
+            Close(probe);
+            DP_SNPRINTF(s_msg, GS(MSG_SCR_CREATE_EXISTS_DRYRUN_FMT), path);
+            sc_puts(s_msg);
+            s_st->bd = BlockDev_OpenFile(path);
+            if (!s_st->bd) { sc_err(ln, GS(MSG_SCR_CANNOT_OPEN_IMAGE)); return RETURN_ERROR; }
+            open_finish(ln);
+            return RETURN_OK;
+        }
+    }
+
     s_st->bd = BlockDev_CreateFile(path, size_bytes);
     if (!s_st->bd) { sc_err(ln, GS(MSG_SCR_CANNOT_CREATE_IMAGE)); return RETURN_ERROR; }
     open_finish(ln);
@@ -603,17 +647,15 @@ static LONG do_init(ULONG ln, char **tok, UWORD ntok)
         if (has_flag(tok, ntok, "MBR")) {
             s_st->rdb.rdb_block_lo = 1;
             s_st->rdb.block_num    = 1;
-            if (s_st->dryrun) {
-                sc_puts(GS(MSG_SCR_INIT_MBR_DRYRUN));
-            } else {
-                if (!MBR_WriteEmpty(s_st->bd)) {
-                    sc_err(ln, GS(MSG_SCR_ADDMBR_WRITE_FAIL));
-                    return RETURN_ERROR;
-                }
-                memset(&s_st->s_mbr, 0, sizeof(s_st->s_mbr));
-                s_st->s_mbr.valid = TRUE;
-                sc_puts(GS(MSG_SCR_INIT_MBR_WRITTEN));
-            }
+            /* Like everything else INIT does, the empty MBR is only committed
+               by WRITE (RDB_Write, rdb.h mbr_init_pending).  The in-memory
+               MBR is valid from here on, so ADDMBR works before WRITE - in a
+               dry run as well. */
+            s_st->rdb.mbr_init_pending = TRUE;
+            s_st->mbr_parts_pending    = FALSE;
+            memset(&s_st->s_mbr, 0, sizeof(s_st->s_mbr));
+            s_st->s_mbr.valid = TRUE;
+            sc_puts(GS(s_st->dryrun ? MSG_SCR_INIT_MBR_DRYRUN : MSG_SCR_INIT_MBR_PENDING));
         } else {
             /* Plain INIT NEW: the fresh RDB goes to block 0, which destroys
                any MBR/FAT table when WRITE runs - drop the stale entries so
@@ -785,6 +827,13 @@ static LONG do_addpart(ULONG ln, char **tok, UWORD ntok)
             sc_warn(ln, s_msg);
         }
     }
+
+    for (i = 0; i < s_st->rdb.num_parts; i++)
+        if (ci_eq(s_st->rdb.parts[i].drive_name, name)) {
+            DP_SNPRINTF(s_msg, GS(MSG_CLI_ADDPART_NAME_USED_FMT), name);
+            sc_err(ln, s_msg);
+            return RETURN_ERROR;
+        }
 
     pi = &s_st->rdb.parts[s_st->rdb.num_parts];
     memset(pi, 0, sizeof(*pi));
@@ -1216,6 +1265,7 @@ static LONG do_restore(ULONG ln, char **tok, UWORD ntok)
         sc_puts(GS(MSG_SCR_RESTORE_DRYRUN));
         return RETURN_OK;
     }
+    if (!sc_confirm_now("RESTORE")) { FreeVec(buf); return RETURN_ERROR; }
 
     if (s_st->dirty)
         sc_warn(ln, GS(MSG_SCR_PREV_UNSAVED));
@@ -1408,6 +1458,7 @@ static LONG do_restoreext(ULONG ln, char **tok, UWORD ntok)
         sc_puts(s_msg);
         return RETURN_OK;
     }
+    if (!sc_confirm_now("RESTOREEXT")) { Close(fh); return RETURN_ERROR; }
 
     buf = (UBYTE *)AllocVec(block_size, MEMF_PUBLIC | MEMF_CLEAR);
     if (!buf) { Close(fh); return RETURN_ERROR; }
@@ -1488,6 +1539,7 @@ static LONG do_partclone(ULONG ln, char **tok, UWORD ntok)
         sc_puts(s_msg);
         return RETURN_OK;
     }
+    if (!sc_confirm_now("PARTCLONE")) return RETURN_ERROR;
 
     if (cross) {
         char  ddevname[64];
@@ -1829,6 +1881,7 @@ static LONG do_grow(ULONG ln, char **tok, UWORD ntok)
         return RETURN_OK;
     }
 
+    sc_puts(GS(MSG_RESIZE_NO_WARRANTY)); sc_puts("\n");
     DP_SNPRINTF(s_msg, GS(MSG_SCR_GROW_ASK), pi->drive_name);
     if (!sc_ask_yn(s_msg)) { sc_puts(GS(MSG_SCR_ABORTED)); return RETURN_ERROR; }
 
@@ -1919,7 +1972,9 @@ static LONG do_grow(ULONG ln, char **tok, UWORD ntok)
        diverges from the relocated on-disk root.  Re-inhibit and leave it
        locked until the mandatory reboot (matches the SFS/PFS pending-reboot
        state; idempotent for those). */
-    if (no_unmount) {
+    /* Only a real device has a live handler of that name; for an image
+       file "DH0:" would be the running system's own volume. */
+    if (no_unmount && s_st->bd->backend == BD_DEVICE) {
         char inh[40];
         DP_SNPRINTF(inh, "%s:", pi->drive_name);
         Inhibit((STRPTR)inh, DOSTRUE);
@@ -2033,7 +2088,9 @@ static LONG do_shrink(ULONG ln, char **tok, UWORD ntok)
         BOOL  relative = (sizestr[0] == '-');
         UQUAD bytes    = parse_size_bytes(relative ? sizestr + 1 : sizestr);
         UQUAD cylbytes = (UQUAD)blks_cyl * 512UL;
-        if (bytes == 0) {
+        /* A target below one cylinder is a forgotten suffix ("SIZE=40"),
+           not a wish to shrink to the minimum - that is spelled MIN. */
+        if (bytes == 0 || (!relative && bytes < cylbytes)) {
             DP_SNPRINTF(s_msg, GS(MSG_SHR_BAD_SIZE_FMT), sizestr);
             sc_puts(s_msg);
             return RETURN_ERROR;
@@ -2076,6 +2133,7 @@ static LONG do_shrink(ULONG ln, char **tok, UWORD ntok)
         return RETURN_OK;
     }
 
+    sc_puts(GS(MSG_RESIZE_NO_WARRANTY)); sc_puts("\n");
     DP_SNPRINTF(s_msg, GS(MSG_SHR_ASK), pi->drive_name);
     if (!sc_ask_yn(s_msg)) { sc_puts(GS(MSG_SCR_ABORTED)); return RETURN_ERROR; }
 
@@ -2145,7 +2203,9 @@ static LONG do_shrink(ULONG ln, char **tok, UWORD ntok)
         }
     }
 
-    if (no_unmount) {
+    /* Only a real device has a live handler of that name; for an image
+       file "DH0:" would be the running system's own volume. */
+    if (no_unmount && s_st->bd->backend == BD_DEVICE) {
         char inh[40];
         DP_SNPRINTF(inh, "%s:", pi->drive_name);
         Inhibit((STRPTR)inh, DOSTRUE);
@@ -2272,6 +2332,7 @@ static LONG do_partin(ULONG ln, char **tok, UWORD ntok)
     if (!pi) { DP_SNPRINTF(s_msg, GS(MSG_PC_NOT_FOUND_FMT), name); sc_puts(s_msg); return RETURN_ERROR; }
 
     if (s_st->dryrun) { sc_puts(GS(MSG_SCR_PARTIN_DRYRUN)); return RETURN_OK; }
+    if (!sc_confirm_now("PARTIN")) return RETURN_ERROR;
 
     err[0] = '\0';
     if (!PartClone_RestoreToPart(s_st->bd, &s_st->rdb, pi, tok[1],
@@ -2389,6 +2450,7 @@ static LONG do_clearrdb(ULONG ln)
         sc_puts(s_msg);
         return RETURN_OK;
     }
+    if (!sc_confirm_now("CLEARRDB")) return RETURN_ERROR;
 
     if (!ClearRDB_Run(s_st->bd, &plan, &zeroed, err)) {
         snprintf(s_msg, sizeof(s_msg), GS(MSG_SCR_CLEARRDB_FAIL_FMT), err);
@@ -2465,6 +2527,7 @@ static LONG do_zeropart(ULONG ln, char **tok, UWORD ntok)
         sc_puts(s_msg);
         return RETURN_OK;
     }
+    if (!sc_confirm_now("ZEROPART")) return RETURN_ERROR;
 
     ok = PART_Zero(s_st->bd, &s_st->rdb, pi, err_buf, NULL, NULL);
 
@@ -2521,6 +2584,7 @@ static LONG do_write(ULONG ln)
 
     /* Quick-format any partition that was given a VOLNAME: internal
        formatter by default, OS formatter with SAFE (see nativefmt.h). */
+    BOOL fmt_failed = FALSE;
     {
         UWORD i;
         for (i = 0; i < s_st->rdb.num_parts; i++) {
@@ -2535,6 +2599,7 @@ static LONG do_write(ULONG ln)
             } else {
                 DP_SNPRINTF(s_msg, GS(MSG_SCR_FMT_FAILED_FMT),
                         pi->drive_name, err);
+                fmt_failed = TRUE;
             }
             sc_puts(s_msg);
             if (note[0]) {
@@ -2566,7 +2631,9 @@ static LONG do_write(ULONG ln)
         }
         s_st->unmount_count = 0;
     }
-    return RETURN_OK;
+    /* The table is written, but a script must not carry on (to REBOOT, to
+       copying files) as if its new volumes existed. */
+    return fmt_failed ? RETURN_ERROR : RETURN_OK;
 }
 
 /* ------------------------------------------------------------------ */
@@ -2653,7 +2720,7 @@ static LONG do_imagein(ULONG ln, char **tok, UWORD ntok)
     sc_puts(GS(MSG_SCR_IMAGEIN_WARN));
     if (!sc_ask_yn(GS(MSG_SCR_IMAGEIN_ASK))) {
         sc_puts(GS(MSG_SCR_ABORTED));
-        return RETURN_OK;
+        return RETURN_ERROR;
     }
 
     DP_SNPRINTF(s_msg, GS(MSG_SCR_READING_IMAGE_FMT), path);
@@ -2779,7 +2846,10 @@ static LONG do_addmbr(ULONG ln, char **tok, UWORD ntok)
         return RETURN_OK;
     }
 
-    if (!MBR_Write(s_st->bd, &s_st->s_mbr))
+    if (s_st->rdb.mbr_init_pending) {
+        s_st->mbr_parts_pending = TRUE;    /* goes to disk with WRITE */
+        s_st->dirty = TRUE;
+    } else if (!MBR_Write(s_st->bd, &s_st->s_mbr))
         { sc_err(ln, GS(MSG_SCR_ADDMBR_WRITE_FAIL)); return RETURN_ERROR; }
 
     MBR_TypeName(mtype, typebuf);
@@ -2831,7 +2901,10 @@ static LONG do_delmbr(ULONG ln, char **tok, UWORD ntok)
     memset(&s_st->s_mbr.parts[slot], 0, sizeof(s_st->s_mbr.parts[slot]));
     snprintf(s_st->s_mbr.parts[slot].name, 8, "MBR%u", (unsigned)(slot + 1));
 
-    if (!MBR_Write(s_st->bd, &s_st->s_mbr)) {
+    if (s_st->rdb.mbr_init_pending) {
+        s_st->mbr_parts_pending = TRUE;    /* goes to disk with WRITE */
+        s_st->dirty = TRUE;
+    } else if (!MBR_Write(s_st->bd, &s_st->s_mbr)) {
         sc_err(ln, GS(MSG_SCR_DELMBR_WRITE_FAIL));
         return RETURN_ERROR;
     }
@@ -2967,6 +3040,10 @@ static LONG do_reboot(ULONG ln)
 {
     UWORD i;
 
+    if (s_st->dryrun) {                 /* a dry run must not reboot */
+        sc_puts(GS(MSG_SCR_REBOOT_DRYRUN));
+        return RETURN_OK;
+    }
     if (s_st->dirty)
         sc_warn(ln, GS(MSG_SCR_REBOOT_UNSAVED));
     if (!sc_ask_yn(GS(MSG_SCR_REBOOT_ASK))) {
@@ -3052,6 +3129,18 @@ static LONG run_line(char *line, ULONG ln)
     if (ci_eq(tok[0], "RESTORE"))  return do_restore(ln, tok, ntok);
     if (ci_eq(tok[0], "BACKUPEXT")) return do_backupext(ln, tok, ntok);
     if (ci_eq(tok[0], "RESTOREEXT")) return do_restoreext(ln, tok, ntok);
+    /* These commit on their own by writing the WHOLE in-memory table.  With
+       edits pending (ADDPART, DELPART, ... not yet WRITten) that would put
+       those on disk too, without the WRITE confirmation - and skip what WRITE
+       does after it (formatting new partitions, unmounting deleted ones). */
+    if (s_st->dirty &&
+        (ci_eq(tok[0], "GROW") || ci_eq(tok[0], "SHRINK") ||
+         ci_eq(tok[0], "PARTIN") ||
+         (ci_eq(tok[0], "PARTCLONE") && !kwarg(tok, ntok, "TODEV")))) {
+        DP_SNPRINTF(s_msg, GS(MSG_SCR_PENDING_WRITE_FIRST_FMT), tok[0]);
+        sc_err(ln, s_msg);
+        return RETURN_ERROR;
+    }
     if (ci_eq(tok[0], "PARTCLONE")) return do_partclone(ln, tok, ntok);
     if (ci_eq(tok[0], "ADDFS"))    return do_addfs(ln, tok, ntok);
     if (ci_eq(tok[0], "GROW"))     return do_grow(ln, tok, ntok);

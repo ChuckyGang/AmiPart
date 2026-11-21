@@ -412,6 +412,32 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         goto done;
     }
 
+    /* More pointers than the volume's size needs: left behind by an earlier
+       grow that stopped after extending the chain (FFS itself only uses the
+       first BitmapCount entries, so the volume was fine).  They are not part
+       of the bitmap - forget them, or the new pointers would be appended
+       after them and the chain would name the wrong blocks. */
+    BOOL chain_trimmed = FALSE;
+    if (bm_count > old_bm_need) {
+        ULONG in_ext   = (old_bm_need > ROOT_BM_MAX) ? old_bm_need - ROOT_BM_MAX : 0;
+        ULONG need_ext = (in_ext + ext_slots - 1) / ext_slots;
+        for (ULONG i = old_bm_need; i < ROOT_BM_MAX; i++)
+            root_buf[RL_BM_PAGES(nlongs) + i] = 0;
+        if (need_ext < ext_count) ext_count = need_ext;
+        if (ext_count > 0)
+            ext_used[ext_count - 1] = in_ext - (ext_count - 1) * ext_slots;
+        bm_count      = old_bm_need;
+        chain_trimmed = TRUE;
+    }
+
+    /* The flat list (and MAX_EXT_CHAIN) bound what this code can describe. */
+    if (new_bm_need > max_bm_list) {
+        snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_TOO_MANY_EXT),
+                (unsigned long)((new_bm_need - ROOT_BM_MAX + ext_slots - 1) / ext_slots),
+                (unsigned)MAX_EXT_CHAIN);
+        goto done;
+    }
+
     /* ---------------------------------------------------------------- */
     /* Phase 4 - check we can accommodate the new bm block numbers      */
     /* ---------------------------------------------------------------- */
@@ -435,7 +461,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
         ULONG overflow = num_new_bm - avail_slots;
         num_new_ext = (overflow + ext_slots - 1) / ext_slots;
         need_new_ext = TRUE;
-        if (num_new_ext > MAX_EXT_CHAIN) {
+        if (ext_count + num_new_ext > MAX_EXT_CHAIN) {
             snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_FFS_TOO_MANY_EXT),
                     (unsigned long)num_new_ext, (unsigned)MAX_EXT_CHAIN);
@@ -450,6 +476,41 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                         GS(MSG_FFS_NO_ROOM_EXT),
                         (unsigned long)ei);
+                goto done;
+            }
+        }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Phase 4b - can the root move to its new position?  Checked here,  */
+    /* BEFORE the first write: Phase 8 refuses an occupied target, and a */
+    /* refusal after Phases 5-7 would leave their changes on the disk.   */
+    /* ---------------------------------------------------------------- */
+    {
+        ULONG nr = (reserved + new_blocks - 1) / 2;   /* same as Phase 8 */
+        if (nr >= reserved && nr != root_blk) {
+            BOOL used = FALSE;
+            if (nr < old_blocks) {
+                /* inside the existing volume: ask its bitmap */
+                ULONG bi = (nr - reserved) / bpbm;
+                if (bi >= bm_count ||
+                    !read_fs_block(bd, part_abs, bm_blknums[bi], spb, bm_buf)) {
+                    snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_READ_BM_RELOC_FAIL),
+                            (unsigned long)(bi < bm_count ? bm_blknums[bi] : 0));
+                    goto done;
+                }
+                used = !BM_TESTFREE(bm_buf, (nr - reserved) % bpbm);
+            } else {
+                /* in the added space: only this grow's own blocks live there */
+                if (nr >= reserved + old_bm_need * bpbm &&
+                    (nr - reserved) % bpbm == 0)
+                    used = TRUE;                       /* a new bitmap block */
+                for (ULONG ei = 0; ei < num_new_ext; ei++)
+                    if (new_ext_relblk[ei] == nr) used = TRUE;
+            }
+            if (used) {
+                snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_SHR_TARGET_USED_FMT),
+                        (unsigned long)nr);
                 goto done;
             }
         }
@@ -566,7 +627,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             root_buf[RL_BM_PAGES(nlongs) + i] = bm_blknums[src_idx];
 
         /* Existing last ext block free slots */
-        if (added < num_new_bm && ext_count > 0) {
+        if ((added < num_new_bm || chain_trimmed) && ext_count > 0) {
             if (!read_fs_block(bd, part_abs, ext_relblk[ext_count - 1], spb, bm_buf)) {
                 snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_FFS_REREAD_EXT_FAIL),
                         (unsigned long)ext_relblk[ext_count - 1]);
@@ -577,6 +638,7 @@ BOOL FFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
                 bm_buf[slot++] = bm_blknums[src_idx++];
                 added++;
             }
+            while (slot < ext_slots) bm_buf[slot++] = 0;   /* nothing stale after them */
             /* next ext pointer: wire to first new ext block if we created any */
             bm_buf[nlongs - 1] = need_new_ext ? new_ext_relblk[0] : 0;
             /* ext blocks have no checksum field */

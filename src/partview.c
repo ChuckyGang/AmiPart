@@ -515,6 +515,21 @@ static void fill_geometry_if_no_rdb(struct BlockDev *bd, struct RDBInfo *rdb)
     }
 }
 
+BOOL pv_other_edits_pending = FALSE;
+
+BOOL pv_refuse_pending(struct Window *win)
+{
+    struct EasyStruct es;
+    if (!pv_other_edits_pending) return FALSE;
+    es.es_StructSize   = sizeof(es);
+    es.es_Flags        = 0;
+    es.es_Title        = (UBYTE *)AMIPART_VERTITLE;
+    es.es_TextFormat   = (UBYTE *)GS(MSG_PV_RESIZE_PENDING_BODY);
+    es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+    EasyRequest(win, &es, NULL);
+    return TRUE;
+}
+
 static struct BlockDev *reopen_after_raw_write(struct BlockDev *bd,
                                                 const char *devname, ULONG unit)
 {
@@ -2846,6 +2861,7 @@ BOOL partview_run(const char *devname, ULONG unit)
                 ULONG          ev_mic  = imsg->Micros;
                 struct Gadget *gad     = (struct Gadget *)imsg->IAddress;
                 GT_ReplyIMsg(imsg);
+                pv_other_edits_pending = dirty;   /* state before this action */
 
                 switch (iclass) {
 
@@ -2953,8 +2969,33 @@ BOOL partview_run(const char *devname, ULONG unit)
                             rdb_integrity_check(win, bd, rdb);
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 11)
                             image_dump_disk(win, bd);
-                        else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 12)
-                            image_restore_disk(win, bd);
+                        else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 12) {
+                            /* The whole disk was overwritten: the table in
+                               memory describes the OLD disk.  Re-read, or the
+                               next Write / grow / move would put the old table
+                               over the restored one. */
+                            if (image_restore_disk(win, bd)) {
+                                bd = reopen_after_raw_write(bd, devname, unit);
+                                RDB_FreeCode(rdb);
+                                memset(rdb, 0, sizeof(*rdb));
+                                if (bd) {
+                                    RDB_Read(bd, rdb);
+                                    if (MBR_Read(bd, &mbr_store)) s_mbr = &mbr_store;
+                                    else s_mbr = NULL;
+                                } else {
+                                    s_mbr = NULL;
+                                }
+                                if (sel >= (WORD)rdb->num_parts)
+                                    sel = (WORD)rdb->num_parts - 1;
+                                dirty = FALSE;
+                                needs_reboot = TRUE;
+                                refresh_listview(win, lv_gad, rdb, sel);
+                                draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                            ix, iy, iw, bx, by, bw, bh,
+                                            hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                refresh_all_gadgets(win, glist);
+                            }
+                        }
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 14)
                             pv_export_mountlist(win, bd, rdb);
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 30) {
@@ -3027,11 +3068,40 @@ BOOL partview_run(const char *devname, ULONG unit)
                             struct PartInfo *sp =
                                 (sel >= 0 && rdb && sel < (WORD)rdb->num_parts)
                                 ? &rdb->parts[sel] : NULL;
-                            /* The clone writes another disk's RDB; a reboot
-                               is needed for its new partition to mount. */
-                            if (copy_partition_to_disk(win, bd, rdb, sp,
-                                                       devname, unit))
-                                needs_reboot = TRUE;
+                            /* The clone reads the destination's table from
+                               disk, changes it and writes it.  The destination
+                               may be THIS disk, so the table in memory must
+                               match the disk before (no pending edits) and be
+                               re-read after - otherwise the next Write would
+                               drop the clone's partition again. */
+                            if (dirty) {
+                                struct EasyStruct es;
+                                es.es_StructSize   = sizeof(es);
+                                es.es_Flags        = 0;
+                                es.es_Title        = (UBYTE *)GS(MSG_PCP_TITLE);
+                                es.es_TextFormat   = (UBYTE *)GS(MSG_PV_WRITE_FIRST_BODY);
+                                es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+                                EasyRequest(win, &es, NULL);
+                            } else if (copy_partition_to_disk(win, bd, rdb, sp,
+                                                              devname, unit)) {
+                                needs_reboot = TRUE;   /* new partition mounts at boot */
+                                RDB_FreeCode(rdb);
+                                memset(rdb, 0, sizeof(*rdb));
+                                if (bd) {
+                                    RDB_Read(bd, rdb);
+                                    if (MBR_Read(bd, &mbr_store)) s_mbr = &mbr_store;
+                                    else s_mbr = NULL;
+                                } else {
+                                    s_mbr = NULL;
+                                }
+                                if (sel >= (WORD)rdb->num_parts)
+                                    sel = (WORD)rdb->num_parts - 1;
+                                refresh_listview(win, lv_gad, rdb, sel);
+                                draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
+                                            ix, iy, iw, bx, by, bw, bh,
+                                            hx, hy, hw, sel, lastdisk_gad, lastlun_gad);
+                                refresh_all_gadgets(win, glist);
+                            }
                         }
                         else if (MENUNUM(mcode) == 1 && ITEMNUM(mcode) == 23) {
                             if (sel >= 0 && bd && rdb && sel < (WORD)rdb->num_parts)
@@ -3056,7 +3126,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                             struct PartInfo *sp =
                                 (sel >= 0 && rdb && sel < (WORD)rdb->num_parts)
                                 ? &rdb->parts[sel] : NULL;
-                            if (pv_restore_partition(win, bd, rdb, sp)) {
+                            if (pv_refuse_pending(win)) {
+                                /* nothing done */
+                            } else if (pv_restore_partition(win, bd, rdb, sp)) {
                                 needs_reboot = TRUE;
                                 refresh_listview(win, lv_gad, rdb, sel);
                                 draw_static(win, devname, unit, rdb,
@@ -3101,6 +3173,11 @@ BOOL partview_run(const char *devname, ULONG unit)
                         if (r == 1 && bd) {          /* Write */
                             if (RDB_Write(bd, rdb)) {
                                 dirty = FALSE;
+                                /* same post-write steps as Back > Write */
+                                if (format_pending_partitions(win, bd, rdb))
+                                    needs_reboot = TRUE;
+                                if (unmount_deleted_partitions(win, bd, rdb))
+                                    needs_reboot = TRUE;
                                 if (needs_reboot) {
                                     offer_reboot(win, GS(MSG_PV_REBOOT_WRITTEN));
                                     needs_reboot = FALSE;
@@ -3860,11 +3937,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     if (add_mbr && bd) {
                                         rdb->rdb_block_lo = 1;
                                         rdb->block_num    = 1;
+                                        /* Nothing is written here: RDB_Write puts the
+                                           empty MBR on block 0 when the user presses
+                                           Write (rdb.h mbr_init_pending). */
+                                        rdb->mbr_init_pending = TRUE;
                                         memset(&mbr_store, 0, sizeof(mbr_store));
-                                        if (MBR_WriteEmpty(bd)) {
-                                            mbr_store.valid = TRUE;
-                                            s_mbr = &mbr_store;
-                                        }
+                                        mbr_store.valid = TRUE;
+                                        s_mbr = &mbr_store;
                                     } else {
                                         /* Fresh RDB goes to block 0, which destroys
                                            any MBR/FAT table on Write - drop the
@@ -3874,6 +3953,9 @@ BOOL partview_run(const char *devname, ULONG unit)
                                         s_mbr = NULL;
                                     }
                                     sel   = -1;
+                                    /* The partitions just dropped may be mounted;
+                                       their handlers keep the old layout. */
+                                    needs_reboot = TRUE;
                                     dirty = TRUE;
                                     refresh_listview(win, lv_gad, rdb, sel);
                                     draw_static(win, devname, unit, rdb, (bd ? bd->disk_brand : ""),
@@ -3945,11 +4027,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                                     if (add_mbr2 && bd) {
                                         rdb->rdb_block_lo = 1;
                                         rdb->block_num    = 1;
+                                        /* Nothing is written here: RDB_Write puts the
+                                           empty MBR on block 0 when the user presses
+                                           Write (rdb.h mbr_init_pending). */
+                                        rdb->mbr_init_pending = TRUE;
                                         memset(&mbr_store, 0, sizeof(mbr_store));
-                                        if (MBR_WriteEmpty(bd)) {
-                                            mbr_store.valid = TRUE;
-                                            s_mbr = &mbr_store;
-                                        }
+                                        mbr_store.valid = TRUE;
+                                        s_mbr = &mbr_store;
                                     } else {
                                         /* Fresh RDB goes to block 0, which destroys
                                            any MBR/FAT table on Write - drop the
@@ -3984,6 +4068,13 @@ BOOL partview_run(const char *devname, ULONG unit)
                             if (rdb->cylinders == 0) break;
                             RDB_InitFresh(rdb, rdb->cylinders,
                                           rdb->heads, rdb->sectors);
+                            /* A PC partition table is on block 0 and its
+                               partitions are in the list: the RDB must go to
+                               block 1 beside it, not on top of it. */
+                            if (s_mbr && s_mbr->valid) {
+                                rdb->rdb_block_lo = 1;
+                                rdb->block_num    = 1;
+                            }
                             { struct TagItem st[]={{GTCB_Checked,0},{TAG_DONE,0}};
                               if (lastdisk_gad) { st[0].ti_Data=(rdb->flags&RDBFF_LAST)?1:0;    GT_SetGadgetAttrsA(lastdisk_gad,win,NULL,st); }
                               if (lastlun_gad)  { st[0].ti_Data=(rdb->flags&RDBFF_LASTLUN)?1:0; GT_SetGadgetAttrsA(lastlun_gad, win,NULL,st); } }

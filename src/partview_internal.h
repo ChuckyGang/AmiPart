@@ -95,7 +95,16 @@ BOOL  pv_rescue          (struct Window *win, struct BlockDev *bd,
 /* ------------------------------------------------------------------ */
 
 void  image_dump_disk    (struct Window *win, struct BlockDev *bd);
-void  image_restore_disk (struct Window *win, struct BlockDev *bd);
+BOOL  image_restore_disk (struct Window *win, struct BlockDev *bd);
+
+/* TRUE while the table in memory holds edits that are not on disk yet, as of
+   the start of the user action being handled (set by the main window loop).
+   Grow / shrink / move / restore-partition write the WHOLE table, so they
+   refuse to run then - they would commit those edits without the Write
+   confirmation.  pv_refuse_pending() shows the explanation. */
+extern BOOL pv_other_edits_pending;
+BOOL  pv_refuse_pending(struct Window *win);
+
 
 /* ------------------------------------------------------------------ */
 /* partview_diskcopy.c                                                  */

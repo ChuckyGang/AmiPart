@@ -439,6 +439,7 @@ void Devices_GetUnitsForName(const char *devname, struct UnitList *ul,
         if (try_scsi_inquiry(bd, vendor, product))
             have_brand = TRUE;
 
+        RDB_FreeCode(rdb);          /* filesystem code of the previous unit */
         memset(rdb, 0, sizeof(*rdb));
         if (RDB_Read(bd, rdb) && rdb->valid && rdb->cylinders > 0) {
             UQUAD total = (UQUAD)rdb->cylinders * rdb->heads *
@@ -517,6 +518,7 @@ void Devices_GetUnitsForName(const char *devname, struct UnitList *ul,
         }
     }
 
+    RDB_FreeCode(rdb);
     FreeVec(rdb);
 
     /* Restore requester behaviour. */

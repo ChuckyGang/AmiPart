@@ -215,8 +215,15 @@ static BOOL ffs_format(struct BlockDev *bd, const struct RDBInfo *rdb,
        run of used blocks; the dircache block (if any) sits on its own. */
     if (blocks < reserved + 16) goto too_small;
     bits      = blocks - reserved;
-    root      = blocks / 2;
-    num_bm    = (bits + bpbm - 1) / bpbm;
+    /* Both as FFS computes them at mount (init.asm), with HighestBlock =
+       blocks - 1:  RootKey = (Reserved + HighestBlock) / 2 and
+       BitmapCount = (BlocksPerBM - 1 + HighestBlock - Reserved) / BlocksPerBM.
+       "blocks / 2" and a plain round-up agree with these only for an even
+       block count with 2 reserved blocks / when (blocks - reserved) is not
+       one past a bitmap-block boundary; FFS looks for the root at ITS value. */
+    root      = (reserved + blocks - 1) / 2;
+    num_bm    = (bpbm - 2 + blocks - reserved) / bpbm;
+    (void)bits;
     ext_slots = nlongs - 1;
     num_ext   = (num_bm > FFS_ROOT_BM_MAX)
                 ? (num_bm - FFS_ROOT_BM_MAX + ext_slots - 1) / ext_slots : 0;

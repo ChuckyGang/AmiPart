@@ -286,6 +286,10 @@ BOOL MBR_RangeConflicts(ULONG lo, ULONG hi, const struct RDBInfo *rdb,
 
     if (lo > hi) return TRUE;
 
+    /* past the end of the disk (the RDB's cylinder count is the disk size) */
+    if (rdb && rdb->valid && rdb->cylinders > 0 && hi >= rdb->cylinders)
+        return TRUE;
+
     /* RDB reserved area (cyl 0 .. lo_cyl-1) - or at least block 0's cylinder */
     if (rdb && rdb->valid && rdb->lo_cyl > 0) {
         if (mbr_cyls_overlap(lo, hi, 0, rdb->lo_cyl - 1)) return TRUE;

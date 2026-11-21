@@ -427,6 +427,22 @@ BOOL PartClone_RestoreToPart(struct BlockDev *bd, struct RDBInfo *rdb,
                      ? (h.src_high_cyl - h.src_low_cyl + 1) : 1;
         ULONG new_high = dst->low_cyl + span - 1;
         int   didx = (int)(dst - &rdb->parts[0]);
+        /* Cylinder numbers only mean the same place on the disk when the
+           cylinder SIZE is the same.  The destination keeps its low_cyl but
+           takes the dump's heads/sectors/block size, so with a different
+           blocks-per-cylinder its start would move - and the copy below
+           would land on another partition.  Refuse instead. */
+        {
+            ULONG dspb = (dst->block_size >= 1024) ? (dst->block_size / 512) : 1;
+            ULONG dhh  = dst->heads   > 0 ? dst->heads   : rdb->heads;
+            ULONG dss  = dst->sectors > 0 ? dst->sectors : rdb->sectors;
+            if (hh * ss * spb != dhh * dss * dspb) {
+                snprintf(err_buf, ebsz, GS(MSG_PC_DUMP_CYLSIZE_FMT),
+                         (unsigned long)(hh * ss * spb), dst->drive_name,
+                         (unsigned long)(dhh * dss * dspb));
+                return FALSE;
+            }
+        }
         if (!PartClone_ValidateFootprint(rdb, dst->low_cyl, new_high,
                                          hh, ss, didx, err_buf, ebsz))
             return FALSE;
@@ -441,6 +457,14 @@ BOOL PartClone_RestoreToPart(struct BlockDev *bd, struct RDBInfo *rdb,
                  dst->drive_name, (unsigned long)dst_blocks,
                  (unsigned long)h.block_count);
         return FALSE;
+    }
+    {   /* the destination is about to be overwritten: no live handler */
+        static char offl[ENGINE_ERRBUF_SIZE];
+        if (!PART_TakeOffline(bd, rdb, dst, offl)) {
+            strncpy(err_buf, offl, ebsz - 1);
+            err_buf[ebsz - 1] = '\0';
+            return FALSE;
+        }
     }
 
     buf = (UBYTE *)AllocVec((ULONG)PC_CHUNK_BLOCKS * 512, MEMF_PUBLIC);

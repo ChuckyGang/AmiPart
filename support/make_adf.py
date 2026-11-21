@@ -40,8 +40,13 @@ def main():
             "makedir", "S", "+",
             "write", startup_path, "S/Startup-Sequence", "+",
             "write", binary_path, "AmiPart", "+",
-            "boot", "install", "boot2x3x",
         ]
+        # AmiPart embeds pfs3aio: its licence travels with every binary copy.
+        lic = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "pfs3aio", "LICENSE")
+        if os.path.exists(lic):
+            cmd += ["write", lic, "pfs3aio-LICENSE", "+"]
+        cmd += ["boot", "install", "boot2x3x"]
         subprocess.run(cmd, check=True)
 
 

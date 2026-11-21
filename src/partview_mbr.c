@@ -717,6 +717,16 @@ void offer_add_mbr_part(struct Window *win, struct BlockDev *bd,
         return;
     }
 
+    /* The MBR itself is still pending (Init "with MBR", not yet written):
+       MBR_Write would put a partition table on block 0 now, over whatever
+       is there, before the user has pressed Write. */
+    if (rdb && rdb->mbr_init_pending) {
+        es.es_TextFormat   = (UBYTE *)GS(MSG_PV_WRITE_FIRST_BODY);
+        es.es_GadgetFormat = (UBYTE *)GS(MSG_OK);
+        EasyRequest(win, &es, NULL);
+        return;
+    }
+
     memset(&result, 0, sizeof(result));
     if (!mbr_edit_dialog(win, bd, mbr, rdb, MBR_MAX_PARTS, &result))
         return;
@@ -752,6 +762,23 @@ void offer_edit_mbr_part(struct Window *win, struct BlockDev *bd,
 
     if (!mbr_edit_dialog(win, bd, mbr, rdb, slot, &result))
         return;
+
+    /* The dialog works in cylinders.  A partition made by a PC tool rarely
+       starts on a cylinder boundary (LBA 2048 is typical): turning the
+       unchanged cylinder numbers back into LBAs would move its start and
+       size, and the filesystem inside would no longer be where the entry
+       says.  If the range was not edited, keep the exact original values. */
+    {
+        ULONG hh = (rdb && rdb->valid && rdb->heads   > 0) ? rdb->heads   : 1;
+        ULONG ss = (rdb && rdb->valid && rdb->sectors > 0) ? rdb->sectors : 1;
+        ULONG old_end = backup.lba_start + (backup.lba_size ? backup.lba_size - 1 : 0);
+        ULONG new_end = result.lba_start + (result.lba_size ? result.lba_size - 1 : 0);
+        if (MBR_LBAToCyl(result.lba_start, hh, ss) == MBR_LBAToCyl(backup.lba_start, hh, ss) &&
+            MBR_LBAToCyl(new_end, hh, ss)          == MBR_LBAToCyl(old_end, hh, ss)) {
+            result.lba_start = backup.lba_start;
+            result.lba_size  = backup.lba_size;
+        }
+    }
 
     snprintf(result.name, sizeof(result.name), "MBR%u", slot + 1);
     mbr->parts[slot] = result;

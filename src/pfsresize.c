@@ -366,7 +366,12 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
            and the minimal-edit grow strategy would be invalid.  The
            new_num_idxb > PFS_MAX_BITMAPINDEX check below additionally
            refuses a grow that would cross that boundary. */
-        if (old_num_idxb > PFS_MAX_BITMAPINDEX) {
+        /* Index slots in the rootblock: 104 with MODE_SUPERINDEX, only 5
+           (idx.small.bitmapindex[MAXSMALLBITMAPINDEX+1]) without - the slots
+           after those five hold other things (the anode index pointers). */
+        ULONG max_idx = (options & PFS_MODE_SUPERINDEX)
+                        ? (ULONG)PFS_MAX_BITMAPINDEX : 5UL;
+        if (old_num_idxb > max_idx) {
             snprintf(err_buf, ENGINE_ERRBUF_SIZE,
                     GS(MSG_PFS_SUPERINDEX),
                     (unsigned long)options);
@@ -396,11 +401,11 @@ BOOL PFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
             goto done;
         }
 
-        if (new_num_idxb > PFS_MAX_BITMAPINDEX) {
-            /* PFS3 rootblock holds at most 104 bitmap index pointers.
-               This is a hard limit of the PFS3 on-disk format. */
+        if (new_num_idxb > max_idx) {
+            /* PFS3 rootblock holds at most 104 (small index: 5) bitmap index
+               pointers.  This is a hard limit of the PFS3 on-disk format. */
             ULONG blksz      = (pi->block_size >= 512) ? pi->block_size : 512;
-            ULONG max_blocks = (ULONG)PFS_MAX_BITMAPINDEX * idxperblk
+            ULONG max_blocks = max_idx * idxperblk
                                * bm_coverage;
             /* max_blocks in logical blocks -> MB: divide by blocks-per-MB */
             ULONG max_mb     = max_blocks / (1048576UL / blksz);

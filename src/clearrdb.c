@@ -47,7 +47,19 @@ void ClearRDB_Plan(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     if (rdb && rdb->valid) {
         ULONG last = RDB_LastMetaBlock(rdb);
+        UWORD i;
         if (last != RDB_END_MARK && last + 1 > head) head = last + 1;
+        /* "last" comes from pointers stored on the disk; a junk one must not
+           stretch the wipe into partition data.  Stop at the first block of
+           the lowest partition. */
+        for (i = 0; i < rdb->num_parts; i++) {
+            const struct PartInfo *pi = &rdb->parts[i];
+            ULONG hh = pi->heads   > 0 ? pi->heads   : rdb->heads;
+            ULONG ss = pi->sectors > 0 ? pi->sectors : rdb->sectors;
+            ULONG sc = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
+            ULONG first = pi->low_cyl * hh * ss * sc;
+            if (first >= RDB_SCAN_LIMIT && first < head) head = first;
+        }
     }
 
     plan->superfloppy = (BOOL)(mbr && mbr->superfloppy);

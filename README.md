@@ -6,7 +6,7 @@ A native AmigaOS 2.x hard disk partition editor with full RDB (Rigid Disk Block)
 
 ## Download
 
-**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable, an autoboot ADF, and a native Linux CLI binary. Click **Assets** on that page to see the downloadable files.
+**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable, an autoboot ADF, a native Linux CLI binary, and the experimental Linux GUI binary. Click **Assets** on that page to see the downloadable files.
 
 ## Linux CLI
 
@@ -40,6 +40,10 @@ attention only after the Amiga side.
 The same GUI as on the Amiga, in a window on Linux — the Amiga GUI source
 compiled against a small Intuition/GadTools layer on SDL2. Open an image
 file or a raw disk, edit, rescue, write:
+
+A prebuilt `amipart-gui-linux-x86_64` is attached to each release; it
+needs only the SDL2 runtime (`sudo apt install libsdl2-2.0-0`) and a
+`chmod +x`. To build it yourself:
 
 ```
 sudo apt install libsdl2-dev        # build dependency
@@ -95,6 +99,23 @@ When launched by double-clicking its icon, AmiPart reads these tooltypes from th
 - `WINDOW=left/top/width/height` — restores the partition editor window to this position and size on open, e.g. `WINDOW=50/30/640/400`. Ignored (falls back to the default centered size) if the saved geometry no longer fits the current screen — for example after switching to a smaller resolution. Not read when AmiPart is run from the Shell.
 
 ---
+
+## Translations
+
+AmiPart uses the AmigaOS `locale.library` catalog system (AmigaOS 2.1 and
+later; on 2.04 it stays in English), so anyone can translate it without the
+source code or a compiler. The release archive has a `Catalogs` drawer with
+everything needed:
+
+- `AmiPart.cd` – every text of the program, in English
+- `AmiPart.ct` – a ready-made template to translate
+- `README.txt` – step-by-step instructions
+- `support/gencat.py` – a small Python 3 tool that checks a translation
+  (placeholders, button separators), builds the `AmiPart.catalog`, and brings
+  an older translation up to date when a new version adds texts
+
+FlexCat and CatComp read the same files if you prefer to work on the Amiga.
+Translations are welcome: send the `.ct` file as an issue or pull request.
 
 ## Building
 
@@ -153,3 +174,42 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Third-party software
+
+AmiPart contains an unmodified copy of **pfs3aio** (PFS3 All-In-One, version
+3.1 / 19.2) by Toni Wilen, based on Professional File System III. It is the
+default filesystem driver offered by *Filesystems > Add*.
+Sources: <https://github.com/tonioni/pfs3aio>
+
+This product includes software developed by Michiel Pelt.
+
+```
+Copyright (c) 2011, Michiel Pelt
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. All advertising materials mentioning features or use of this software
+   must display the following acknowledgement:
+   This product includes software developed by Michiel Pelt.
+4. Neither the name of the author nor the
+   names of its contributors may be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY MICHIEL PELT ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL MICHIEL PELT BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```

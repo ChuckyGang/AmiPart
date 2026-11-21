@@ -26,6 +26,7 @@
 #include "clib.h"
 #include "rdb.h"
 #include "rdbbe.h"
+#include "mbr.h"
 #include "locale_support.h"
 
 /* TD_READ64/TD_WRITE64 are not in the Bartman SDK trackdisk.h but are
@@ -1288,7 +1289,12 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         rdb->cylinders   = BE32R(rdsk->rdb_Cylinders);
         rdb->sectors     = BE32R(rdsk->rdb_Sectors);
         rdb->heads       = BE32R(rdsk->rdb_Heads);
-        rdb->rdb_block_lo= BE32R(rdsk->rdb_RDBBlocksLo);
+        /* RDB_Write puts the RDSK at rdb_block_lo and lays the other blocks
+           out after it.  That must be where the RDSK actually IS (blk, inside
+           the 0..15 scan range): a foreign or damaged rdb_RDBBlocksLo would
+           otherwise move the RDSK out of the range the ROM scans, onto an
+           MBR at block 0, or - with a huge value - wrap the layout around. */
+        rdb->rdb_block_lo= blk;
         rdb->rdb_block_hi= BE32R(rdsk->rdb_RDBBlocksHi);
         rdb->lo_cyl      = BE32R(rdsk->rdb_LoCylinder);
         rdb->hi_cyl      = BE32R(rdsk->rdb_HiCylinder);
@@ -1417,6 +1423,10 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         next = BE32R(pb->pb_Next);
         rdb->num_parts++;
     }
+    /* More entries on disk than the table holds: the rest is not in memory,
+       and a write would drop it - same refusal as a broken chain. */
+    if (next != RDB_END_MARK && rdb->num_parts >= MAX_PARTITIONS)
+        RDB_TRUNC(next, RDB_TRUNC_SANITY);
 
     /* Sort partitions by low_cyl (insertion sort - n is small).
        Ensures display order and written PART-block order both follow
@@ -1442,6 +1452,7 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
         struct FSInfo *fi;
         ULONG lseg_blk;
         ULONG num_lseg;
+        UBYTE lseg_damaged = 0;      /* RDB_TRUNC_* reason, 0 = chain intact */
 
         if (next == 0 || next == rdb->block_num)         /* sanity: MBR/RDSK block */
             { RDB_TRUNC(next, RDB_TRUNC_SANITY); break; }
@@ -1493,16 +1504,19 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             struct LoadSegBlock *lsb;
             const ULONG *lp;
             ULONG sum, sl, ci;
-            if (lseg_blk == 0) break;  /* sanity: block 0 is MBR */
-            if (chain_seen(lseg_seen, &lseg_seen_n, lseg_blk)) break; /* cycle */
-            if (!BlockDev_ReadBlock(bd, lseg_blk, buf)) break;
+            if (lseg_blk == 0) {       /* sanity: block 0 is MBR */
+                if (num_lseg > 0) lseg_damaged = RDB_TRUNC_SANITY;
+                break;
+            }
+            if (chain_seen(lseg_seen, &lseg_seen_n, lseg_blk)) { lseg_damaged = RDB_TRUNC_LOOP; break; }
+            if (!BlockDev_ReadBlock(bd, lseg_blk, buf)) { lseg_damaged = RDB_TRUNC_READ; break; }
             lsb = (struct LoadSegBlock *)buf;
-            if (BE32R(lsb->lsb_ID) != IDNAME_LOADSEG) break;
+            if (BE32R(lsb->lsb_ID) != IDNAME_LOADSEG) { lseg_damaged = RDB_TRUNC_ID; break; }
             lp = (const ULONG *)buf;
             sl = BE32R(lsb->lsb_SummedLongs);
             if (sl >= 2 && sl <= 128) {
                 sum = 0; for (ci = 0; ci < sl; ci++) sum += BE32R(lp[ci]);
-                if (sum != 0) break;   /* checksum mismatch */
+                if (sum != 0) { lseg_damaged = RDB_TRUNC_CHKSUM; break; }
             }
             /* sl out of range: non-standard tool; trust the LSEG ID */
             num_lseg++;
@@ -1510,6 +1524,8 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
                 fi->seg_last_blk = lseg_blk;
             lseg_blk = BE32R(lsb->lsb_Next);
         }
+        if (lseg_blk != RDB_END_MARK && num_lseg >= MAX_LSEG_BLOCKS)
+            lseg_damaged = RDB_TRUNC_SANITY;     /* longer than we can hold */
         } /* end LSEG count scope */
 
         if (num_lseg > 0) {
@@ -1562,8 +1578,20 @@ BOOL RDB_Read(struct BlockDev *bd, struct RDBInfo *rdb)
             }
         }
 
+        /* The FSHD names code blocks, but they could not all be loaded (a
+           damaged LSEG block, a chain over the size limit, no memory).  A
+           write would lay the handler out again from what IS in memory -
+           shortened, or as "no code" - with fresh checksums.  Flag it like
+           any other broken chain so the write is refused until the user has
+           been told. */
+        if (fi->seg_list_blk != RDB_END_MARK && fi->seg_list_blk != 0 &&
+            (lseg_damaged || !fi->code))
+            RDB_TRUNC(fi->seg_list_blk, lseg_damaged ? lseg_damaged : RDB_TRUNC_READ);
+
         rdb->num_fs++;
     }
+    if (next != RDB_END_MARK && rdb->num_fs >= MAX_FILESYSTEMS)
+        RDB_TRUNC(next, RDB_TRUNC_SANITY);
     } /* end FSHD walk scope */
 
     FreeVec(buf);
@@ -2342,6 +2370,17 @@ BOOL RDB_Write(struct BlockDev *bd, struct RDBInfo *rdb)
                 (void)BlockDev_WriteBlock(bd, blk, zb);
             FreeVec(rb);
         }
+    }
+
+    /* Init "with an MBR at block 0": the empty MBR is committed here, with
+       the table it belongs to (the RDSK sits at block 1 or above, and any old
+       RDSK on block 0 has just been retired). */
+    if (rdb->mbr_init_pending && rdb->rdb_block_lo >= 1) {
+        if (!MBR_WriteEmpty(bd)) {
+            FreeVec(big_buf);
+            return FALSE;
+        }
+        rdb->mbr_init_pending = FALSE;
     }
 
     wipe_new_boot_blocks(bd, rdb);

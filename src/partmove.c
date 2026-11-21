@@ -36,6 +36,7 @@
 #include "partmove.h"
 #include "sfsresize.h"   /* SFS_IsSupportedType */
 #include "sfs_util.h"
+#include "quickformat.h"   /* UnmountPartition */
 #include "locale_support.h"
 
 /* ------------------------------------------------------------------ */
@@ -165,6 +166,23 @@ BOOL PART_CanMove(const struct RDBInfo *rdb, const struct PartInfo *pi,
 /* ------------------------------------------------------------------ */
 /* PART_Move                                                            */
 /* ------------------------------------------------------------------ */
+/* PART_TakeOffline - see partmove.h                                   */
+/* ------------------------------------------------------------------ */
+BOOL PART_TakeOffline(struct BlockDev *bd, const struct RDBInfo *rdb,
+                      const struct PartInfo *pi, char *err_buf)
+{
+    ULONG heads   = pi->heads   > 0 ? pi->heads   : rdb->heads;
+    ULONG sectors = pi->sectors > 0 ? pi->sectors : rdb->sectors;
+    ULONG scale   = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
+    ULONG bpc     = heads * sectors * scale;
+    err_buf[0] = '\0';
+    if (bpc == 0) return TRUE;              /* callers report bad geometry */
+    return TakeRangeOffline(bd, pi->low_cyl * bpc,
+                            (pi->high_cyl + 1) * bpc - 1,
+                            err_buf, ENGINE_ERRBUF_SIZE);
+}
+
+/* ------------------------------------------------------------------ */
 
 BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
                struct PartInfo *pi, ULONG new_low_cyl,
@@ -206,12 +224,12 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
 
     /* Re-validate (should have been checked by PART_CanMove already) */
     {
-        char vbuf[128];
-        if (!PART_CanMove(rdb, pi, new_low_cyl, NULL, vbuf)) {
-            snprintf(err_buf, ENGINE_ERRBUF_SIZE, "%.127s", vbuf);
+        if (!PART_CanMove(rdb, pi, new_low_cyl, NULL, err_buf))
             return FALSE;
-        }
     }
+
+    /* Never relocate a filesystem under a live handler. */
+    if (!PART_TakeOffline(bd, rdb, pi, err_buf)) return FALSE;
 
     /* Allocate copy buffer: MOVE_CHUNK sectors */
     buf = (UBYTE *)AllocVec((ULONG)MOVE_CHUNK * 512, MEMF_PUBLIC);
@@ -449,8 +467,16 @@ BOOL PART_Zero(struct BlockDev *bd, const struct RDBInfo *rdb,
         return FALSE;
     }
 
-    phys_base  = pi->low_cyl * heads * sectors;
-    phys_count = (pi->high_cyl - pi->low_cyl + 1) * heads * sectors;
+    /* The envelope counts in DE_SIZEBLOCK-sized blocks; the device in 512s
+       (same scale as PART_Move and rdb.c part_phys_span). */
+    /* Zeroing under a live handler: it would write its cached blocks back. */
+    if (!PART_TakeOffline(bd, rdb, pi, err_buf)) return FALSE;
+
+    {
+        ULONG phys_per_lb = (pi->block_size >= 1024) ? (pi->block_size / 512) : 1;
+        phys_base  = pi->low_cyl * heads * sectors * phys_per_lb;
+        phys_count = (pi->high_cyl - pi->low_cyl + 1) * heads * sectors * phys_per_lb;
+    }
 
     zbuf = (UBYTE *)AllocVec((ULONG)MOVE_CHUNK * bd->block_size,
                               MEMF_PUBLIC | MEMF_CLEAR);

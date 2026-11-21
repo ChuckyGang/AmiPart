@@ -9,9 +9,17 @@ toolchain we need so the build is reproducible without those tools installed:
   header   <cd> <out.h>            Generate the C string-id header + the
                                    built-in (English) default string table.
   ct       <cd> <out.ct> [lang]    Emit a translation template for a translator.
+  update   <cd> <old.ct> <new.ct>  Bring an existing translation up to date
+                                   with a newer .cd: translated strings are
+                                   kept, new ones are added in English and
+                                   marked "NEW", removed ones are dropped.
+  check    <cd> <in.ct>            Report what is untranslated and verify the
+                                   %-placeholders and "|" button separators.
   catalog  <cd> <in.ct> <out.catalog>
                                    Compile a translator's .ct into a binary
                                    locale.library .catalog (IFF FORM CTLG).
+                                   Runs the same checks as "check" and stops
+                                   on a placeholder mismatch.
 
 The .cd / .ct format is the usual CatComp one:
 
@@ -28,8 +36,10 @@ IDs are assigned sequentially from 0 unless an explicit ID is given in the
 onto the next physical line.
 """
 
+import re
 import sys
 import struct
+import time
 
 
 # --------------------------------------------------------------------------
@@ -132,7 +142,8 @@ def parse_cd(path, want_text=True):
             pending_comments.append(stripped[1:].strip())
             continue
         if stripped.startswith("#"):
-            parts = stripped[1:].split(None, 1)
+            # .cd control lines use one '#', .ct ones two ("## language x")
+            parts = stripped.lstrip("#").split(None, 1)
             if parts:
                 key = parts[0].lower()
                 val = parts[1].strip() if len(parts) > 1 else ""
@@ -162,6 +173,12 @@ def parse_cd(path, want_text=True):
             num = next_id
         next_id = num + 1
 
+        # Two messages with one name would silently give the name the id of
+        # the LAST one (the C header just redefines the macro), so every use
+        # of the first would show the wrong text.
+        if any(x.ident == ident for x in msgs):
+            sys.exit("%s:%d: duplicate message identifier %s" % (path, i, ident))
+
         m = Msg(ident, num)
         m.minlen, m.maxlen = minlen, maxlen
         m.comment = pending_comments
@@ -180,6 +197,29 @@ def parse_cd(path, want_text=True):
 # --------------------------------------------------------------------------
 # C header / default-table generation
 # --------------------------------------------------------------------------
+
+def ct_escape(b):
+    """Escape a string for a .cd/.ct line, in the form _unescape reads back:
+    only control characters and the backslash are escaped; everything else
+    (including ISO-8859-1 letters and quotes) is written as it is."""
+    out = []
+    for ch in b:
+        if ch == 0x5C:
+            out.append("\\\\")
+        elif ch == 0x0A:
+            out.append("\\n")
+        elif ch == 0x09:
+            out.append("\\t")
+        elif ch == 0x0D:
+            out.append("\\r")
+        elif ch == 0x1B:
+            out.append("\\e")
+        elif ch < 0x20:
+            out.append("\\x%02X" % ch)
+        else:
+            out.append(bytes([ch]).decode("latin-1"))
+    return "".join(out)
+
 
 def c_escape(b):
     out = []
@@ -247,26 +287,126 @@ def gen_header(cd, out):
 # .ct translation template
 # --------------------------------------------------------------------------
 
-def gen_ct(cd, out, lang):
+NEW_MARK = "NEW - not translated yet"
+
+
+def _catver(v):
+    """Catalog version as "version.revision" (the .cd carries only "1")."""
+    v = v.strip() or "0"
+    return v if "." in v else v + ".0"
+
+
+def _write_ct(cd, out, lang, old=None, old_header=None):
+    """Write a .ct for every message of the .cd.  old: {ident: text bytes} of
+    an existing translation to carry over (None = fresh template)."""
     header, msgs = parse_cd(cd)
+    ver = "$VER: %s.catalog %s (%s)" % (header["name"], _catver(header["version"]), "DD.MM.YYYY")
+    if old_header and old_header.get("version", "").startswith("$VER"):
+        ver = old_header["version"]
     lines = []
-    lines.append("## version $VER: %s.catalog %s (%s)"
-                 % (header["name"], header["version"], "DD.MM.YYYY"))
+    lines.append("## version %s" % ver)
     lines.append("## language %s" % lang)
     lines.append("## codeset 0")
     lines.append(";")
-    lines.append("; Translation template generated from %s." % cd)
-    lines.append("; Translate the line under each identifier; keep %%-placeholders intact.")
+    lines.append("; AmiPart translation.  Source of the English text: %s" % cd.split("/")[-1])
+    lines.append("; Translate the line under each identifier.")
+    lines.append(";   * keep every %-placeholder (%s %lu %ld ...): same count, same order")
+    lines.append(";   * keep the \"|\" separators of button rows (\"OK|Cancel\")")
+    lines.append(";   * keep \\n line breaks; save this file as ISO-8859-1 (Latin-1)")
+    lines.append(";   * a string left in English is fine - it simply stays English")
     lines.append(";")
+    new = kept = 0
     for m in msgs:
         for c in m.comment:
-            lines.append("; %s" % c)
+            if c != NEW_MARK:
+                lines.append("; %s" % c if c else ";")
+        if old is not None and m.ident in old:
+            text = old[m.ident]
+            kept += 1
+        else:
+            text = m.text
+            if old is not None:
+                lines.append("; %s" % NEW_MARK)
+                new += 1
         lines.append("%s (%d//)" % (m.ident, m.num))
-        lines.append(c_escape(m.text))          # english default as a starting point
+        lines.append(ct_escape(text))
         lines.append(";")
     with open(out, "w", encoding="latin-1") as fh:
         fh.write("\n".join(lines) + "\n")
-    sys.stderr.write("gencat: wrote %s (%d strings)\n" % (out, len(msgs)))
+    return len(msgs), kept, new
+
+
+def gen_ct(cd, out, lang):
+    n, _, _ = _write_ct(cd, out, lang)
+    sys.stderr.write("gencat: wrote %s (%d strings)\n" % (out, n))
+
+
+def gen_update(cd, old_ct, out):
+    old_header, old_msgs = parse_cd(old_ct)
+    old = {m.ident: m.text for m in old_msgs if m.text is not None}
+    cd_idents = {m.ident for m in parse_cd(cd)[1]}
+    gone = sorted(i for i in old if i not in cd_idents)
+    n, kept, new = _write_ct(cd, out, old_header.get("language", "unknown"),
+                             old=old, old_header=old_header)
+    sys.stderr.write("gencat: wrote %s (%d strings: %d kept, %d new, %d dropped)\n"
+                     % (out, n, kept, new, len(gone)))
+    for i in gone:
+        sys.stderr.write("  dropped (no longer in the program): %s\n" % i)
+
+
+# --------------------------------------------------------------------------
+# translation checks
+# --------------------------------------------------------------------------
+
+_PLACEHOLDER = re.compile(rb"%(?:%|[-+ 0#]*[0-9]*(?:\.[0-9]+)?l?[sdiuxXc])")
+
+
+def _placeholders(text):
+    return [p for p in _PLACEHOLDER.findall(text) if p != b"%%"]
+
+
+def check_ct(cd, ct, quiet=False):
+    """Match a translation against the .cd by IDENTIFIER.  Returns
+    (strings to compile as [(id, bytes)], number of errors)."""
+    _, cd_msgs = parse_cd(cd)
+    _, ct_msgs = parse_cd(ct)
+    by_ident = {m.ident: m for m in cd_msgs}
+    out, errors, same, seen = [], 0, 0, set()
+    for m in ct_msgs:
+        if m.text is None:
+            continue
+        ref = by_ident.get(m.ident)
+        if ref is None:
+            sys.stderr.write("%s: note: %s is not in the program any more - skipped\n"
+                             % (ct, m.ident))
+            continue
+        seen.add(m.ident)
+        if _placeholders(m.text) != _placeholders(ref.text):
+            sys.stderr.write("%s: ERROR: %s: placeholders differ from the English text\n"
+                             "    english    : %s\n    translation: %s\n"
+                             % (ct, m.ident,
+                                b" ".join(_placeholders(ref.text)).decode("latin-1") or "(none)",
+                                b" ".join(_placeholders(m.text)).decode("latin-1") or "(none)"))
+            errors += 1
+            continue
+        if m.text.count(b"|") != ref.text.count(b"|"):
+            sys.stderr.write("%s: ERROR: %s: number of \"|\" button separators differs "
+                             "(english %d, translation %d)\n"
+                             % (ct, m.ident, ref.text.count(b"|"), m.text.count(b"|")))
+            errors += 1
+            continue
+        if m.text == ref.text:
+            same += 1
+        out.append((ref.num, m.text))
+    missing = [m.ident for m in cd_msgs if m.ident not in seen]
+    if not quiet:
+        sys.stderr.write("gencat: %s: %d strings in the program, %d translated, "
+                         "%d still English, %d missing, %d error(s)\n"
+                         % (ct, len(cd_msgs), len(out) - same, same, len(missing), errors))
+        if missing:
+            sys.stderr.write("  missing (shown in English; run \"update\" to add them): %s%s\n"
+                             % (", ".join(missing[:8]), " ..." if len(missing) > 8 else ""))
+    return out, errors
 
 
 # --------------------------------------------------------------------------
@@ -281,24 +421,34 @@ def _chunk(cid, data):
 
 
 def gen_catalog(cd, ct, out):
-    cd_header, cd_msgs = parse_cd(cd)
-    ct_header, ct_msgs = parse_cd(ct)
+    cd_header, _ = parse_cd(cd)
+    ct_header, _ = parse_cd(ct)
     lang = ct_header.get("language", "unknown")
     name = cd_header.get("name", "AmiPart")
     ver = cd_header.get("version", "0")
 
-    fver = ("$VER: %s.catalog %s (%s)" % (name, ver, "01.01.2026")).encode("latin-1") + b"\x00"
+    # Ids come from the .cd by identifier, never from the numbers in the .ct:
+    # a translation made for an older .cd then still lands on the right
+    # strings.  A wrong %-placeholder would crash the program, so it is fatal.
+    strings, errors = check_ct(cd, ct)
+    if errors:
+        sys.exit("gencat: %d error(s) - no catalog written" % errors)
+
+    fver = ct_header.get("version", "")
+    if not fver.startswith("$VER") or "DD.MM.YYYY" in fver:
+        fver = "$VER: %s.catalog %s (%s)" % (name, _catver(ver), time.strftime("%d.%m.%Y"))
+    fver = fver.encode("latin-1") + b"\x00"
     langb = lang.encode("latin-1") + b"\x00"
-    cset = struct.pack(">I", 0)                   # codeset 0 = ISO-8859-1
+    # struct CodeSet: cs_CodeSet + 7 reserved longs (32 bytes, as CatComp and
+    # FlexCat write it).  Codeset 0 = ISO-8859-1.
+    cset = struct.pack(">8I", 0, 0, 0, 0, 0, 0, 0, 0)
 
     strs = bytearray()
-    for m in ct_msgs:
-        if m.text is None:
-            continue
-        s = m.text + b"\x00"
+    for num, text in sorted(strings):
+        s = text + b"\x00"
         if len(s) & 1:
             s += b"\x00"
-        strs += struct.pack(">II", m.num, len(s))
+        strs += struct.pack(">II", num, len(s))
         strs += s
 
     body = b"CTLG"
@@ -310,7 +460,7 @@ def gen_catalog(cd, ct, out):
     form = _chunk(b"FORM", body)
     with open(out, "wb") as fh:
         fh.write(form)
-    sys.stderr.write("gencat: wrote %s (%s, %d strings)\n" % (out, lang, len(ct_msgs)))
+    sys.stderr.write("gencat: wrote %s (%s, %d strings)\n" % (out, lang, len(strings)))
 
 
 # --------------------------------------------------------------------------
@@ -324,6 +474,10 @@ def main():
         gen_header(sys.argv[2], sys.argv[3])
     elif cmd == "ct" and len(sys.argv) in (4, 5):
         gen_ct(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else "deutsch")
+    elif cmd == "update" and len(sys.argv) == 5:
+        gen_update(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == "check" and len(sys.argv) == 4:
+        return 1 if check_ct(sys.argv[2], sys.argv[3])[1] else 0
     elif cmd == "catalog" and len(sys.argv) == 5:
         gen_catalog(sys.argv[2], sys.argv[3], sys.argv[4])
     else:

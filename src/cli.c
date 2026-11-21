@@ -218,11 +218,14 @@ static BOOL parse_dev(const char *str, char *devname, ULONG *unit)
 static UQUAD parse_size_bytes(const char *s)
 {
     UQUAD val = 0;
-    if (!s) return 0;
+    if (!s || *s < '0' || *s > '9') return 0;
     while (*s >= '0' && *s <= '9') val = val * 10 + (UQUAD)(*s++ - '0');
-    if      (*s == 'K' || *s == 'k') val *= 1024UL;
-    else if (*s == 'M' || *s == 'm') val *= 1024UL * 1024UL;
-    else if (*s == 'G' || *s == 'g') val *= 1024UL * 1024UL * 1024UL;
+    if      (*s == 'K' || *s == 'k') { val *= 1024UL; s++; }
+    else if (*s == 'M' || *s == 'm') { val *= 1024UL * 1024UL; s++; }
+    else if (*s == 'G' || *s == 'g') { val *= 1024UL * 1024UL * 1024UL; s++; }
+    /* Anything left over ("1.5G", "4OM", "10MB") is a typo, not a size: the
+       callers treat 0 as "bad size" rather than act on the digits alone. */
+    if (*s) return 0;
     return val;
 }
 
@@ -1520,6 +1523,13 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
         }
     }
 
+    for (i = 0; i < s_rdb->num_parts; i++)
+        if (str_eq_ci(s_rdb->parts[i].drive_name, name)) {
+            DP_SNPRINTF(outbuf, GS(MSG_CLI_ADDPART_NAME_USED_FMT), name);
+            cli_puts(outbuf);
+            RDB_FreeCode(s_rdb); BlockDev_Close(bd); return RETURN_ERROR;
+        }
+
     pi = &s_rdb->parts[s_rdb->num_parts];
     memset(pi, 0, sizeof(*pi));
     pi->is_new        = 1;
@@ -1586,6 +1596,7 @@ static LONG cmd_addpart(const char *devname, ULONG unit, BOOL force,
                     mounted[0] ? mounted : pi->drive_name, pi->volume_name);
         } else {
             DP_SNPRINTF(outbuf, GS(MSG_CLI_FORMAT_FAILED), err);
+            rc = RETURN_ERROR;      /* the partition exists but is NOT formatted */
         }
         cli_puts(outbuf);
         if (note[0]) {
@@ -1717,6 +1728,7 @@ static LONG cmd_grow(const char *devname, ULONG unit, BOOL force,
             pi->drive_name, (ULONG)old_hi, (ULONG)new_hi, szbuf);
     cli_puts(outbuf);
 
+    cli_puts(GS(MSG_RESIZE_NO_WARRANTY)); cli_puts("\n");
     DP_SNPRINTF(outbuf, GS(MSG_SCR_GROW_ASK), pi->drive_name);
     if (!ask_yn(outbuf, force)) {
         cli_puts(GS(MSG_CLI_ABORTED_NO_CHANGES));
@@ -1809,7 +1821,9 @@ static LONG cmd_grow(const char *devname, ULONG unit, BOOL force,
        diverges from the relocated on-disk root.  Re-inhibit and leave the
        volume locked so it can't be written until the mandatory reboot (the
        same pending-reboot state SFS/PFS already use; idempotent for them). */
-    if (no_unmount) {
+    /* Only a real device has a live handler of that name; for an image
+       file "DH0:" would be the running system's own volume. */
+    if (no_unmount && bd->backend == BD_DEVICE) {
         char inh[40];
         DP_SNPRINTF(inh, "%s:", pi->drive_name);
         Inhibit((STRPTR)inh, DOSTRUE);
@@ -1979,7 +1993,9 @@ static LONG cmd_shrink(const char *devname, ULONG unit, BOOL force,
         BOOL  relative = (size_s[0] == '-');
         UQUAD bytes    = parse_size_bytes(relative ? size_s + 1 : size_s);
         UQUAD cylbytes = (UQUAD)blks_cyl * 512UL;
-        if (bytes == 0) {
+        /* A target below one cylinder is a forgotten suffix ("SIZE=40"),
+           not a wish to shrink to the minimum - that is spelled MIN. */
+        if (bytes == 0 || (!relative && bytes < cylbytes)) {
             DP_SNPRINTF(outbuf, GS(MSG_SHR_BAD_SIZE_FMT), size_s);
             cli_puts(outbuf);
             RDB_FreeCode(s_rdb); BlockDev_Close(bd); return RETURN_ERROR;
@@ -2019,6 +2035,7 @@ static LONG cmd_shrink(const char *devname, ULONG unit, BOOL force,
             pi->drive_name, (ULONG)old_hi, (ULONG)new_hi, szbuf);
     cli_puts(outbuf);
 
+    cli_puts(GS(MSG_RESIZE_NO_WARRANTY)); cli_puts("\n");
     DP_SNPRINTF(outbuf, GS(MSG_SHR_ASK), pi->drive_name);
     if (!ask_yn(outbuf, force)) {
         cli_puts(GS(MSG_CLI_ABORTED_NO_CHANGES));
@@ -2094,7 +2111,9 @@ static LONG cmd_shrink(const char *devname, ULONG unit, BOOL force,
 
     /* NOUNMOUNT (or remount failed): lock the volume until reboot,
        exactly like GROW - the live handler still has the OLD geometry. */
-    if (no_unmount) {
+    /* Only a real device has a live handler of that name; for an image
+       file "DH0:" would be the running system's own volume. */
+    if (no_unmount && bd->backend == BD_DEVICE) {
         char inh[40];
         DP_SNPRINTF(inh, "%s:", pi->drive_name);
         Inhibit((STRPTR)inh, DOSTRUE);
@@ -3643,6 +3662,28 @@ LONG cli_run(void)
         !args[ARG_RESCUE]) {
         FreeArgs(rdargs);
         return CLI_NO_ARGS;
+    }
+
+    /* Whole-line checks, BEFORE any command runs: the commands below execute
+     * in a fixed order (CLEARRDB and INIT early), so a mistake found later
+     * would be reported only after the disk has been wiped. */
+    {
+        /* GROW/M is the only multi-word slot, so it also collects every stray
+         * word on the line ("DEV scsi.device 3", "INIT NEW MBR").  It must
+         * hold exactly <drive> <size>. */
+        STRPTR *gv = (STRPTR *)args[ARG_GROW];
+        if (gv && !(gv[0] && gv[1] && !gv[2])) {
+            cli_puts(GS(MSG_SCR_GROW_USAGE));
+            FreeArgs(rdargs);
+            return RETURN_WARN;
+        }
+        /* A backup on the same line would be taken AFTER the wipe. */
+        if ((args[ARG_INIT] || args[ARG_CLEARRDB]) &&
+            (args[ARG_BACKUP] || args[ARG_BACKUPEXT] || args[ARG_IMAGEOUT])) {
+            cli_puts(GS(MSG_CLI_SAVE_WITH_WIPE));
+            FreeArgs(rdargs);
+            return RETURN_WARN;
+        }
     }
 
     s_rdb = (struct RDBInfo *)AllocVec(sizeof(*s_rdb), MEMF_PUBLIC | MEMF_CLEAR);

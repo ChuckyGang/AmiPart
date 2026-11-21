@@ -92,6 +92,16 @@ BOOL UnmountPartition(struct BlockDev *bd, const char *name,
                       UnmountProgressFn progress, void *ud,
                       char *errbuf, ULONG errlen);
 
+/* Take whatever is mounted on blocks first..last (512-byte device blocks) of
+ * bd's device+unit offline, before those blocks are overwritten or relocated.
+ * The live DOS devices are found by their DosEnvec block range, not by name:
+ * a partition can be mounted under another name than its RDB entry (a clash
+ * with another disk gets a suffix), and a same-named volume on another disk
+ * must not count.  TRUE when nothing live remains on the range (or bd is an
+ * image file); FALSE with errbuf set when a handler there is in use. */
+BOOL TakeRangeOffline(struct BlockDev *bd, ULONG first, ULONG last,
+                      char *errbuf, ULONG errlen);
+
 /* Bring a just-mounted volume online (Lock+UnLock its root) so that any lock
  * orphaned while it was briefly absent (e.g. during a resize) revalidates
  * against it silently, instead of popping an "insert volume" requester.

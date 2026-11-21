@@ -52,6 +52,10 @@ scripting interface.
  FILESYSTEMS
 --------------------------------------------------------------------------------
  * Add a filesystem driver to the RDB.
+   pfs3aio 3.1 (19.2) is built into AmiPart and is the default in the Add
+   dialog; a handler file picked from disk is used instead, whatever its
+   version.  (pfs3aio: this product includes software developed by Michiel
+   Pelt - licence in support/pfs3aio/LICENSE.)
  * DosType may be entered as ASCII (e.g. DOS3, PFS\3) or as a 0x / $ hex value.
  * AmiPart will try to guess the DosType from the handler file name.
  * Filesystem driver version word and stack size are configurable.
@@ -243,14 +247,15 @@ scripting interface.
    checks that the backup belongs to the disk (geometry + product string);
    whole-disk overwrites (COPYDISK, IMAGEIN) refuse a target with mounted
    partitions unless forced; copies report zero-filled unreadable blocks.
-   - INIT NEW MBR: writes empty MBR at block 0, places RDB at block 1.
+   - INIT NEW MBR: empty MBR at block 0, RDB at block 1 (both written by
+     WRITE, like every other INIT).
    - ADDMBR TYPE=<t> START=<cyl> END=<cyl|+size> [ACTIVE]: adds an MBR
      partition (types: FAT32 FAT32LBA FAT16 LINUX LINUXSWAP).  Writes
      immediately; no WRITE needed.  +size notation (e.g. END=+8G) converts
      a byte-size to an end cylinder relative to START.
    - DELMBR NAME=<MBR1..MBR4>: clears an MBR slot and writes immediately.
  * CLI commands: INIT=NEWMBR, ADDMBR, DELMBR.
-   - INIT=NEWMBR DEV=<dev>/<unit>: same as script INIT NEW MBR.
+   - INIT=NEWMBR DEV=<dev>:<unit>: same as script INIT NEW MBR.
    - ADDMBR MBRTYPE=<t> STARTCYL=<cyl> ENDCYL=<cyl|+size> [ACTIVE]: adds
      an MBR partition (device must already have an MBR from INIT=NEWMBR).
    - DELMBR NAME=<MBR1..MBR4>: removes an MBR partition.

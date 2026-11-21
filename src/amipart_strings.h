@@ -1561,8 +1561,22 @@
 #define MSG_PV_RESCUE_HINT3          1555
 #define MSG_PV_RESCUE_NOTHING        1556
 #define MSG_DLG_ABOUT_NOBACKUP       1557
+#define MSG_FS_BUILTIN_PFS3AIO       1558
+#define MSG_PV_WRITE_FIRST_BODY      1559
+#define MSG_CLI_SAVE_WITH_WIPE       1560
+#define MSG_SCR_INIT_MBR_PENDING     1561
+#define MSG_SCR_DESTROY_NOW_ASK_FMT  1562
+#define MSG_SCR_REBOOT_DRYRUN        1563
+#define MSG_SCR_CREATE_EXISTS_DRYRUN_FMT 1564
+#define MSG_PC_DUMP_CYLSIZE_FMT      1565
+#define MSG_PM_MOUNTED_BUSY_FMT      1566
+#define MSG_DLG_ABOUT_PFS3AIO        1567
+#define MSG_PV_RESIZE_PENDING_BODY   1568
+#define MSG_SCR_PENDING_WRITE_FIRST_FMT 1569
+#define MSG_CLI_ADDPART_NAME_USED_FMT 1570
+#define MSG_RESIZE_NO_WARRANTY       1571
 
-#define MSG_COUNT 1558
+#define MSG_COUNT 1572
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -1613,7 +1627,7 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /*  36 MSG_MAIN_SIZE_MAX */ "Size exceeds the 2 GB dos.library image-file limit.",
     /*  37 MSG_MAIN_IMG_CREATE_FAIL_FMT */ "Failed to create image file:\n%s",
     /*  38 MSG_MAIN_WARN_TITLE */ "AmiPart - WARNING",
-    /*  39 MSG_MAIN_WARN_BODY */ "EXPERIMENTAL SOFTWARE\nAmiPart %s  (built %s)\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.",
+    /*  39 MSG_MAIN_WARN_BODY */ "RELEASE CANDIDATE\nAmiPart %s  (built %s)\n\nThis is a release candidate: a test version of\nwhat will become the final release. Please\nreport any problem you find. This window will\nnot be shown in the final release.\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.",
     /*  40 MSG_MAIN_WARN_GADGETS */ "I have a backup - Continue|Quit",
     /*  41 MSG_CLI_IMAGE_PATH_BAD */ "ERROR: IMAGE path is empty or too long.\n",
     /*  42 MSG_CLI_NEED_DEV_OR_IMAGE */ "This command requires DEV <device>:<unit> or IMAGE <path>.\n",
@@ -3132,5 +3146,19 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1555 MSG_PV_RESCUE_HINT3 */ "written to the disk until you press Write in the main window.",
     /* 1556 MSG_PV_RESCUE_NOTHING */ "Nothing was found that can be added to the partition table.",
     /* 1557 MSG_DLG_ABOUT_NOBACKUP */ "\n\nI take no responsibility for lost data.\nMake a backup before you change a disk.",
+    /* 1558 MSG_FS_BUILTIN_PFS3AIO */ "<built-in pfs3aio>",
+    /* 1559 MSG_PV_WRITE_FIRST_BODY */ "This operation writes a partition table straight to disk.\nYou have unsaved changes: press Write (or Undo All) first,\nthen try again.",
+    /* 1560 MSG_CLI_SAVE_WITH_WIPE */ "BACKUP, BACKUPEXT and IMAGEOUT cannot share a command line with INIT or\nCLEARRDB: the wipe would run first and the old state would not be saved.\nRun the backup as its own command first.\n",
+    /* 1561 MSG_SCR_INIT_MBR_PENDING */ "Empty MBR for block 0 prepared (RDB at block 1) - written by WRITE.\n",
+    /* 1562 MSG_SCR_DESTROY_NOW_ASK_FMT */ "%s overwrites data on the disk at once (not at WRITE). Continue?",
+    /* 1563 MSG_SCR_REBOOT_DRYRUN */ "DRYRUN: would reboot.\n",
+    /* 1564 MSG_SCR_CREATE_EXISTS_DRYRUN_FMT */ "DRYRUN: \"%s\" already exists - CREATE FILE would erase it. Not done;\nthe existing file is used for the rest of the dry run.\n",
+    /* 1565 MSG_PC_DUMP_CYLSIZE_FMT */ "The dump uses %lu blocks per cylinder, %s on this disk uses %lu.\nA dump can only be restored where the cylinder size is the same.\n",
+    /* 1566 MSG_PM_MOUNTED_BUSY_FMT */ "%s is mounted and cannot be taken offline (%s).\nClose everything that uses it, or boot from another disk, then try again.",
+    /* 1567 MSG_DLG_ABOUT_PFS3AIO */ "\n\nBuilt-in filesystem driver: pfs3aio by Toni Wilen.\nThis product includes software developed by Michiel Pelt.",
+    /* 1568 MSG_PV_RESIZE_PENDING_BODY */ "Resizing, moving or restoring a filesystem writes the partition\ntable to disk at once - together with every other change you\nhave made but not written yet.\n\nPress Write (or Undo All) first, then do this again.\nThe partition has been left as it was.",
+    /* 1569 MSG_SCR_PENDING_WRITE_FIRST_FMT */ "%s writes the partition table at once, which would also commit the\nchanges made since the last WRITE. Put a WRITE before it.",
+    /* 1570 MSG_CLI_ADDPART_NAME_USED_FMT */ "ADDPART: this disk already has a partition named %s.\n",
+    /* 1571 MSG_RESIZE_NO_WARRANTY */ "NO WARRANTY: resizing a filesystem can go wrong and destroy\nthe data on this disk. Have a backup before you continue.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

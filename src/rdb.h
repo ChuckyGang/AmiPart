@@ -247,6 +247,10 @@ struct RDBInfo {
     ULONG chain_trunc_block;
     UBYTE chain_trunc_reason;      /* RDB_TRUNC_* */
     BOOL  allow_truncated_write;
+    /* "Init with an MBR at block 0" has been chosen but not written yet.
+       RDB_Write puts the empty MBR on block 0 together with the new table and
+       clears this - nothing on the disk changes before the user's Write. */
+    BOOL  mbr_init_pending;
     struct PartInfo parts[MAX_PARTITIONS];
     struct FSInfo   filesystems[MAX_FILESYSTEMS];
 };

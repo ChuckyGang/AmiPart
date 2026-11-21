@@ -387,7 +387,22 @@ BOOL SFS_GrowPartition(struct BlockDev *bd, const struct RDBInfo *rdb,
     new_totalblocks = totalblocks + delta_sfs;
     /* Clone: force the exact destination block count so the root's total
        matches what SFS derives from the DosEnvec at mount (an EXACT check). */
-    if (new_total_ovr != 0 && new_total_ovr > totalblocks) {
+    if (new_total_ovr != 0) {
+        /* The caller named the exact size.  The cylinder arithmetic above is
+           meaningless for it (a clone passes a dummy old_high_cyl), so it
+           must never be used as a fallback. */
+        if (new_total_ovr == totalblocks) {
+            /* already the right size: nothing was changed, so the volume
+               need not stay locked until reboot */
+            if (did_inhibit) { Inhibit((STRPTR)inh_name, DOSFALSE); did_inhibit = FALSE; }
+            ok = TRUE;
+            goto done;
+        }
+        if (new_total_ovr < totalblocks) {
+            snprintf(err_buf, ENGINE_ERRBUF_SIZE, GS(MSG_SFS_TOTALBLOCKS_SMALL),
+                     (unsigned long)new_total_ovr);
+            goto done;
+        }
         new_totalblocks = new_total_ovr;
         delta_sfs       = new_totalblocks - totalblocks;
     }

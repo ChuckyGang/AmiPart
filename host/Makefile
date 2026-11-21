@@ -12,7 +12,7 @@ amipart: $(SRCS) amiga_compat.h $(wildcard ../src/*.h)
 GUI    = main diskselect guilv guisize mapview partview partview_clear \
          partview_dialogs partview_diskcopy partview_fs partview_image \
          partview_mbr partview_move partview_partclone partview_partcopy \
-         partview_rdb partview_shrink partview_zero progresswin
+         partview_rdb partview_shrink partview_zero progresswin pfs3aio_bin
 GSRCS  = $(addprefix ../src/,$(addsuffix .c,$(CORE) $(GUI))) \
          amiga_shim.c host_rdargs.c host_locale.c host_devices.c \
          host_gui.c host_gadtools.c host_req.c

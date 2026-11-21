@@ -330,6 +330,7 @@ BOOL offer_move_partition(struct Window *win,
                                   struct PartInfo *pi,
                                   ULONG default_lo)   /* 0 = use pi->low_cyl */
 {
+    if (pv_refuse_pending(win)) return FALSE;
     struct Screen  *scr     = NULL;
     APTR            vi      = NULL;
     struct Gadget  *glist   = NULL;
@@ -518,7 +519,7 @@ BOOL offer_move_partition(struct Window *win,
                     break;
 
                 case MVDLG_MOVE: {
-                    char can_err[128];
+                    static char can_err[ENGINE_ERRBUF_SIZE];
                     ULONG new_hi_tmp;
 
                     /* Read target cylinder from string gadget */
@@ -827,11 +828,18 @@ int offer_ffs_grow(struct Window *win, struct BlockDev *bd,
     if (pi->high_cyl <= old_hi) return GROW_NONE;
     if (!FFS_IsSupportedType(pi->dos_type)) return GROW_NONE;
     if (!bd) return GROW_NONE;
+    if (pv_refuse_pending(win)) { pi->high_cyl = old_hi; return GROW_ABORTED; }
 
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
     es.es_Title        = (UBYTE *)GS(MSG_MOVE_GROW_TITLE);
-    es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_FFS_BODY_FMT);
+    {   /* no-warranty / backup notice above the question (the body is still
+           the format string: its %s takes the drive name) */
+        static char wbody[760];
+        DP_SNPRINTF(wbody, "%s\n\n%s", GS(MSG_RESIZE_NO_WARRANTY),
+                    GS(MSG_MOVE_GROW_FFS_BODY_FMT));
+        es.es_TextFormat = (UBYTE *)wbody;
+    }
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
     if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) != 1) return GROW_NONE;
@@ -992,11 +1000,18 @@ int offer_pfs_grow(struct Window *win, struct BlockDev *bd,
     if (pi->high_cyl <= old_hi) return GROW_NONE;
     if (!PFS_IsSupportedType(pi->dos_type)) return GROW_NONE;
     if (!bd) return GROW_NONE;
+    if (pv_refuse_pending(win)) { pi->high_cyl = old_hi; return GROW_ABORTED; }
 
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
     es.es_Title        = (UBYTE *)GS(MSG_MOVE_GROW_TITLE);
-    es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_PFS_BODY_FMT);
+    {   /* no-warranty / backup notice above the question (the body is still
+           the format string: its %s takes the drive name) */
+        static char wbody[760];
+        DP_SNPRINTF(wbody, "%s\n\n%s", GS(MSG_RESIZE_NO_WARRANTY),
+                    GS(MSG_MOVE_GROW_PFS_BODY_FMT));
+        es.es_TextFormat = (UBYTE *)wbody;
+    }
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
     if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) == 1) {
@@ -1064,11 +1079,18 @@ int offer_sfs_grow(struct Window *win, struct BlockDev *bd,
     if (pi->high_cyl <= old_hi) return GROW_NONE;
     if (!SFS_IsSupportedType(pi->dos_type)) return GROW_NONE;
     if (!bd) return GROW_NONE;
+    if (pv_refuse_pending(win)) { pi->high_cyl = old_hi; return GROW_ABORTED; }
 
     es.es_StructSize   = sizeof(es);
     es.es_Flags        = 0;
     es.es_Title        = (UBYTE *)GS(MSG_MOVE_GROW_TITLE);
-    es.es_TextFormat   = (UBYTE *)GS(MSG_MOVE_GROW_SFS_BODY_FMT);
+    {   /* no-warranty / backup notice above the question (the body is still
+           the format string: its %s takes the drive name) */
+        static char wbody[760];
+        DP_SNPRINTF(wbody, "%s\n\n%s", GS(MSG_RESIZE_NO_WARRANTY),
+                    GS(MSG_MOVE_GROW_SFS_BODY_FMT));
+        es.es_TextFormat = (UBYTE *)wbody;
+    }
     es.es_GadgetFormat = (UBYTE *)GS(MSG_MOVE_GROW_GADGETS);
 
     if (EasyRequest(win, &es, NULL, (IPTR)pi->drive_name) == 1) {
@@ -1143,6 +1165,14 @@ int offer_sfs_grow(struct Window *win, struct BlockDev *bd,
 /* operation, with no window where a discard could strand a shrunk     */
 /* filesystem behind a stale on-disk envelope.                         */
 /* ================================================================== */
+/* Append the no-warranty / backup notice to a shrink confirmation. */
+static void shr_add_warranty(char *body, ULONG size)
+{
+    ULONG l = strlen(body);
+    if (l + 3 < size)
+        snprintf(body + l, size - l, "\n\n%s", GS(MSG_RESIZE_NO_WARRANTY));
+}
+
 int offer_shrink(struct Window *win, struct BlockDev *bd,
                  struct RDBInfo *rdb, struct PartInfo *pi,
                  ULONG old_lo, ULONG old_hi)
@@ -1151,7 +1181,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
     struct ShrinkReport rep;
     char  errbuf[ENGINE_ERRBUF_SIZE], umerr[80], rmerr[80], mnt[40];
     char  sz1[20], sz2[20];
-    static char body[320];
+    static char body[640];
     int   fskind;                 /* 1=FFS 2=PFS 3=SFS */
     BOOL  no_unmount = FALSE, can_remount;
     ULONG requested, new_hi, ncyl_old, bpc_fs, min_cyls, min_high;
@@ -1165,6 +1195,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
     else if (PFS_IsSupportedType(pi->dos_type)) fskind = 2;
     else if (SFS_IsSupportedType(pi->dos_type)) fskind = 3;
     else return GROW_NONE;
+    if (pv_refuse_pending(win)) { pi->high_cyl = old_hi; return GROW_ABORTED; }
 
     umerr[0] = rmerr[0] = '\0';
     heads    = pi->heads   > 0 ? pi->heads   : rdb->heads;
@@ -1220,6 +1251,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
         es.es_StructSize   = sizeof(es);
         es.es_Flags        = 0;
         es.es_Title        = (UBYTE *)GS(MSG_PV_SHR_TITLE);
+        shr_add_warranty(body, sizeof(body));
         es.es_TextFormat   = (UBYTE *)body;
         es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_SHR_MIN_GADGETS);
         if (EasyRequest(win, &es, NULL) != 1)
@@ -1234,6 +1266,7 @@ int offer_shrink(struct Window *win, struct BlockDev *bd,
         es.es_StructSize   = sizeof(es);
         es.es_Flags        = 0;
         es.es_Title        = (UBYTE *)GS(MSG_PV_SHR_TITLE);
+        shr_add_warranty(body, sizeof(body));
         es.es_TextFormat   = (UBYTE *)body;
         es.es_GadgetFormat = (UBYTE *)GS(MSG_PV_SHR_GADGETS);
         if (EasyRequest(win, &es, NULL) != 1)

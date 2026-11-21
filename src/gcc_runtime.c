@@ -53,7 +53,10 @@ static u64 mul32x32(u32 a, u32 b)
     u32 carry_m = (mid < p01) ? 1u : 0u;
     u32 lo = p00 + (mid << 16);
     u32 carry_lo = (lo < p00) ? 1u : 0u;
-    u32 hi = p11 + (p01 >> 16) + (p10 >> 16) + (carry_m << 16) + carry_lo;
+    /* high word: p11 + the upper half of the summed cross products (and its
+       carry) + the carry out of the low word.  Shifting p01 and p10
+       separately would lose the carry between their low halves. */
+    u32 hi = p11 + (mid >> 16) + (carry_m << 16) + carry_lo;
     U64 r; r.s.hi = hi; r.s.lo = lo;
     return r.v;
 }

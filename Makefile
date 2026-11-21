@@ -98,7 +98,7 @@ CD_FILE   := catalogs/AmiPart.cd
 STRINGS_H := src/amipart_strings.h
 GENCAT    := support/gencat.py
 
-.PHONY: all clean icon adf FORCE strings catalog-template catalog amiga linux linux-gui
+.PHONY: all clean icon adf FORCE strings catalog-template catalog catalog-update catalog-check amiga linux linux-gui
 
 # Convenience names for the two targets: `make amiga` (the default) builds
 # the m68k binary here, `make linux` builds the native host CLI in host/.
@@ -124,6 +124,11 @@ $(STRINGS_H): $(CD_FILE) $(GENCAT)
 	$(info Generating $@ from $<)
 	@python3 $(GENCAT) header $< $@
 
+# The pfs3aio handler embedded as the Filesystems > Add default.
+src/pfs3aio_bin.c: support/pfs3aio/pfs3aio support/bin2c.py
+	$(info Generating $@ from $<)
+	@python3 support/bin2c.py $< $@ pfs3aio_bin
+
 # Every object depends on the generated header (most .c files pull it in via
 # locale_support.h).
 $(src_obj): $(STRINGS_H)
@@ -136,6 +141,19 @@ LANG ?= deutsch
 catalog-template: $(CD_FILE) $(GENCAT)
 	$(info Generating catalogs/$(LANG).ct)
 	@python3 $(GENCAT) ct $(CD_FILE) catalogs/$(LANG).ct $(LANG)
+
+# Bring an existing translation up to date after strings were added:
+#   make catalog-update LANG=deutsch  (rewrites catalogs/deutsch.ct in place;
+#   translated strings are kept, new ones are added in English, marked NEW)
+catalog-update: $(CD_FILE) $(GENCAT)
+	$(info Updating catalogs/$(LANG).ct)
+	@python3 $(GENCAT) update $(CD_FILE) catalogs/$(LANG).ct catalogs/$(LANG).ct.new
+	@mv catalogs/$(LANG).ct.new catalogs/$(LANG).ct
+
+# Report untranslated strings and placeholder mistakes:
+#   make catalog-check LANG=deutsch
+catalog-check: $(CD_FILE) $(GENCAT)
+	@python3 $(GENCAT) check $(CD_FILE) catalogs/$(LANG).ct
 
 # Compile a finished translation into a binary catalog:
 #   make catalog LANG=deutsch        (reads catalogs/deutsch.ct)

@@ -141,7 +141,10 @@ void image_dump_disk(struct Window *win, struct BlockDev *bd)
 /* Restore image file -> current disk (DESTRUCTIVE)                    */
 /* ------------------------------------------------------------------ */
 
-void image_restore_disk(struct Window *win, struct BlockDev *bd)
+/* Returns TRUE once the copy has started: the disk may then hold a different
+   partition table (also after a cancel or an error part-way), so the caller
+   must re-read it rather than keep showing - and later write - the old one. */
+BOOL image_restore_disk(struct Window *win, struct BlockDev *bd)
 {
     struct EasyStruct es;
     static char       load_path[256];
@@ -151,21 +154,21 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
         es.es_Title=(UBYTE*)GS(MSG_IMG_RESTORE_TITLE);
         es.es_TextFormat=(UBYTE*)GS(MSG_IMG_DEV_NOT_ACCESSIBLE);
         es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
-        EasyRequest(win, &es, NULL); return;
+        EasyRequest(win, &es, NULL); return FALSE;
     }
 
     es.es_StructSize=sizeof(es); es.es_Flags=0;
     es.es_Title=(UBYTE*)GS(MSG_IMG_RESTORE_WARN_TITLE);
     es.es_TextFormat=(UBYTE*)GS(MSG_IMG_RESTORE_WARN_BODY);
     es.es_GadgetFormat=(UBYTE*)GS(MSG_IMG_RESTORE_WARN_GADGETS);
-    if (EasyRequest(win, &es, NULL) != 1) return;
+    if (EasyRequest(win, &es, NULL) != 1) return FALSE;
 
     if (!AslBase) {
         es.es_StructSize=sizeof(es); es.es_Flags=0;
         es.es_Title=(UBYTE*)GS(MSG_IMG_RESTORE_TITLE);
         es.es_TextFormat=(UBYTE*)GS(MSG_IMG_ASL_UNAVAIL);
         es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
-        EasyRequest(win, &es, NULL); return;
+        EasyRequest(win, &es, NULL); return FALSE;
     }
 
     {
@@ -189,7 +192,7 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
             }
             FreeAslRequest(fr);
         }
-        if (!chosen) return;
+        if (!chosen) return FALSE;
     }
 
     {
@@ -205,7 +208,7 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
               es.es_Title=(UBYTE*)GS(MSG_IMG_RESTORE_TITLE);
               es.es_TextFormat=(UBYTE*)done_msg;
               es.es_GadgetFormat=(UBYTE*)GS(MSG_DC_MOUNTED_GADGETS);
-              if (EasyRequest(win, &es, NULL) != 1) return;
+              if (EasyRequest(win, &es, NULL) != 1) return FALSE;
           } }
         snprintf(prog.title, sizeof(prog.title), GS(MSG_IMG_RESTORE_PROGRESS_TITLE_FMT), load_path);
         ProgressWin_Open(&prog, prog.title);
@@ -229,4 +232,5 @@ void image_restore_disk(struct Window *win, struct BlockDev *bd)
         es.es_GadgetFormat=(UBYTE*)GS(MSG_OK);
         EasyRequest(win, &es, NULL);
     }
+    return TRUE;
 }

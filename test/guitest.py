@@ -13,6 +13,8 @@ What is checked:
   - Rescue (scan, "Load into AmiPart", Write) gives the same image as
     RESCUE WRITE on the command line
   - the map zoom controls change the view and leave the table alone
+  - Filesystems > Add defaults to the built-in pfs3aio; a file named by
+    the user is used instead, whatever its version
   - every menu entry can be opened without the program failing
 
 Build first:  make -C host amipart gui
@@ -52,10 +54,14 @@ def gui(workdir, lines, timeout=120, extra_env=None):
     script = os.path.join(workdir, "script.txt")
     with open(script, "w", encoding="latin-1") as f:
         f.write("\n".join(lines) + "\n")
-    env = dict(os.environ, AMIPART_GUI_HEADLESS="1", AMIPART_GUI_SCRIPT=script)
+    # File requesters start in the user's home directory (not the current
+    # one), so the work directory poses as home; cwd is deliberately not it.
+    env = dict(os.environ, AMIPART_GUI_HEADLESS="1", AMIPART_GUI_SCRIPT=script,
+               HOME=workdir)
+    env.pop("SUDO_USER", None)
     if extra_env:
         env.update(extra_env)
-    p = subprocess.run([GUI], cwd=workdir, env=env, stdin=subprocess.DEVNULL,
+    p = subprocess.run([GUI], cwd="/", env=env, stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, errors="replace", timeout=timeout)
     return p.returncode, p.stdout + p.stderr
 
@@ -189,6 +195,38 @@ def main():
         check("rescue + load + write: same image as CLI RESCUE WRITE",
               rc == 0 and r.returncode == 0 and same(os.path.join(d, "t.hdf"), os.path.join(d, "c.hdf")),
               out[-600:] + r.stdout[-300:])
+
+        # ---- Filesystems > Add: built-in pfs3aio, or a file from disk ------
+        # The Add dialog starts on the pfs3aio embedded in the binary.  A file
+        # the user names is used instead, even when it is an older version.
+        fsadd = ["gadid 6", "expect FileSystem Drivers", "gadid 3",
+                 "expect Add FileSystem Driver", "dump"]
+        fsdone = ["gadid 4", "gadid 6",          # OK, Done
+                  "gadid 7", "expect Write partition table", "gadid 1"]
+        builtin = open(os.path.join(ROOT, "support", "pfs3aio", "pfs3aio"), "rb").read()
+        shutil.copy(base, os.path.join(d, "t.hdf"))
+        rc, out = gui(d, open_image("t.hdf") + fsadd + fsdone)
+        info = cli(os.path.join(d, "t.hdf"), "INFO").stdout
+        img = open(os.path.join(d, "t.hdf"), "rb").read(4 << 20)
+        check("add filesystem: built-in pfs3aio is the default",
+              rc == 0 and 'value="PFS\\3"' in out and "built-in pfs3aio" in out
+              and "PFS\\3     v19.2" in info and builtin[:400] in img, out[-600:] + info[-300:])
+
+        old = bytearray(2000)                    # stand-in handler, version 18.5
+        old[0:4] = bytes.fromhex("000003f3")
+        old[0x22:0x24] = b"\x4a\xfc"
+        old[0x22 + 11] = 18
+        old[100:129] = b"$VER: pfs3old 18.5 (1.1.2010)"
+        with open(os.path.join(d, "pfs3old"), "wb") as f:
+            f.write(old)
+        shutil.copy(base, os.path.join(d, "t.hdf"))
+        rc, out = gui(d, open_image("t.hdf") + fsadd
+                      + ["set 2 " + os.path.join(d, "pfs3old")] + fsdone)
+        info = cli(os.path.join(d, "t.hdf"), "INFO").stdout
+        img = open(os.path.join(d, "t.hdf"), "rb").read(4 << 20)
+        check("add filesystem: a file from disk replaces the built-in (older version)",
+              rc == 0 and "PFS\\3     v18.5" in info and bytes(old[:400]) in img
+              and builtin[:400] not in img, out[-600:] + info[-300:])
 
         # ---- every menu entry opens --------------------------------------
         bad = []

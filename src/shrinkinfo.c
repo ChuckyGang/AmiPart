@@ -30,7 +30,7 @@ LONG ShrinkInfo_Run(struct BlockDev *bd, const struct RDBInfo *rdb,
                     ShrinkInfoEmit emit, void *ud)
 {
     struct ShrinkReport rep;
-    char  err[256];
+    static char err[ENGINE_ERRBUF_SIZE];
     char  sz1[20], sz2[20];
     const char *fsname;
     int   fskind;

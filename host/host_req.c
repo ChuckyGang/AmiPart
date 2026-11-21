@@ -12,6 +12,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <pwd.h>
 #include "hg_int.h"
 
 /* ------------------------------------------------------------------ */
@@ -394,6 +395,22 @@ static int fr_read(const char *drawer, struct FrEntry *ent, struct Node *nodes, 
     return n;
 }
 
+/* Where a requester starts when the drawer it was given does not exist
+ * (the Amiga source asks for "RAM:" or "L:"): the user's home directory,
+ * or "/" if there is none.  Under sudo - the usual way to reach a raw
+ * disk - that is the invoking user's home, not root's. */
+static void fr_default_drawer(char *out, size_t size)
+{
+    const char *su = getenv("SUDO_USER");
+    const char *home = NULL;
+    struct passwd *pw = (su && *su) ? getpwnam(su) : NULL;
+
+    if (pw && pw->pw_dir && is_dir(pw->pw_dir)) home = pw->pw_dir;
+    if (!home) { home = getenv("HOME"); if (home && !is_dir(home)) home = NULL; }
+    if (!home || strlen(home) >= size) home = "/";
+    strcpy(out, home);
+}
+
 BOOL AslRequest(APTR req, struct TagItem *tags)
 {
     struct HFileReq *r = (struct HFileReq *)req;
@@ -410,9 +427,7 @@ BOOL AslRequest(APTR req, struct TagItem *tags)
 
     if (!r || !scr) return FALSE;
     fr_tags(r, tags);
-    if (!is_dir(r->drawer)) {
-        if (!getcwd(r->drawer, sizeof(r->drawer))) strcpy(r->drawer, "/");
-    }
+    if (!is_dir(r->drawer)) fr_default_drawer(r->drawer, sizeof(r->drawer));
     ent = (struct FrEntry *)malloc(sizeof(*ent) * FR_MAX);
     nodes = (struct Node *)calloc(FR_MAX, sizeof(*nodes));
     if (!ent || !nodes) { free(ent); free(nodes); return FALSE; }
@@ -495,7 +510,7 @@ BOOL AslRequest(APTR req, struct TagItem *tags)
                 break; }
             case FRG_DRAWER:
                 strncpy(r->drawer, (char *)((struct StringInfo *)g_drawer->SpecialInfo)->Buffer, sizeof(r->drawer) - 1);
-                if (!is_dir(r->drawer) && !getcwd(r->drawer, sizeof(r->drawer))) strcpy(r->drawer, "/");
+                if (!is_dir(r->drawer)) fr_default_drawer(r->drawer, sizeof(r->drawer));
                 reload = 1;
                 break;
             case FRG_LIST:

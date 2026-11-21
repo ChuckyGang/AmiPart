@@ -42,8 +42,13 @@ LONG Read(BPTR fh, void *buf, LONG len) {
     return n;
 }
 LONG Write(BPTR fh, const void *buf, LONG len) {
+    LONG n;
     if (!fh) return -1;
-    return (LONG)fwrite(buf, 1, (size_t)len, (FILE *)(size_t)fh);
+    n = (LONG)fwrite(buf, 1, (size_t)len, (FILE *)(size_t)fh);
+    /* Push it to the file now: Close() has no way to report a failed flush,
+       so a full disk would otherwise look like a successful backup. */
+    if (fflush((FILE *)(size_t)fh) != 0) return -1;
+    return n;
 }
 /* AmigaOS Seek returns the OLD position; mode maps to SEEK_SET/CUR/END. */
 LONG Seek(BPTR fh, LONG pos, LONG mode) {
@@ -443,6 +448,13 @@ static void host_note(char *errbuf, ULONG errlen, const char *msg)
 UWORD MountedPartitionsOnDevice(struct BlockDev *bd, char *names, ULONG nsz)
 {   /* the kernel refuses O_EXCL on a mounted disk, so nothing we open is */
     (void)bd; if (names && nsz) names[0] = 0; return 0;
+}
+BOOL TakeRangeOffline(struct BlockDev *bd, ULONG first, ULONG last,
+                      char *errbuf, ULONG errlen)
+{   /* nothing is ever mounted on the host */
+    (void)bd; (void)first; (void)last;
+    if (errbuf && errlen) errbuf[0] = 0;
+    return TRUE;
 }
 BOOL UnmountDevice(const char *name, char *errbuf, ULONG errlen)
 {   /* nothing is ever mounted on the host - "already offline" = success */

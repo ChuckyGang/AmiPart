@@ -78,6 +78,7 @@ IMAGE <path>
 
 CREATE SIZE=<n>[K|M|G]
   Create a new image file of the given size, then open it.
+  An existing file at that path is erased without a question.
   Must be combined with IMAGE=<path>.  Uses SetFileSize() — sparse on
   filesystems that support it (SFS, PFS), pre-allocated on FFS.
 
@@ -513,6 +514,8 @@ OPEN FILE <path>
 CREATE FILE <path> SIZE=<n>[K|M|G]
   Create a new image file of the given size and open it.
   Existing file with the same name is overwritten.
+  With DRYRUN an existing file is left as it is and used for the rest of
+  the dry run; a file that does not exist yet is still created.
   Subsequent commands (INIT NEW, ADDPART, ...) operate on the new file.
   Example:  CREATE FILE work:images/fresh.hdf SIZE=100M
 
@@ -547,10 +550,41 @@ INIT NEW
   Create a fresh RDB on the opened device, auto-detecting geometry.
   Overwrites any existing RDB (warns unless FORCE is set).
 
+INIT NEW MBR
+  Like INIT NEW, but for a combined MBR+RDB disk: an empty PC partition
+  table goes to block 0 and the RDB to block 1.  Nothing is written until
+  WRITE.  ADDMBR may follow straight away; its entries are written by the
+  same WRITE.  (Command line: INIT=NEWMBR.)
+
 INIT NEWGEO
   Update the RDB cylinder count to match the actual disk size.
   Keeps existing heads/sectors; only cylinder count and hi_cyl change.
   No-op if disk is the same size or smaller.
+
+DELPART NAME=<drive>
+  Remove a partition from the table in memory (committed by WRITE).
+
+ADDMBR TYPE=<t> START=<cyl> END=<cyl|+size> [ACTIVE]
+DELMBR NAME=<MBR1..MBR4>
+  Add or remove a PC partition on an MBR+RDB disk.  Types: FAT32 FAT32LBA
+  FAT16 LINUX LINUXSWAP.  On a disk that already has its MBR these write
+  block 0 at once; after INIT NEW MBR they wait for WRITE.
+  Note the keywords differ from the command line (MBRTYPE/STARTCYL/ENDCYL).
+
+CHECKRDB
+  RDB integrity check, same report as the command line's CHECK.  Read-only.
+
+VERIFYRDB FILE=<path>
+VERIFYEXT FILE=<path>
+  Compare the RDSK block / all RDB blocks on disk with a BACKUP /
+  BACKUPEXT file (command line: VERIFY / VERIFYEXT).  Read-only.
+
+PARTOUT <drive> <file>
+PARTIN <file> <drive>
+  Dump one partition to a file / restore such a dump into a partition
+  (command line: PARTOUT / PARTIN).  PARTIN overwrites the partition at
+  once and then writes the RDB.  The disk must use the same cylinder size
+  (heads x sectors x block size) as the one the dump was made on.
 
 ADDPART NAME=<n> LOW=<cyl|START|NEXT|size> HIGH=<cyl|END|+size>
          [TYPE=<dostype>] [BOOTPRI=<n>] [BOOTABLE] [ENFORCESIZE]
@@ -695,6 +729,8 @@ GROW <drive> <size[KMG]|END> [NOUNMOUNT]
   leave the volume inhibited and need a reboot.  Each step is printed.
   Unlike ADDPART/ADDFS, GROW commits on its own — no separate WRITE needed.
   In DRYRUN mode it prints the plan and changes nothing.
+  For that reason GROW, SHRINK, PARTIN and same-disk PARTCLONE refuse to
+  run while earlier changes are still unwritten: put a WRITE before them.
 
   NOUNMOUNT skips the unmount step, which the boot partition (and any volume
   with open files/locks) cannot satisfy.  The filesystem is still grown with
@@ -774,9 +810,17 @@ CLEARRDB
     OPEN scsi.device 3
     CLEARRDB
     INIT NEW
-    ADDPART DH0 SIZE=100M
+    ADDPART NAME=DH0 LOW=2 HIGH=END
     WRITE
     CLOSE
+
+CONFIRMATIONS
+  Commands that overwrite disk contents at once instead of waiting for
+  WRITE - RESTORE, RESTOREEXT, PARTIN, PARTCLONE, ZEROPART, CLEARRDB and
+  IMAGEIN - ask Y/N first, exactly like their command-line twins.  FORCE
+  answers Y; answering N stops the script.  With DRYRUN they only report
+  what they would do, CREATE FILE does not erase an existing file, and
+  REBOOT does not reboot.
 
 WRITE
   Commit all pending in-memory changes to disk.

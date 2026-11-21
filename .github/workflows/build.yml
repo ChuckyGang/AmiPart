@@ -195,7 +195,8 @@ jobs:
           path: host/amipart
           if-no-files-found: error
 
-      # Not attached to the release yet: links SDL2 dynamically (libsdl2-2.0-0).
+      # Attached to the release as-is: its only dependency beyond libc is the
+      # SDL2 runtime (libsdl2-2.0-0), which the release notes mention.
       - name: Upload Linux GUI binary
         uses: actions/upload-artifact@v4
         with:
@@ -226,6 +227,12 @@ jobs:
           name: amipart-linux-x86_64
           path: linux-out
 
+      - name: Download Linux GUI binary
+        uses: actions/download-artifact@v4
+        with:
+          name: amipart-gui-linux-x86_64
+          path: linux-gui-out
+
       - name: Set release date
         id: date
         run: echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
@@ -233,11 +240,17 @@ jobs:
       - name: Create LHA archive
         run: |
           ARCHIVE="AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha"
+          # Ready-to-edit translation template, always in step with the binary.
+          python3 support/gencat.py ct catalogs/AmiPart.cd AmiPart.ct yourlanguage
           python3 support/make_lha.py "$ARCHIVE" \
             "AmiPart:out/AmiPart" \
             "AmiPart.info:out/AmiPart.info" \
             "README.md:README.md" \
+            "cmdline.txt:cmdline.txt" \
+            "FEATURES.txt:FEATURES.txt" \
+            "pfs3aio-LICENSE.txt:support/pfs3aio/LICENSE" \
             "Catalogs/AmiPart.cd:catalogs/AmiPart.cd" \
+            "Catalogs/AmiPart.ct:AmiPart.ct" \
             "Catalogs/README.txt:catalogs/README.txt" \
             "support/gencat.py:support/gencat.py"
           ls -lh "$ARCHIVE"
@@ -257,12 +270,17 @@ jobs:
           cat > notes.md <<EOF
           $HEAD
 
-          **About the Linux GUI (\`amipart-gui\`, built with \`make linux-gui\`):** it is an
+          **About the Linux GUI (\`amipart-gui-linux-x86_64\`):** it is an
           experimental wrapper, a fun side project. It runs the Amiga GUI code
           on Linux through a small compatibility layer, so yes, it looks very
           Amiga-like, and that is by choice. The main goal of AmiPart is still
-          the Amiga program; the Linux GUI is not a native Linux application
-          and is not included in this release (build it from source).
+          the Amiga program; the Linux GUI is not a native Linux application.
+          It needs the SDL2 runtime (\`sudo apt install libsdl2-2.0-0\`); make
+          the download executable with \`chmod +x\` first.
+
+          All builds contain pfs3aio 3.1 by Toni Wilen as the default filesystem
+          driver. This product includes software developed by Michiel Pelt; its
+          licence is attached as \`pfs3aio-LICENSE.txt\`.
           EOF
           gh release create proto \
             --title "AmiPart ${{ steps.date.outputs.DATE }} PROTO" \
@@ -270,7 +288,9 @@ jobs:
             --prerelease \
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
-            "linux-out/amipart#amipart-linux-x86_64"
+            "linux-out/amipart#amipart-linux-x86_64" \
+            "linux-gui-out/amipart-gui#amipart-gui-linux-x86_64" \
+            "support/pfs3aio/LICENSE#pfs3aio-LICENSE.txt"
 
       # Keep every build reachable: the rolling "proto" release above is
       # replaced on each push, so a dated copy stays behind for users who
@@ -284,12 +304,17 @@ jobs:
           cat > notes.md <<EOF
           $HEAD
 
-          **About the Linux GUI (\`amipart-gui\`, built with \`make linux-gui\`):** it is an
+          **About the Linux GUI (\`amipart-gui-linux-x86_64\`):** it is an
           experimental wrapper, a fun side project. It runs the Amiga GUI code
           on Linux through a small compatibility layer, so yes, it looks very
           Amiga-like, and that is by choice. The main goal of AmiPart is still
-          the Amiga program; the Linux GUI is not a native Linux application
-          and is not included in this release (build it from source).
+          the Amiga program; the Linux GUI is not a native Linux application.
+          It needs the SDL2 runtime (\`sudo apt install libsdl2-2.0-0\`); make
+          the download executable with \`chmod +x\` first.
+
+          All builds contain pfs3aio 3.1 by Toni Wilen as the default filesystem
+          driver. This product includes software developed by Michiel Pelt; its
+          licence is attached as \`pfs3aio-LICENSE.txt\`.
           EOF
           gh release create "$TAG" \
             --title "AmiPart ${{ steps.date.outputs.DATE }} (${GITHUB_SHA::7})" \
@@ -297,4 +322,6 @@ jobs:
             --prerelease \
             "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
-            "linux-out/amipart#amipart-linux-x86_64"
+            "linux-out/amipart#amipart-linux-x86_64" \
+            "linux-gui-out/amipart-gui#amipart-gui-linux-x86_64" \
+            "support/pfs3aio/LICENSE#pfs3aio-LICENSE.txt"

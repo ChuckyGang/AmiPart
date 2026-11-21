@@ -697,6 +697,78 @@ BOOL QuickFormat_EnsureHandler(const struct RDBInfo *rdb, ULONG dostype,
     return TRUE;
 }
 
+/* Name (C string, no colon) of one live DOS device on bd's device+unit whose
+   DosEnvec range overlaps device blocks first..last.  FALSE if there is none.
+   Same walk as MountedPartitionsOnDevice below. */
+static BOOL live_device_on_range(struct BlockDev *bd, ULONG first, ULONG last,
+                                 char *name, ULONG nsz)
+{
+    struct DosList *dl;
+    BOOL found = FALSE;
+
+    dl = LockDosList(LDF_DEVICES | LDF_READ);
+    while (!found && (dl = NextDosEntry(dl, LDF_DEVICES)) != NULL) {
+        struct FileSysStartupMsg *fssm;
+        const UBYTE *devb, *nm;
+        const ULONG *env;
+        ULONG bpc, scale, lo, hi;
+
+        if (!dl->dol_Task) continue;                    /* no handler = not live */
+        if ((ULONG)dl->dol_misc.dol_handler.dol_Startup < 1024) continue;
+        fssm = (struct FileSysStartupMsg *)
+               BADDR(dl->dol_misc.dol_handler.dol_Startup);
+        if (!fssm) continue;
+        if (fssm->fssm_Unit != bd->unit) continue;
+        if ((ULONG)fssm->fssm_Device < 256) continue;
+        devb = (const UBYTE *)BADDR(fssm->fssm_Device);
+        if (!ci_dev_eq(devb, bd->devname)) continue;
+
+        env = (const ULONG *)BADDR(fssm->fssm_Environ);
+        if (!env || env[DE_TABLESIZE] < DE_UPPERCYL) continue;
+        bpc   = env[DE_NUMHEADS] * env[DE_BLKSPERTRACK];
+        scale = (env[DE_SIZEBLOCK] >= 256) ? env[DE_SIZEBLOCK] / 128 : 1;  /* longs -> 512s */
+        lo    = env[DE_LOWCYL] * bpc * scale;
+        hi    = (env[DE_UPPERCYL] + 1) * bpc * scale - 1;
+        if (lo > last || hi < first) continue;
+
+        nm = (const UBYTE *)BADDR(dl->dol_Name);
+        if (nm && nm[0] && (ULONG)nm[0] < nsz) {
+            memcpy(name, nm + 1, nm[0]);
+            name[nm[0]] = '\0';
+            found = TRUE;
+        }
+    }
+    UnLockDosList(LDF_DEVICES | LDF_READ);
+    return found;
+}
+
+BOOL TakeRangeOffline(struct BlockDev *bd, ULONG first, ULONG last,
+                      char *errbuf, ULONG errlen)
+{
+    char  name[40], why[96], msg[200];
+    UWORD tries;
+
+    set_err(errbuf, errlen, "");
+    if (!bd || bd->backend != BD_DEVICE) return TRUE;
+
+    /* More than one device can sit on the range (stale table entries);
+       each successful unmount removes one, so this terminates. */
+    for (tries = 0; tries < 8; tries++) {
+        if (!live_device_on_range(bd, first, last, name, sizeof(name)))
+            return TRUE;
+        why[0] = '\0';
+        if (!UnmountPartition(bd, name, NULL, NULL, why, sizeof(why))) {
+            DP_SNPRINTF(msg, GS(MSG_PM_MOUNTED_BUSY_FMT), name,
+                        why[0] ? why : GS(MSG_MOVE_IN_USE));
+            set_err(errbuf, errlen, msg);
+            return FALSE;
+        }
+    }
+    DP_SNPRINTF(msg, GS(MSG_PM_MOUNTED_BUSY_FMT), name, GS(MSG_MOVE_IN_USE));
+    set_err(errbuf, errlen, msg);
+    return FALSE;
+}
+
 UWORD MountedPartitionsOnDevice(struct BlockDev *bd, char *names, ULONG nsz)
 {
     struct DosList *dl;

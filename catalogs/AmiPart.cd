@@ -6,8 +6,9 @@
 ## Compile a .catalog:        python3 support/gencat.py catalog AmiPart.cd deutsch.ct AmiPart.catalog
 ##
 ## RULES FOR EDITORS:
-##   * Append new messages at the END of their section, never insert in the
-##     middle - ids are positional and must stay stable for existing catalogs.
+##   * Append new messages at the END OF THIS FILE, never in the middle (not
+##     even at the end of their section) - ids are positional and must stay
+##     stable for existing catalogs.
 ##   * Keep printf-style %-placeholders identical in translations.
 ##
 #language english
@@ -139,7 +140,7 @@ MSG_MAIN_WARN_TITLE
 AmiPart - WARNING
 ;
 MSG_MAIN_WARN_BODY
-EXPERIMENTAL SOFTWARE\nAmiPart %s  (built %s)\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.
+RELEASE CANDIDATE\nAmiPart %s  (built %s)\n\nThis is a release candidate: a test version of\nwhat will become the final release. Please\nreport any problem you find. This window will\nnot be shown in the final release.\n\nAmiPart can modify the partition table\nof your hard drive or other block device.\n\nIncorrect use WILL cause permanent data loss.\n\nMake sure you have a FULL BACKUP of any disk\nyou intend to work with before proceeding.\n\nThe author accepts NO responsibility for\nany loss of data caused by this software.
 ;
 MSG_MAIN_WARN_GADGETS
 I have a backup - Continue|Quit
@@ -4814,3 +4815,45 @@ Nothing was found that can be added to the partition table.
 ;
 MSG_DLG_ABOUT_NOBACKUP
 \n\nI take no responsibility for lost data.\nMake a backup before you change a disk.
+;
+MSG_FS_BUILTIN_PFS3AIO
+<built-in pfs3aio>
+;
+MSG_PV_WRITE_FIRST_BODY
+This operation writes a partition table straight to disk.\nYou have unsaved changes: press Write (or Undo All) first,\nthen try again.
+;
+MSG_CLI_SAVE_WITH_WIPE
+BACKUP, BACKUPEXT and IMAGEOUT cannot share a command line with INIT or\nCLEARRDB: the wipe would run first and the old state would not be saved.\nRun the backup as its own command first.\n
+;
+MSG_SCR_INIT_MBR_PENDING
+Empty MBR for block 0 prepared (RDB at block 1) - written by WRITE.\n
+;
+MSG_SCR_DESTROY_NOW_ASK_FMT
+%s overwrites data on the disk at once (not at WRITE). Continue?
+;
+MSG_SCR_REBOOT_DRYRUN
+DRYRUN: would reboot.\n
+;
+MSG_SCR_CREATE_EXISTS_DRYRUN_FMT
+DRYRUN: "%s" already exists - CREATE FILE would erase it. Not done;\nthe existing file is used for the rest of the dry run.\n
+;
+MSG_PC_DUMP_CYLSIZE_FMT
+The dump uses %lu blocks per cylinder, %s on this disk uses %lu.\nA dump can only be restored where the cylinder size is the same.\n
+;
+MSG_PM_MOUNTED_BUSY_FMT
+%s is mounted and cannot be taken offline (%s).\nClose everything that uses it, or boot from another disk, then try again.
+;
+MSG_DLG_ABOUT_PFS3AIO
+\n\nBuilt-in filesystem driver: pfs3aio by Toni Wilen.\nThis product includes software developed by Michiel Pelt.
+;
+MSG_PV_RESIZE_PENDING_BODY
+Resizing, moving or restoring a filesystem writes the partition\ntable to disk at once - together with every other change you\nhave made but not written yet.\n\nPress Write (or Undo All) first, then do this again.\nThe partition has been left as it was.
+;
+MSG_SCR_PENDING_WRITE_FIRST_FMT
+%s writes the partition table at once, which would also commit the\nchanges made since the last WRITE. Put a WRITE before it.
+;
+MSG_CLI_ADDPART_NAME_USED_FMT
+ADDPART: this disk already has a partition named %s.\n
+;
+MSG_RESIZE_NO_WARRANTY
+NO WARRANTY: resizing a filesystem can go wrong and destroy\nthe data on this disk. Have a backup before you continue.

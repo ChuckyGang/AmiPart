@@ -27,6 +27,7 @@
 #include "guisize.h"
 #include "rdb.h"
 #include "partview_internal.h"
+#include "pfs3aio_bin.h"
 
 extern struct ExecBase      *SysBase;
 extern struct DosLibrary    *DOSBase;
@@ -153,6 +154,66 @@ static ULONG guess_dostype_from_path(const char *path)
     return 0;
 }
 
+/* fhb_Version for a handler binary: (major << 16) | minor.
+   Major is RT_Version of the first Resident struct (RT_MATCHWORD = 0x4AFC,
+   version byte at +11); minor comes from the "$VER: name maj.min" string. */
+static ULONG fs_code_version(const UBYTE *code, ULONG size)
+{
+    {
+        ULONG i;
+        UBYTE major = 0, minor = 0;
+        for (i = 0; i + 12 < size; i += 2) {
+            if (code[i] == 0x4A && code[i+1] == 0xFC) {
+                major = code[i + 11];
+                /* look for $VER: string to get minor - fall back to 0 */
+                {
+                    ULONG j;
+                    for (j = 0; j + 5 < size; j++) {
+                        if (code[j]   == '$' && code[j+1] == 'V' &&
+                            code[j+2] == 'E' && code[j+3] == 'R' &&
+                            code[j+4] == ':') {
+                            /* skip "$VER: name maj.min" - advance past ": " and name */
+                            ULONG k = j + 5;
+                            while (k < size && code[k] == ' ') k++;
+                            /* skip name token */
+                            while (k < size && code[k] != ' ' && code[k] != '\0') k++;
+                            while (k < size && code[k] == ' ') k++;
+                            /* skip major digits */
+                            while (k < size && code[k] >= '0' && code[k] <= '9') k++;
+                            if (k < size && code[k] == '.') {
+                                k++;
+                                minor = 0;
+                                while (k < size && code[k] >= '0' && code[k] <= '9') {
+                                    minor = (UBYTE)(minor * 10 + (code[k] - '0'));
+                                    k++;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        return ((ULONG)major << 16) | (ULONG)minor;
+    }
+}
+
+/* Fill *fi from the pfs3aio handler embedded in AmiPart (the Add dialog's
+   default).  The entry owns an AllocVec'd copy, like a file-loaded one. */
+static BOOL fs_load_builtin(struct FSInfo *fi)
+{
+    UBYTE *code = (UBYTE *)AllocVec(pfs3aio_bin_size, MEMF_PUBLIC);
+    if (!code) return FALSE;
+    memcpy(code, pfs3aio_bin, pfs3aio_bin_size);
+    if (fi->code) FreeVec(fi->code);
+    fi->code      = code;
+    fi->code_size = pfs3aio_bin_size;
+    strcpy(fi->fs_name, "L:pfs3aio");
+    fi->version   = fs_code_version(code, pfs3aio_bin_size);
+    return TRUE;
+}
+
 /* Load a file path into *fi->code/code_size. Shows error on failure.
    Returns TRUE on success (or if path is empty = no-code entry).     */
 static BOOL fs_load_file(struct Window *win, const char *path, struct FSInfo *fi)
@@ -208,52 +269,15 @@ static BOOL fs_load_file(struct Window *win, const char *path, struct FSInfo *fi
         memcpy(fi->fs_name, path, len);
         fi->fs_name[len] = '\0';
     }
-    /* Extract version from Resident struct (RT_MATCHWORD = 0x4AFC).
-       AmigaOS convention: fhb_Version = (major << 16) | minor.
-       Scan entire binary for RT_MATCHWORD and read RT_Version at +11. */
-    {
-        ULONG i;
-        UBYTE major = 0, minor = 0;
-        for (i = 0; i + 12 < (ULONG)fsize; i += 2) {
-            if (code[i] == 0x4A && code[i+1] == 0xFC) {
-                major = code[i + 11];
-                /* look for $VER: string to get minor - fall back to 0 */
-                {
-                    ULONG j;
-                    for (j = 0; j + 5 < (ULONG)fsize; j++) {
-                        if (code[j]   == '$' && code[j+1] == 'V' &&
-                            code[j+2] == 'E' && code[j+3] == 'R' &&
-                            code[j+4] == ':') {
-                            /* skip "$VER: name maj.min" - advance past ": " and name */
-                            ULONG k = j + 5;
-                            while (k < (ULONG)fsize && code[k] == ' ') k++;
-                            /* skip name token */
-                            while (k < (ULONG)fsize && code[k] != ' ' && code[k] != '\0') k++;
-                            while (k < (ULONG)fsize && code[k] == ' ') k++;
-                            /* skip major digits */
-                            while (k < (ULONG)fsize && code[k] >= '0' && code[k] <= '9') k++;
-                            if (k < (ULONG)fsize && code[k] == '.') {
-                                k++;
-                                minor = 0;
-                                while (k < (ULONG)fsize && code[k] >= '0' && code[k] <= '9') {
-                                    minor = (UBYTE)(minor * 10 + (code[k] - '0'));
-                                    k++;
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-        fi->version = ((ULONG)major << 16) | (ULONG)minor;
-    }
+    fi->version = fs_code_version(code, (ULONG)fsize);
     return TRUE;
 }
 
 /* Opens a sub-dialog to enter/edit DosType + optional file path.
-   is_edit=FALSE: Add (default drawer L:), is_edit=TRUE: Edit.
+   is_edit=FALSE: Add, is_edit=TRUE: Edit.
+   Add starts with the built-in pfs3aio selected (the File field shows
+   MSG_FS_BUILTIN_PFS3AIO).  Any other path in the File field - typed or
+   picked with Browse - loads that file instead, whatever its version.
    Returns TRUE if user confirmed, filling in *fi.               */
 static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
 {
@@ -278,7 +302,7 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
     if (is_edit) {
         file_str[0] = '\0';   /* empty = keep existing code */
     } else {
-        strncpy(file_str, "L:", sizeof(file_str) - 1);
+        strncpy(file_str, GS(MSG_FS_BUILTIN_PFS3AIO), sizeof(file_str) - 1);
         file_str[sizeof(file_str) - 1] = '\0';
     }
 
@@ -443,7 +467,10 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                             { struct TagItem asl_tags[] = {
                                   { ASLFR_TitleText,    (IPTR)GS(MSG_FS_SELECT_DRIVER) },
                                   { ASLFR_InitialDrawer,(IPTR)"L:" },
-                                  { ASLFR_InitialFile,  (IPTR)si->Buffer },
+                                  { ASLFR_InitialFile,
+                                    (IPTR)(strcmp((char *)si->Buffer,
+                                                  GS(MSG_FS_BUILTIN_PFS3AIO)) == 0
+                                           ? "" : (char *)si->Buffer) },
                                   { TAG_DONE, 0 } };
                               fr = (struct FileRequester *)AllocAslRequest(
                                   ASL_FileRequest, asl_tags); }
@@ -507,7 +534,10 @@ static BOOL fs_addedit_dialog(struct FSInfo *fi, BOOL is_edit)
                             result = TRUE;
                         } else {
                             si = (struct StringInfo *)file_gad->SpecialInfo;
-                            if (fs_load_file(win, (char *)si->Buffer, fi))
+                            if (strcmp((char *)si->Buffer,
+                                       GS(MSG_FS_BUILTIN_PFS3AIO)) == 0) {
+                                if (fs_load_builtin(fi)) result = TRUE;
+                            } else if (fs_load_file(win, (char *)si->Buffer, fi))
                                 result = TRUE;
                         }
                         if (result) running = FALSE;
@@ -733,7 +763,7 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                         if (rdb->num_fs < MAX_FILESYSTEMS) {
                             struct FSInfo new_fi;
                             memset(&new_fi, 0, sizeof(new_fi));
-                            new_fi.dos_type    = 0x444F5301UL;  /* FFS default */
+                            new_fi.dos_type    = 0x50465303UL;  /* PFS\3: built-in pfs3aio */
                             new_fi.version     = 0;
                             new_fi.priority    = 0;
                             new_fi.global_vec  = -1L;
@@ -741,12 +771,15 @@ BOOL filesystem_manager_dialog(struct RDBInfo *rdb)
                             if (fs_addedit_dialog(&new_fi, FALSE)) {
                                 rdb->filesystems[rdb->num_fs++] = new_fi;
                                 dirty = TRUE;
+                                /* Edit/Delete act on the new entry next, so the
+                                   list must show IT selected, not the old row. */
+                                sel = (WORD)(rdb->num_fs - 1);
                                 { struct TagItem dt[]={{GTLV_Labels,~0UL},{TAG_DONE,0}};
-                                  struct TagItem rt[]={{GTLV_Labels,(IPTR)&fs_list_gad},{TAG_DONE,0}};
+                                  struct TagItem rt[]={{GTLV_Labels,(IPTR)&fs_list_gad},
+                                                       {GTLV_Selected,(ULONG)sel},{TAG_DONE,0}};
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, dt);
                                   build_fs_list(rdb);
                                   GT_SetGadgetAttrsA(lv_gad, win, NULL, rt); }
-                                sel = (WORD)(rdb->num_fs - 1);
                             }
                             /* Discard any events that arrived at the background
                                FS Manager window while the add sub-dialog was open.

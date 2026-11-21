@@ -26,12 +26,24 @@ typedef void (*MoveProgressFn)(void *ud,
                                const char *phase);
 
 /*
+ * Take a partition offline before its blocks are overwritten or relocated
+ * (move, zero, restore): a live handler would keep writing to the old
+ * contents and corrupt the result.  Unmounts whatever DOS device is live on
+ * this partition's blocks on bd's device+unit (quickformat.h
+ * TakeRangeOffline).  TRUE when it is offline (or was not mounted / bd is an
+ * image file); FALSE with err_buf set when it is in use - nothing must be
+ * written then.  err_buf: at least ENGINE_ERRBUF_SIZE bytes.
+ */
+BOOL PART_TakeOffline(struct BlockDev *bd, const struct RDBInfo *rdb,
+                      const struct PartInfo *pi, char *err_buf);
+
+/*
  * Check whether moving partition pi to new_low_cyl is valid.
  *   - new range must fit inside rdb->lo_cyl .. rdb->hi_cyl
  *   - new range must not overlap any other partition
  *   - new_low_cyl must differ from pi->low_cyl
  * new_high_cyl_out (may be NULL) receives the computed new hi cylinder.
- * err_buf must be at least 128 bytes.
+ * err_buf must be at least ENGINE_ERRBUF_SIZE bytes.
  * Returns TRUE if the move is valid.
  */
 BOOL PART_CanMove(const struct RDBInfo *rdb, const struct PartInfo *pi,
@@ -57,7 +69,7 @@ BOOL PART_Move(struct BlockDev *bd, const struct RDBInfo *rdb,
 /*
  * Zero out all blocks in a partition (overwrite with zeros).
  * Useful before disk imaging so unused space compresses well.
- * err_buf must be at least 128 bytes.
+ * err_buf must be at least ENGINE_ERRBUF_SIZE bytes.
  */
 BOOL PART_Zero(struct BlockDev *bd, const struct RDBInfo *rdb,
                const struct PartInfo *pi,

@@ -150,6 +150,9 @@ struct RDArgs *ReadArgs(CONST_STRPTR tmpl, SIPTR *array, struct RDArgs *rda)
             ent[hit].filled = 1;
             continue;
         }
+        /* A switch takes no value: "DRYRUN=1" must be an error, not a token
+           that is silently dropped (the run would then be for real). */
+        if (hit >= 0 && ent[hit].is_s) { host_set_ioerr(118 /* ERROR_TOO_MANY_ARGS */); goto fail; }
         if (hit >= 0 && !ent[hit].is_s) {
             char *val;
             if (eq) val = eq + 1;
