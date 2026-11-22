@@ -235,11 +235,18 @@ jobs:
 
       - name: Set release date
         id: date
-        run: echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "DATE=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          # Release name comes from src/version.h: "1.0 RC1" -> 1.0-RC1 / rc1
+          LABEL=$(sed -n 's/^#define AMIPART_VERLABEL *"\(.*\)".*/\1/p' src/version.h)
+          test -n "$LABEL"
+          echo "LABEL=$LABEL" >> "$GITHUB_OUTPUT"
+          echo "SLUG=$(echo "$LABEL" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+          echo "TAGBASE=v$(echo "$LABEL" | tr ' ' '-' | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
 
       - name: Create LHA archive
         run: |
-          ARCHIVE="AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha"
+          ARCHIVE="AmiPart-${{ steps.date.outputs.SLUG }}-${{ steps.date.outputs.DATE }}.lha"
           # Ready-to-edit translation template, always in step with the binary.
           python3 support/gencat.py ct catalogs/AmiPart.cd AmiPart.ct yourlanguage
           python3 support/make_lha.py "$ARCHIVE" \
@@ -255,18 +262,21 @@ jobs:
             "support/gencat.py:support/gencat.py"
           ls -lh "$ARCHIVE"
 
-      - name: Delete previous PROTO release (if any)
+      - name: Delete previous rolling release (if any)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete proto --yes 2>/dev/null || true
-          git push --delete origin proto 2>/dev/null || true
+          # "proto" was the rolling release before the release candidates.
+          for T in proto rc; do
+            gh release delete "$T" --yes 2>/dev/null || true
+            git push --delete origin "$T" 2>/dev/null || true
+          done
 
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          HEAD="Automated prototype build from commit \`${{ github.sha }}\`."
+          HEAD="AmiPart ${{ steps.date.outputs.LABEL }}: release candidate, automated build from commit \`${{ github.sha }}\`."
           cat > notes.md <<EOF
           $HEAD
 
@@ -282,25 +292,25 @@ jobs:
           driver. This product includes software developed by Michiel Pelt; its
           licence is attached as \`pfs3aio-LICENSE.txt\`.
           EOF
-          gh release create proto \
-            --title "AmiPart ${{ steps.date.outputs.DATE }} PROTO" \
+          gh release create rc \
+            --title "AmiPart ${{ steps.date.outputs.LABEL }} (${{ steps.date.outputs.DATE }})" \
             --notes-file notes.md \
             --prerelease \
-            "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
+            "AmiPart-${{ steps.date.outputs.SLUG }}-${{ steps.date.outputs.DATE }}.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
             "linux-out/amipart#amipart-linux-x86_64" \
             "linux-gui-out/amipart-gui#amipart-gui-linux-x86_64" \
             "support/pfs3aio/LICENSE#pfs3aio-LICENSE.txt"
 
-      # Keep every build reachable: the rolling "proto" release above is
+      # Keep every build reachable: the rolling "rc" release above is
       # replaced on each push, so a dated copy stays behind for users who
       # need to go back to an earlier build (issue #12).
       - name: Keep a dated copy of this build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="proto-${{ steps.date.outputs.DATE }}-${GITHUB_SHA::7}"
-          HEAD="Archived prototype build from commit \`${{ github.sha }}\`. The rolling \`proto\` release always has the newest build."
+          TAG="${{ steps.date.outputs.TAGBASE }}-${{ steps.date.outputs.DATE }}-${GITHUB_SHA::7}"
+          HEAD="Archived AmiPart ${{ steps.date.outputs.LABEL }} build from commit \`${{ github.sha }}\`. The rolling \`rc\` release always has the newest build."
           cat > notes.md <<EOF
           $HEAD
 
@@ -317,10 +327,10 @@ jobs:
           licence is attached as \`pfs3aio-LICENSE.txt\`.
           EOF
           gh release create "$TAG" \
-            --title "AmiPart ${{ steps.date.outputs.DATE }} (${GITHUB_SHA::7})" \
+            --title "AmiPart ${{ steps.date.outputs.LABEL }} ${{ steps.date.outputs.DATE }} (${GITHUB_SHA::7})" \
             --notes-file notes.md \
             --prerelease \
-            "AmiPart-${{ steps.date.outputs.DATE }}-PROTO.lha" \
+            "AmiPart-${{ steps.date.outputs.SLUG }}-${{ steps.date.outputs.DATE }}.lha" \
             "out/AmiPart.adf#AmiPart-autoboot.adf" \
             "linux-out/amipart#amipart-linux-x86_64" \
             "linux-gui-out/amipart-gui#amipart-gui-linux-x86_64" \

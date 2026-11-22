@@ -6,7 +6,7 @@ A native AmigaOS 2.x hard disk partition editor with full RDB (Rigid Disk Block)
 
 ## Download
 
-**[Latest build](https://github.com/ChuckyGang/AmiPart/releases/latest)** — including the executable, an autoboot ADF, a native Linux CLI binary, and the experimental Linux GUI binary. Click **Assets** on that page to see the downloadable files.
+**[Latest build (1.0 release candidate)](https://github.com/ChuckyGang/AmiPart/releases/tag/rc)** — including the executable, an autoboot ADF, a native Linux CLI binary, and the experimental Linux GUI binary. Click **Assets** on that page to see the downloadable files.
 
 ## Linux CLI
 
