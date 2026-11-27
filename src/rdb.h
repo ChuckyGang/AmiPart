@@ -92,9 +92,7 @@ struct BlockDev {
     UBYTE            backend;             /* BD_DEVICE or BD_FILE */
     BPTR             fh;                  /* file handle, BD_FILE only (0 otherwise) */
     char             filepath[108];       /* image path,  BD_FILE only */
-    UBYTE            ata_via;             /* ATA_VIA_* path that worked for ATA commands (atacmd.c), 0 = not known */
-    UBYTE            ata_direct;          /* direct IDE port: 0 not tried, 1 drive verified, 2 refused */
-    BYTE             ata_direct_rc;       /* ATAD_* reason when ata_direct == 2 */
+    UBYTE            ata_via;             /* ATA_VIA_* pass-through CDB that worked (atacmd.c), 0 = not known */
 };
 
 /* Open/close a block device for probing or RDB I/O.

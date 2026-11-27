@@ -214,10 +214,10 @@ scripting interface.
  HEALTH / DIAGNOSTICS
 --------------------------------------------------------------------------------
  * SMART status read support (ATA SMART via SCSI ATA PASS-THROUGH).
-   Commodore's scsi.device has no pass-through: on the A600/A1200 and
-   A4000/A4000T motherboard IDE ports the drive is asked directly, only
-   while the port is idle.  When SMART cannot be read the screen says
-   whether the driver or the drive turned it down.
+   Always through the device driver, never the controller's registers.
+   Needs a driver with pass-through (lide.device and others); Commodore's
+   scsi.device has none.  When SMART cannot be read the screen shows the
+   driver's answer.
  * Bad-block scan with per-sector error reporting.
  * Rescue scan (CLI RESCUE [DEEP]): finds surviving RDB blocks and
    FFS/OFS, PFS3 and SFS volumes on a disk whose partition table is lost

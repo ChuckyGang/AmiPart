@@ -744,17 +744,15 @@ static LONG cmd_smart(const char *devname, ULONG unit)
         struct AtaIdent ident;
         if (ATA_Identify(bd, &ident) == 0) {
             ATA_IdentPrint(&ident, cli_emit_line, NULL);
-            if (bd->ata_via == ATA_VIA_DIRECT)
-                cli_emit_line(NULL, GS(MSG_ATA_VIA_DIRECT));
         } else {
             cli_emit_line(NULL, GS(MSG_ATA_NOT_AVAIL));
         }
         cli_puts("\n");
     }
 
-    /* SMART READ DATA (0xD0) through ATA_Command(): ATA pass-through, or
-       the IDE port itself behind Commodore's scsi.device.  A drive with
-       SMART switched off aborts it, so enable (0xD8) and ask once more. */
+    /* SMART READ DATA (0xD0) through the driver's ATA pass-through.  A
+       drive with SMART switched off aborts it, so enable (0xD8) and ask
+       once more. */
     rc = ATA_Command(bd, 0xB0, 0xD0, buf, &diag);
     if (rc == -1) {
         ATA_Command(bd, 0xB0, 0xD8, NULL, NULL);

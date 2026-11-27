@@ -7,9 +7,8 @@
  * sectors per interrupt and the (obsolete) buffer-size / ECC words.
  *
  * It goes out through ATA_Command() (atacmd.c), like the SMART commands:
- * ATA pass-through where the driver has it (lide.device, UAE), the IDE
- * port itself behind Commodore's scsi.device, and it fails cleanly on real
- * SCSI drives.
+ * the driver's ATA pass-through and nothing else, so it works where the
+ * driver has it (lide.device, UAE) and fails cleanly everywhere else.
  */
 
 #ifndef ATAIDENT_H
@@ -43,8 +42,7 @@ struct AtaIdent {
 };
 
 /* Issue IDENTIFY DEVICE and decode it.
- * Returns 0 ok, -1 command failed / no data, -2 HD_SCSICMD unsupported.
- * bd->ata_via says afterwards which way it went (ATA_VIA_* in atacmd.h). */
+ * Returns 0 ok, -1 command failed / no data, -2 HD_SCSICMD unsupported. */
 int ATA_Identify(struct BlockDev *bd, struct AtaIdent *id);
 
 /* Emit the decoded block as display lines (no trailing newline) through

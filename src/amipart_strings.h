@@ -1578,16 +1578,9 @@
 #define MSG_ATA_DIAG_DRIVER_FMT      1572
 #define MSG_ATA_DIAG_PT_NOCMD        1573
 #define MSG_ATA_DIAG_PT_REFUSED_FMT  1574
-#define MSG_ATA_DIAG_DIRECT_NOPORT   1575
-#define MSG_ATA_DIAG_DIRECT_BUSY_1   1576
-#define MSG_ATA_DIAG_DIRECT_BUSY_2   1577
-#define MSG_ATA_DIAG_DIRECT_NODRIVE  1578
-#define MSG_ATA_DIAG_DIRECT_TIMEOUT  1579
-#define MSG_ATA_DIAG_DIRECT_ABORT_FMT 1580
-#define MSG_ATA_DIAG_DIRECT_MISMATCH 1581
-#define MSG_ATA_VIA_DIRECT           1582
+#define MSG_ATA_DIAG_NO_PT           1575
 
-#define MSG_COUNT 1583
+#define MSG_COUNT 1576
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -3174,13 +3167,6 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1572 MSG_ATA_DIAG_DRIVER_FMT */ "  Driver: %s unit %lu",
     /* 1573 MSG_ATA_DIAG_PT_NOCMD */ "  The driver has no HD_SCSICMD, so no ATA pass-through.",
     /* 1574 MSG_ATA_DIAG_PT_REFUSED_FMT */ "  Driver refused ATA pass-through (error %ld, status %lu, sense %s).",
-    /* 1575 MSG_ATA_DIAG_DIRECT_NOPORT */ "  Reading the IDE port directly is not possible with this driver.",
-    /* 1576 MSG_ATA_DIAG_DIRECT_BUSY_1 */ "  IDE port: the drive is busy, so it was left alone.",
-    /* 1577 MSG_ATA_DIAG_DIRECT_BUSY_2 */ "  Try again when nothing is using the disks on this port.",
-    /* 1578 MSG_ATA_DIAG_DIRECT_NODRIVE */ "  IDE port: no drive answered.",
-    /* 1579 MSG_ATA_DIAG_DIRECT_TIMEOUT */ "  IDE port: the drive did not answer in time.",
-    /* 1580 MSG_ATA_DIAG_DIRECT_ABORT_FMT */ "  The drive rejected the command (status $%02lx, error $%02lx): not supported.",
-    /* 1581 MSG_ATA_DIAG_DIRECT_MISMATCH */ "  IDE port: a different drive answered than the driver reports. Not used.",
-    /* 1582 MSG_ATA_VIA_DIRECT */ "  (Read from the IDE port itself: this driver has no ATA pass-through.)",
+    /* 1575 MSG_ATA_DIAG_NO_PT */ "  SMART and drive identification need ATA pass-through in the driver.",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

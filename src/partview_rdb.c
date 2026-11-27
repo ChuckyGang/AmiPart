@@ -2729,8 +2729,8 @@ static const char *smart_attr_name(UBYTE id)
 }
 
 /* ------------------------------------------------------------------ */
-/* smart_send - issue one SMART sub-command (ATA_Command in atacmd.c:  */
-/* ATA pass-through, or the IDE port behind Commodore's scsi.device).  */
+/* smart_send - issue one SMART sub-command through the driver's ATA   */
+/* pass-through (ATA_Command in atacmd.c).                             */
 /*                                                                     */
 /* feature : ATA FEATURES register value:                             */
 /*   0xD0 = READ DATA, 0xD1 = READ THRESHOLDS, 0xD8 = ENABLE OPS     */
@@ -2806,8 +2806,6 @@ void smart_status(struct Window *win, struct BlockDev *bd)
         struct AtaIdent ident;
         if (ATA_Identify(bd, &ident) == 0) {
             ATA_IdentPrint(&ident, smart_emit_line, NULL);
-            if (bd->ata_via == ATA_VIA_DIRECT)
-                vrdb_add(GS(MSG_ATA_VIA_DIRECT));
         } else {
             vrdb_add(GS(MSG_ATA_NOT_AVAIL));
         }
@@ -2827,8 +2825,6 @@ void smart_status(struct Window *win, struct BlockDev *bd)
         goto smart_show;
     }
     if (rc < 0) {
-        /* The diagnostic lines say which of the two it was: the driver
-           refusing pass-through, or the drive refusing SMART. */
         vrdb_add(GS(MSG_RDB_SMART_READFAIL_1));
         ATA_DiagPrint(bd, &diag, smart_emit_line, NULL);
         goto smart_show;
