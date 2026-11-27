@@ -1,5 +1,5 @@
 /*
- * ataident.c - ATA IDENTIFY DEVICE via SCSI ATA PASS-THROUGH.  See ataident.h.
+ * ataident.c - ATA IDENTIFY DEVICE (sent by atacmd.c).  See ataident.h.
  */
 
 #include <exec/types.h>
@@ -13,6 +13,7 @@
 #include "locale_support.h"
 #include "rdb.h"
 #include "ataident.h"
+#include "atacmd.h"
 
 /* The 512-byte block is handed to us exactly as the SMART code sees its
    data: ATA word N = buf[2N] (low byte) | buf[2N+1] << 8 (high byte).
@@ -45,56 +46,9 @@ static WORD highest_bit(UWORD v, int nbits)
     return -1;
 }
 
-/* One IDENTIFY DEVICE attempt with the given CDB length (16 or 12). */
-static BYTE ata_identify_cdb(struct BlockDev *bd, UBYTE *buf, int cdblen,
-                             UBYTE *status)
-{
-    struct SCSICmd scmd;
-    UBYTE          cdb[16];
-    UBYTE          sense[32];
-    BYTE           err;
-
-    memset(&scmd, 0, sizeof(scmd));
-    memset(cdb,   0, sizeof(cdb));
-    memset(sense, 0, sizeof(sense));
-
-    if (cdblen == 16) {
-        cdb[0]  = 0x85;       /* ATA PASS-THROUGH(16)                      */
-        cdb[1]  = 0x08;       /* PROTOCOL = 4 (PIO Data-In) << 1           */
-        cdb[2]  = 0x0E;       /* T_DIR=1 | BYT_BLOK=1 | T_LENGTH=2 (count) */
-        cdb[6]  = 1;          /* SECTOR COUNT = 1                           */
-        cdb[14] = 0xEC;       /* COMMAND = IDENTIFY DEVICE                  */
-    } else {
-        cdb[0]  = 0xA1;       /* ATA PASS-THROUGH(12)                      */
-        cdb[1]  = 0x08;
-        cdb[2]  = 0x0E;
-        cdb[4]  = 1;
-        cdb[9]  = 0xEC;
-    }
-
-    scmd.scsi_Data        = (UWORD *)buf;
-    scmd.scsi_Length      = 512;
-    scmd.scsi_Command     = cdb;
-    scmd.scsi_CmdLength   = (UWORD)cdblen;
-    scmd.scsi_Flags       = SCSIF_READ;
-    scmd.scsi_SenseData   = sense;
-    scmd.scsi_SenseLength = sizeof(sense);
-
-    bd->iotd.iotd_Req.io_Command = HD_SCSICMD;
-    bd->iotd.iotd_Req.io_Length  = sizeof(scmd);
-    bd->iotd.iotd_Req.io_Data    = (APTR)&scmd;
-    bd->iotd.iotd_Req.io_Flags   = 0;
-    bd->iotd.iotd_Count          = 0;
-    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-    *status = scmd.scsi_Status;
-    return err;
-}
-
 int ATA_Identify(struct BlockDev *bd, struct AtaIdent *id)
 {
     UBYTE *buf;
-    UBYTE  status = 0;
-    BYTE   err;
     UWORD  w;
     int    rc = -1;
 
@@ -106,13 +60,9 @@ int ATA_Identify(struct BlockDev *bd, struct AtaIdent *id)
     buf = (UBYTE *)AllocVec(512, MEMF_PUBLIC | MEMF_CLEAR);
     if (!buf) return -1;
 
-    err = ata_identify_cdb(bd, buf, 16, &status);
-    if (err != IOERR_NOCMD && (err != 0 || status != 0)) {
-        memset(buf, 0, 512);
-        err = ata_identify_cdb(bd, buf, 12, &status);
-    }
-    if (err == IOERR_NOCMD) { rc = -2; goto out; }
-    if (err != 0 || status != 0) goto out;
+    rc = ATA_Command(bd, 0xEC, 0, buf, NULL);
+    if (rc != 0) goto out;
+    rc = -1;
 
     /* Sanity: word 0 bit 15 set = ATAPI (IDENTIFY DEVICE aborts there
        anyway); an all-blank model string means we got no real block. */

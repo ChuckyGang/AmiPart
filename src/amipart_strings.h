@@ -1575,8 +1575,19 @@
 #define MSG_SCR_PENDING_WRITE_FIRST_FMT 1569
 #define MSG_CLI_ADDPART_NAME_USED_FMT 1570
 #define MSG_RESIZE_NO_WARRANTY       1571
+#define MSG_ATA_DIAG_DRIVER_FMT      1572
+#define MSG_ATA_DIAG_PT_NOCMD        1573
+#define MSG_ATA_DIAG_PT_REFUSED_FMT  1574
+#define MSG_ATA_DIAG_DIRECT_NOPORT   1575
+#define MSG_ATA_DIAG_DIRECT_BUSY_1   1576
+#define MSG_ATA_DIAG_DIRECT_BUSY_2   1577
+#define MSG_ATA_DIAG_DIRECT_NODRIVE  1578
+#define MSG_ATA_DIAG_DIRECT_TIMEOUT  1579
+#define MSG_ATA_DIAG_DIRECT_ABORT_FMT 1580
+#define MSG_ATA_DIAG_DIRECT_MISMATCH 1581
+#define MSG_ATA_VIA_DIRECT           1582
 
-#define MSG_COUNT 1572
+#define MSG_COUNT 1583
 
 #endif /* AMIPART_STRINGS_H */
 
@@ -3160,5 +3171,16 @@ const char *const DPStringDefaults[MSG_COUNT] = {
     /* 1569 MSG_SCR_PENDING_WRITE_FIRST_FMT */ "%s writes the partition table at once, which would also commit the\nchanges made since the last WRITE. Put a WRITE before it.",
     /* 1570 MSG_CLI_ADDPART_NAME_USED_FMT */ "ADDPART: this disk already has a partition named %s.\n",
     /* 1571 MSG_RESIZE_NO_WARRANTY */ "NO WARRANTY: resizing a filesystem can go wrong and destroy\nthe data on this disk. Have a backup before you continue.",
+    /* 1572 MSG_ATA_DIAG_DRIVER_FMT */ "  Driver: %s unit %lu",
+    /* 1573 MSG_ATA_DIAG_PT_NOCMD */ "  The driver has no HD_SCSICMD, so no ATA pass-through.",
+    /* 1574 MSG_ATA_DIAG_PT_REFUSED_FMT */ "  Driver refused ATA pass-through (error %ld, status %lu, sense %s).",
+    /* 1575 MSG_ATA_DIAG_DIRECT_NOPORT */ "  Reading the IDE port directly is not possible with this driver.",
+    /* 1576 MSG_ATA_DIAG_DIRECT_BUSY_1 */ "  IDE port: the drive is busy, so it was left alone.",
+    /* 1577 MSG_ATA_DIAG_DIRECT_BUSY_2 */ "  Try again when nothing is using the disks on this port.",
+    /* 1578 MSG_ATA_DIAG_DIRECT_NODRIVE */ "  IDE port: no drive answered.",
+    /* 1579 MSG_ATA_DIAG_DIRECT_TIMEOUT */ "  IDE port: the drive did not answer in time.",
+    /* 1580 MSG_ATA_DIAG_DIRECT_ABORT_FMT */ "  The drive rejected the command (status $%02lx, error $%02lx): not supported.",
+    /* 1581 MSG_ATA_DIAG_DIRECT_MISMATCH */ "  IDE port: a different drive answered than the driver reports. Not used.",
+    /* 1582 MSG_ATA_VIA_DIRECT */ "  (Read from the IDE port itself: this driver has no ATA pass-through.)",
 };
 #endif /* DPSTRINGS_DEFINE_TABLE */

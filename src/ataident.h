@@ -1,14 +1,15 @@
 /*
- * ataident.h - ATA IDENTIFY DEVICE (0xEC) via SCSI ATA PASS-THROUGH.
+ * ataident.h - ATA IDENTIFY DEVICE (0xEC).
  *
  * Fetches the drive's own identification block - the data the old DOS
  * tool "WhatIDE" showed: model / serial / firmware strings, CHS geometry,
  * LBA sector count, LBA/DMA capability bits, PIO/MWDMA/UDMA modes,
  * sectors per interrupt and the (obsolete) buffer-size / ECC words.
  *
- * It is sent down the same HD_SCSICMD pipe as the SMART commands, so it
- * works exactly where SMART works (scsi.device IDE, lide.device, UAE) and
- * fails cleanly on real SCSI drives and drivers without pass-through.
+ * It goes out through ATA_Command() (atacmd.c), like the SMART commands:
+ * ATA pass-through where the driver has it (lide.device, UAE), the IDE
+ * port itself behind Commodore's scsi.device, and it fails cleanly on real
+ * SCSI drives.
  */
 
 #ifndef ATAIDENT_H
@@ -42,7 +43,8 @@ struct AtaIdent {
 };
 
 /* Issue IDENTIFY DEVICE and decode it.
- * Returns 0 ok, -1 command failed / no data, -2 HD_SCSICMD unsupported. */
+ * Returns 0 ok, -1 command failed / no data, -2 HD_SCSICMD unsupported.
+ * bd->ata_via says afterwards which way it went (ATA_VIA_* in atacmd.h). */
 int ATA_Identify(struct BlockDev *bd, struct AtaIdent *id);
 
 /* Emit the decoded block as display lines (no trailing newline) through

@@ -4857,3 +4857,41 @@ ADDPART: this disk already has a partition named %s.\n
 ;
 MSG_RESIZE_NO_WARRANTY
 NO WARRANTY: resizing a filesystem can go wrong and destroy\nthe data on this disk. Have a backup before you continue.
+;
+;==========================================================================
+; atacmd.c - why an ATA command (IDENTIFY, SMART) could not be sent, and
+; the note shown when it went to the IDE port instead of through the driver.
+; GUI lines, no trailing \n - the CLI adds it.  Keep them <= 79 characters.
+;==========================================================================
+MSG_ATA_DIAG_DRIVER_FMT
+  Driver: %s unit %lu
+;
+MSG_ATA_DIAG_PT_NOCMD
+  The driver has no HD_SCSICMD, so no ATA pass-through.
+;
+MSG_ATA_DIAG_PT_REFUSED_FMT
+  Driver refused ATA pass-through (error %ld, status %lu, sense %s).
+;
+MSG_ATA_DIAG_DIRECT_NOPORT
+  Reading the IDE port directly is not possible with this driver.
+;
+MSG_ATA_DIAG_DIRECT_BUSY_1
+  IDE port: the drive is busy, so it was left alone.
+;
+MSG_ATA_DIAG_DIRECT_BUSY_2
+  Try again when nothing is using the disks on this port.
+;
+MSG_ATA_DIAG_DIRECT_NODRIVE
+  IDE port: no drive answered.
+;
+MSG_ATA_DIAG_DIRECT_TIMEOUT
+  IDE port: the drive did not answer in time.
+;
+MSG_ATA_DIAG_DIRECT_ABORT_FMT
+  The drive rejected the command (status $%02lx, error $%02lx): not supported.
+;
+MSG_ATA_DIAG_DIRECT_MISMATCH
+  IDE port: a different drive answered than the driver reports. Not used.
+;
+MSG_ATA_VIA_DIRECT
+  (Read from the IDE port itself: this driver has no ATA pass-through.)

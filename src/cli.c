@@ -37,6 +37,7 @@
 #include "shrinkinfo.h"
 #include "partclone.h"
 #include "ataident.h"
+#include "atacmd.h"
 #include "clearrdb.h"
 #include "rescue.h"
 
@@ -665,7 +666,7 @@ static LONG cmd_listdev(BOOL probe_units)
 }
 
 /* ------------------------------------------------------------------ */
-/* SMART - read ATA SMART attribute data via SCSI ATA PASS-THROUGH   */
+/* SMART - read ATA SMART attribute data (atacmd.c)                  */
 /* ------------------------------------------------------------------ */
 
 static const struct { UBYTE id; const char *name; } s_smart_names[] = {
@@ -720,11 +721,9 @@ static void cli_emit_line(void *ctx, const char *s)
 static LONG cmd_smart(const char *devname, ULONG unit)
 {
     struct BlockDev *bd;
-    struct SCSICmd   scmd;
-    UBYTE  cdb[12];
-    UBYTE  sense[32];
+    struct AtaDiag   diag;
     UBYTE *buf;
-    BYTE   err;
+    int    rc;
     UWORD  revision, i;
 
     DP_SNPRINTF(outbuf, GS(MSG_CLI_OPENING), devname, unit);
@@ -743,60 +742,37 @@ static LONG cmd_smart(const char *devname, ULONG unit)
     /* WhatIDE-style identification block (ATA IDENTIFY DEVICE) first. */
     {
         struct AtaIdent ident;
-        if (ATA_Identify(bd, &ident) == 0)
+        if (ATA_Identify(bd, &ident) == 0) {
             ATA_IdentPrint(&ident, cli_emit_line, NULL);
-        else
+            if (bd->ata_via == ATA_VIA_DIRECT)
+                cli_emit_line(NULL, GS(MSG_ATA_VIA_DIRECT));
+        } else {
             cli_emit_line(NULL, GS(MSG_ATA_NOT_AVAIL));
+        }
         cli_puts("\n");
     }
 
-    /*
-     * ATA PASS-THROUGH (12) - SMART READ DATA (0xD0)
-     *
-     * CDB[0] = 0xA1  ATA PASS-THROUGH (12)
-     * CDB[1] = 0x08  PROTOCOL = 4 (PIO Data-In)  -> 4<<1
-     * CDB[2] = 0x0E  T_DIR=1 | BYT_BLOK=1 | T_LENGTH=2
-     * CDB[3] = 0xD0  FEATURES = SMART READ DATA
-     * CDB[4] = 0x01  SECTOR COUNT = 1
-     * CDB[5] = 0x01  LBA_LOW (ignored by SMART)
-     * CDB[6] = 0x4F  LBA_MID magic
-     * CDB[7] = 0xC2  LBA_HIGH magic
-     * CDB[8] = 0x00  DEVICE
-     * CDB[9] = 0xB0  COMMAND = ATA SMART
-     */
-    memset(cdb,   0, sizeof(cdb));
-    memset(sense, 0, sizeof(sense));
-    memset(&scmd, 0, sizeof(scmd));
+    /* SMART READ DATA (0xD0) through ATA_Command(): ATA pass-through, or
+       the IDE port itself behind Commodore's scsi.device.  A drive with
+       SMART switched off aborts it, so enable (0xD8) and ask once more. */
+    rc = ATA_Command(bd, 0xB0, 0xD0, buf, &diag);
+    if (rc == -1) {
+        ATA_Command(bd, 0xB0, 0xD8, NULL, NULL);
+        memset(buf, 0, 512);
+        rc = ATA_Command(bd, 0xB0, 0xD0, buf, &diag);
+    }
 
-    cdb[0]=0xA1; cdb[1]=0x08; cdb[2]=0x0E; cdb[3]=0xD0;
-    cdb[4]=0x01; cdb[5]=0x01; cdb[6]=0x4F; cdb[7]=0xC2;
-    cdb[8]=0x00; cdb[9]=0xB0;
-
-    scmd.scsi_Data        = (UWORD *)buf;
-    scmd.scsi_Length      = 512;
-    scmd.scsi_Command     = cdb;
-    scmd.scsi_CmdLength   = 12;
-    scmd.scsi_Flags       = SCSIF_READ;
-    scmd.scsi_SenseData   = sense;
-    scmd.scsi_SenseLength = sizeof(sense);
-
-    bd->iotd.iotd_Req.io_Command = HD_SCSICMD;
-    bd->iotd.iotd_Req.io_Length  = sizeof(scmd);
-    bd->iotd.iotd_Req.io_Data    = (APTR)&scmd;
-    bd->iotd.iotd_Req.io_Flags   = 0;
-    bd->iotd.iotd_Count          = 0;
-
-    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-
-    if (err == IOERR_NOCMD) {
+    if (rc == -2) {
         cli_puts(GS(MSG_CLI_SMART_NO_SCSICMD));
+        ATA_DiagPrint(bd, &diag, cli_emit_line, NULL);
         FreeVec(buf); BlockDev_Close(bd);
         return RETURN_ERROR;
     }
-    if (err != 0 || scmd.scsi_Status != 0) {
+    if (rc != 0) {
         DP_SNPRINTF(outbuf, GS(MSG_CLI_SMART_CMD_FAILED),
-                (int)err, (unsigned)scmd.scsi_Status);
+                (int)diag.pt_io_err, (unsigned)diag.pt_status);
         cli_puts(outbuf);
+        ATA_DiagPrint(bd, &diag, cli_emit_line, NULL);
         FreeVec(buf); BlockDev_Close(bd);
         return RETURN_ERROR;
     }

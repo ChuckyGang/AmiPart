@@ -39,6 +39,7 @@
 #include "mountlist.h"
 #include "partview_internal.h"
 #include "ataident.h"
+#include "atacmd.h"
 #include "rescue.h"
 #include "progresswin.h"
 
@@ -2728,96 +2729,24 @@ static const char *smart_attr_name(UBYTE id)
 }
 
 /* ------------------------------------------------------------------ */
-/* smart_send - issue one SMART sub-command via ATA PASS-THROUGH.     */
+/* smart_send - issue one SMART sub-command (ATA_Command in atacmd.c:  */
+/* ATA pass-through, or the IDE port behind Commodore's scsi.device).  */
 /*                                                                     */
 /* feature : ATA FEATURES register value:                             */
 /*   0xD0 = READ DATA, 0xD1 = READ THRESHOLDS, 0xD8 = ENABLE OPS     */
 /* buf     : 512-byte MEMF_PUBLIC buffer for data-in commands, or     */
 /*           NULL for non-data commands (e.g. 0xD8 ENABLE).           */
+/* diag    : why it failed (may be NULL)                              */
 /*                                                                     */
-/* Returns: 0  = ok via 16-byte ATA PASS-THROUGH(16) CDB             */
-/*          1  = ok via 12-byte ATA PASS-THROUGH(12) fallback         */
-/*         -1  = command failed on both CDB lengths                   */
+/* Returns: 0  = ok                                                   */
+/*         -1  = command failed                                       */
 /*         -2  = HD_SCSICMD not supported by driver                   */
 /* ------------------------------------------------------------------ */
 
-static int smart_send(struct BlockDev *bd, UBYTE feature, UBYTE *buf)
+static int smart_send(struct BlockDev *bd, UBYTE feature, UBYTE *buf,
+                      struct AtaDiag *diag)
 {
-    struct SCSICmd scmd;
-    UBYTE          cdb[16];
-    UBYTE          sense[32];
-    BYTE           err;
-    BOOL           has_data = (BOOL)(buf != NULL);
-
-    memset(&scmd, 0, sizeof(scmd));
-    memset(cdb,   0, sizeof(cdb));
-    memset(sense, 0, sizeof(sense));
-
-    /* ATA PASS-THROUGH(16), SAT-2 encoding.
-       cdb[1]: PROTOCOL field (bits 4:1): 4=PIO Data-In, 3=Non-data.
-       cdb[2]: T_DIR(bit3)|BYTE_BLOCK(bit2)|T_LENGTH(bits1:0)=2 for data.  */
-    cdb[0]  = 0x85;
-    cdb[1]  = has_data ? 0x08 : 0x06;   /* PIO-In(4<<1) or Non-data(3<<1) */
-    cdb[2]  = has_data ? 0x0E : 0x00;   /* T_DIR|BYTE_BLOCK|T_LENGTH=2    */
-    cdb[4]  = feature;                   /* ATA FEATURES register           */
-    cdb[6]  = has_data ? 1 : 0;         /* ATA SECTOR COUNT = 1 block      */
-    cdb[10] = 0x4F;                      /* ATA LBA MID - SMART signature   */
-    cdb[12] = 0xC2;                      /* ATA LBA HIGH - SMART signature  */
-    cdb[14] = 0xB0;                      /* ATA COMMAND = SMART             */
-
-    scmd.scsi_Data        = has_data ? (UWORD *)buf : NULL;
-    scmd.scsi_Length      = has_data ? 512 : 0;
-    scmd.scsi_Command     = cdb;
-    scmd.scsi_CmdLength   = 16;
-    scmd.scsi_Flags       = has_data ? SCSIF_READ : 0;
-    scmd.scsi_SenseData   = sense;
-    scmd.scsi_SenseLength = sizeof(sense);
-
-    bd->iotd.iotd_Req.io_Command = HD_SCSICMD;
-    bd->iotd.iotd_Req.io_Length  = sizeof(scmd);
-    bd->iotd.iotd_Req.io_Data    = (APTR)&scmd;
-    bd->iotd.iotd_Req.io_Flags   = 0;
-    bd->iotd.iotd_Count          = 0;
-    err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-
-    if (err == 0)           return 0;
-    if (err == IOERR_NOCMD) return -2;
-
-    /* Fall back to ATA PASS-THROUGH(12): same semantics, shorter CDB. */
-    {
-        UBYTE cdb12[12];
-        memset(&scmd,  0, sizeof(scmd));
-        memset(cdb12,  0, sizeof(cdb12));
-        memset(sense,  0, sizeof(sense));
-
-        cdb12[0] = 0xA1;
-        cdb12[1] = has_data ? 0x08 : 0x06;
-        cdb12[2] = has_data ? 0x0E : 0x00;
-        cdb12[3] = feature;
-        cdb12[4] = has_data ? 1 : 0;
-        cdb12[6] = 0x4F;
-        cdb12[7] = 0xC2;
-        cdb12[9] = 0xB0;
-
-        scmd.scsi_Data        = has_data ? (UWORD *)buf : NULL;
-        scmd.scsi_Length      = has_data ? 512 : 0;
-        scmd.scsi_Command     = cdb12;
-        scmd.scsi_CmdLength   = 12;
-        scmd.scsi_Flags       = has_data ? SCSIF_READ : 0;
-        scmd.scsi_SenseData   = sense;
-        scmd.scsi_SenseLength = sizeof(sense);
-
-        bd->iotd.iotd_Req.io_Command = HD_SCSICMD;
-        bd->iotd.iotd_Req.io_Length  = sizeof(scmd);
-        bd->iotd.iotd_Req.io_Data    = (APTR)&scmd;
-        bd->iotd.iotd_Req.io_Flags   = 0;
-        bd->iotd.iotd_Count          = 0;
-        err = (BYTE)DoIO((struct IORequest *)&bd->iotd);
-
-        if (err == 0) return 1;
-    }
-
-    return -1;
+    return ATA_Command(bd, 0xB0, feature, buf, diag);
 }
 
 static void smart_emit_line(void *ctx, const char *s)
@@ -2840,6 +2769,7 @@ void smart_status(struct Window *win, struct BlockDev *bd)
     BOOL               thr_ok   = FALSE;
     BOOL               any_fail = FALSE;
     WORD               i, j;
+    struct AtaDiag     diag;
 
     es.es_StructSize = sizeof(es);
     es.es_Flags      = 0;
@@ -2874,27 +2804,33 @@ void smart_status(struct Window *win, struct BlockDev *bd)
        shown above the SMART data.  Same pass-through pipe as SMART. */
     {
         struct AtaIdent ident;
-        if (ATA_Identify(bd, &ident) == 0)
+        if (ATA_Identify(bd, &ident) == 0) {
             ATA_IdentPrint(&ident, smart_emit_line, NULL);
-        else
+            if (bd->ata_via == ATA_VIA_DIRECT)
+                vrdb_add(GS(MSG_ATA_VIA_DIRECT));
+        } else {
             vrdb_add(GS(MSG_ATA_NOT_AVAIL));
+        }
         vrdb_add("");
     }
 
-    smart_send(bd, 0xD8, NULL);          /* SMART ENABLE OPERATIONS (best effort) */
+    smart_send(bd, 0xD8, NULL, NULL);    /* SMART ENABLE OPERATIONS (best effort) */
 
-    rc = smart_send(bd, 0xD0, data_buf); /* SMART READ DATA */
+    rc = smart_send(bd, 0xD0, data_buf, &diag); /* SMART READ DATA */
 
     if (rc == -2) {
         vrdb_add(GS(MSG_RDB_SMART_NOTSUP_1));
         vrdb_add(GS(MSG_RDB_SMART_NOTSUP_2));
         vrdb_add(GS(MSG_RDB_SMART_NOTSUP_3));
+        vrdb_add("");
+        ATA_DiagPrint(bd, &diag, smart_emit_line, NULL);
         goto smart_show;
     }
     if (rc < 0) {
+        /* The diagnostic lines say which of the two it was: the driver
+           refusing pass-through, or the drive refusing SMART. */
         vrdb_add(GS(MSG_RDB_SMART_READFAIL_1));
-        vrdb_add(GS(MSG_RDB_SMART_READFAIL_2));
-        vrdb_add(GS(MSG_RDB_SMART_READFAIL_3));
+        ATA_DiagPrint(bd, &diag, smart_emit_line, NULL);
         goto smart_show;
     }
     if (data_buf[0] == 0 && data_buf[1] == 0) {
@@ -2907,7 +2843,7 @@ void smart_status(struct Window *win, struct BlockDev *bd)
             (unsigned)data_buf[1], (unsigned)data_buf[0]);
     vrdb_add(line);
 
-    thr_ok = (BOOL)(smart_send(bd, 0xD1, thr_buf) >= 0); /* READ THRESHOLDS */
+    thr_ok = (BOOL)(smart_send(bd, 0xD1, thr_buf, NULL) >= 0); /* READ THRESHOLDS */
 
     /* Pass 1: determine overall health from pre-failure attributes.
        An attribute fails when: pre-failure flag set AND current < threshold. */
