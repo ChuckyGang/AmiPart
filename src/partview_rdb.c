@@ -2710,6 +2710,7 @@ static const struct { UBYTE id; const char *name; } smart_names[] = {
     { 192, "Power-Off Retract Ct"   },
     { 193, "Load/Unload Cycle Ct"   },
     { 194, "Temperature Celsius"    },
+    { 195, "Hardware ECC Recovered" },
     { 196, "Reallocation Event Ct"  },
     { 197, "Current Pending Sector" },
     { 198, "Offline Uncorrectable"  },
@@ -2905,10 +2906,19 @@ void smart_status(struct Window *win, struct BlockDev *bd)
         else if (cur < thr_val)           status = "FAIL";
         else                              status = "OK";
 
-        DP_SNPRINTF(line, "  %3d %-22s  %3d  %3d  %3d  %10lu  %s",
-                (int)id, smart_attr_name(id),
-                (int)cur, (int)wst, (int)thr_val,
-                (unsigned long)raw32, status);
+        /* Temperature attributes keep the reading in the lowest raw byte;
+           the bytes above it hold min/max or limits in a layout that
+           differs per vendor, so the whole number is meaningless. */
+        if ((id == 190 || id == 194) && attr[5] >= 1 && attr[5] <= 150)
+            DP_SNPRINTF(line, "  %3d %-22s  %3d  %3d  %3d  %8lu C  %s",
+                    (int)id, smart_attr_name(id),
+                    (int)cur, (int)wst, (int)thr_val,
+                    (unsigned long)attr[5], status);
+        else
+            DP_SNPRINTF(line, "  %3d %-22s  %3d  %3d  %3d  %10lu  %s",
+                    (int)id, smart_attr_name(id),
+                    (int)cur, (int)wst, (int)thr_val,
+                    (unsigned long)raw32, status);
         vrdb_add(line);
     }
 

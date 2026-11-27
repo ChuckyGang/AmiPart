@@ -691,6 +691,7 @@ static const struct { UBYTE id; const char *name; } s_smart_names[] = {
     {192, "Power-off Retract Count"  },
     {193, "Load/Unload Cycles"       },
     {194, "Temperature (C)"          },
+    {195, "Hardware ECC Recovered"   },
     {196, "Reallocation Events"      },
     {197, "Current Pending Sectors"  },
     {198, "Offline Uncorrectable"    },
@@ -802,7 +803,15 @@ static LONG cmd_smart(const char *devname, ULONG unit)
                | ((ULONG)a[7] << 16) | ((ULONG)a[8] << 24);
         raw_hi = (ULONG)a[9] | ((ULONG)a[10] << 8);
 
-        if (raw_hi)
+        /* Temperature: the reading is the lowest raw byte; the rest is
+           vendor-specific min/max and makes the whole number meaningless. */
+        if ((id == 190 || id == 194) && a[5] >= 1 && a[5] <= 150)
+            DP_SNPRINTF(outbuf, "%3u %-25s %3u %3u %8lu C%s\n",
+                    (unsigned)id, smart_name(id),
+                    (unsigned)val, (unsigned)worst,
+                    (unsigned long)a[5],
+                    (flags & 0x01) ? GS(MSG_CLI_SMART_PREFAIL) : "");
+        else if (raw_hi)
             DP_SNPRINTF(outbuf, "%3u %-25s %3u %3u %04lx%08lx%s\n",
                     (unsigned)id, smart_name(id),
                     (unsigned)val, (unsigned)worst,
